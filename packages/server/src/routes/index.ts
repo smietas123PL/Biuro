@@ -28,8 +28,14 @@ router.use((req, _res, next) => {
 
 const injectCompanyId = (req: any, res: any, next: any) => {
   if (req.params.companyId) {
-    if (!req.body.company_id) req.body.company_id = req.params.companyId;
-    if (!req.query.company_id) req.query.company_id = req.params.companyId;
+    req.body = {
+      ...req.body,
+      company_id: req.body?.company_id ?? req.params.companyId,
+    };
+    req.query = {
+      ...req.query,
+      company_id: req.query?.company_id ?? req.params.companyId,
+    };
   }
   next();
 };

@@ -3,6 +3,20 @@ import { z } from 'zod';
 import { db } from '../db/client.js';
 
 const JsonObjectSchema = z.record(z.unknown());
+const SupportedRuntimeSchema = z.enum(['claude', 'openai', 'gemini']);
+type SupportedRuntime = z.infer<typeof SupportedRuntimeSchema>;
+const defaultTemplateRuntime: SupportedRuntime = 'claude';
+const supportedTemplateRuntimeSet = new Set<SupportedRuntime>(SupportedRuntimeSchema.options);
+
+function normalizeTemplateRuntime(value: unknown): SupportedRuntime {
+  if (typeof value !== 'string') {
+    return defaultTemplateRuntime;
+  }
+
+  return supportedTemplateRuntimeSet.has(value as SupportedRuntime)
+    ? (value as SupportedRuntime)
+    : defaultTemplateRuntime;
+}
 
 const GoalTemplateSchema = z.object({
   ref: z.string().min(1),
@@ -39,7 +53,7 @@ const AgentTemplateSchema = z.object({
   name: z.string().min(1),
   role: z.string().min(1),
   title: z.string().nullable().optional(),
-  runtime: z.enum(['claude', 'openai', 'gemini']).default('claude'),
+  runtime: z.unknown().optional().transform(normalizeTemplateRuntime),
   model: z.string().min(1).nullable().optional(),
   system_prompt: z.string().nullable().optional(),
   config: JsonObjectSchema.default({}),

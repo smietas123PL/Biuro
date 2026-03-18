@@ -93,14 +93,15 @@ export default function DashboardPage() {
         return;
       }
 
-      const [statsData, activityData, retrievalMetricsData] = await Promise.all([
-        request(`/companies/${selectedCompanyId}/stats`) as Promise<CompanyStats>,
-        request(`/companies/${selectedCompanyId}/activity-feed?limit=12`) as Promise<ActivityItem[]>,
-        request(`/companies/${selectedCompanyId}/retrieval-metrics?days=7`) as Promise<RetrievalMetricsSummary>,
+      const statsData = (await request(`/companies/${selectedCompanyId}/stats`)) as CompanyStats;
+      const [activityResult, retrievalMetricsResult] = await Promise.allSettled([
+        request(`/companies/${selectedCompanyId}/activity-feed?limit=12`, undefined, { suppressError: true }) as Promise<ActivityItem[]>,
+        request(`/companies/${selectedCompanyId}/retrieval-metrics?days=7`, undefined, { suppressError: true }) as Promise<RetrievalMetricsSummary>,
       ]);
+
       setStats(statsData);
-      setActivity(activityData);
-      setRetrievalMetrics(retrievalMetricsData);
+      setActivity(activityResult.status === 'fulfilled' ? activityResult.value : []);
+      setRetrievalMetrics(retrievalMetricsResult.status === 'fulfilled' ? retrievalMetricsResult.value : null);
     };
 
     void fetchDashboardData();

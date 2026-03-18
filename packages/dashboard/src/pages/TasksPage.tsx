@@ -145,12 +145,16 @@ export default function TasksPage() {
 
             <div className="grid gap-4">
               <input
+                id="task-title"
+                name="taskTitle"
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                 placeholder="Task title"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
               <textarea
+                id="task-description"
+                name="taskDescription"
                 value={form.description}
                 onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
                 placeholder="Description"
@@ -159,6 +163,8 @@ export default function TasksPage() {
               />
               <div className="grid gap-4 md:grid-cols-2">
                 <select
+                  id="task-assigned-to"
+                  name="taskAssignedTo"
                   value={form.assigned_to}
                   onChange={(event) => setForm((current) => ({ ...current, assigned_to: event.target.value }))}
                   className="rounded-md border bg-background px-3 py-2 text-sm"
@@ -171,6 +177,8 @@ export default function TasksPage() {
                   ))}
                 </select>
                 <input
+                  id="task-priority"
+                  name="taskPriority"
                   value={form.priority}
                   onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}
                   placeholder="Priority"

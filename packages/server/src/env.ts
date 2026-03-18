@@ -31,6 +31,7 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
   PORT: z.coerce.number().default(3100),
   HEARTBEAT_INTERVAL_MS: z.coerce.number().default(30000),
+  MAX_CONCURRENT_HEARTBEATS: z.coerce.number().int().min(1).default(20),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 

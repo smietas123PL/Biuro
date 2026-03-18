@@ -8,10 +8,12 @@ export const NotificationService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!response.ok) throw new Error(`Webhook failed: ${response.statusText}`);
+      if (!response.ok) throw new Error(`Webhook failed: ${response.status} ${response.statusText}`);
       logger.info({ url }, 'Webhook sent successfully');
+      return { ok: true as const };
     } catch (err: any) {
       logger.error({ err: err.message, url }, 'Failed to send webhook');
+      return { ok: false as const, error: err.message as string };
     }
   },
 

@@ -39,6 +39,10 @@ app.use(cors({
 app.use(express.json({ verify: captureRawBody }));
 app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
 
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
+});
+
 // Routes
 app.use('/api', routes);
 

@@ -505,6 +505,8 @@ export default function TemplatesPage() {
 
                     <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                       <input
+                        id="template-import-confirmation"
+                        name="templateImportConfirmation"
                         value={confirmationText}
                         onChange={(event) => setConfirmationText(event.target.value)}
                         placeholder="Type IMPORT to confirm"

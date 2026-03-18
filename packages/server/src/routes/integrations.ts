@@ -1,10 +1,24 @@
 import { Router, type Request } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { z } from 'zod';
+import { db } from '../db/client.js';
 import { IntegrationService } from '../services/integrations.js';
+import { NotificationService } from '../services/notifications.js';
 import { env } from '../env.js';
+import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
 type RawBodyRequest = Request & { rawBody?: string };
+
+const integrationConfigSchema = z.object({
+  slack_webhook_url: z.union([z.string().url(), z.literal(''), z.null()]).optional(),
+  discord_webhook_url: z.union([z.string().url(), z.literal(''), z.null()]).optional(),
+});
+
+const integrationTestSchema = z.object({
+  type: z.enum(['slack', 'discord']),
+  url: z.union([z.string().url(), z.literal('')]).optional(),
+});
 
 function timingSafeMatch(left: string, right: string) {
   const leftBuffer = Buffer.from(left);
@@ -54,6 +68,228 @@ function verifyDiscordWebhookSecret(req: Request) {
 
   return timingSafeMatch(secret, env.DISCORD_WEBHOOK_SECRET);
 }
+
+function getPublicBaseUrl(req: Request) {
+  const forwardedProto = req.header('x-forwarded-proto');
+  const forwardedHost = req.header('x-forwarded-host');
+  const protocol = forwardedProto?.split(',')[0]?.trim() || req.protocol;
+  const host = forwardedHost?.split(',')[0]?.trim() || req.header('host') || `localhost:${env.PORT}`;
+  return `${protocol}://${host}`;
+}
+
+function normalizeOptionalUrl(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+router.get('/overview', requireRole(['owner', 'admin']), async (req, res, next) => {
+  const baseUrl = getPublicBaseUrl(req);
+  const companyIdHeader = req.header('x-company-id');
+  const companyId = companyIdHeader && companyIdHeader !== 'undefined' ? companyIdHeader : null;
+
+  try {
+    let outgoing = {
+      slack_webhook_url: null as string | null,
+      discord_webhook_url: null as string | null,
+    };
+    let recentTests: Array<{
+      id: string;
+      type: 'slack' | 'discord';
+      status: 'success' | 'failure';
+      created_at: string;
+      target_url: string | null;
+      error: string | null;
+    }> = [];
+    let lastTest: {
+      type: 'slack' | 'discord';
+      status: 'success' | 'failure';
+      created_at: string;
+      target_url: string | null;
+      error: string | null;
+    } | null = null;
+
+    if (companyId) {
+      const [companyRes, recentTestsRes] = await Promise.all([
+        db.query(
+          'SELECT slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1',
+          [companyId]
+        ),
+        db.query(
+          `SELECT id, details, created_at
+           FROM audit_log
+           WHERE company_id = $1
+             AND action = 'integration.webhook_tested'
+           ORDER BY created_at DESC
+           LIMIT 10`,
+          [companyId]
+        ),
+      ]);
+
+      if (companyRes.rows.length > 0) {
+        outgoing = {
+          slack_webhook_url: companyRes.rows[0].slack_webhook_url ?? null,
+          discord_webhook_url: companyRes.rows[0].discord_webhook_url ?? null,
+        };
+      }
+
+      recentTests = recentTestsRes.rows.map((row) => ({
+        id: row.id,
+        type: row.details?.type === 'discord' ? 'discord' : 'slack',
+        status: row.details?.status === 'failure' ? 'failure' : 'success',
+        created_at: row.created_at,
+        target_url: row.details?.target_url ?? null,
+        error: row.details?.error ?? null,
+      }));
+      lastTest = recentTests[0] ?? null;
+    }
+
+    res.json({
+      base_url: baseUrl,
+      slack: {
+        configured: Boolean(env.SLACK_SIGNING_SECRET),
+        signing_secret_configured: Boolean(env.SLACK_SIGNING_SECRET),
+        events_url: `${baseUrl}/api/integrations/slack/events`,
+        slash_command_url: `${baseUrl}/api/integrations/slack/command`,
+        slash_command_name: '/biuro-task',
+        example_payload: {
+          command: '/biuro-task',
+          text: 'Analyze Q4 revenue patterns',
+          company_id: companyId,
+        },
+      },
+      discord: {
+        configured: Boolean(env.DISCORD_WEBHOOK_SECRET),
+        webhook_secret_configured: Boolean(env.DISCORD_WEBHOOK_SECRET),
+        webhook_url: `${baseUrl}/api/integrations/discord/webhook`,
+        expected_header: 'x-webhook-secret',
+      },
+      outgoing,
+      webhook_tests: {
+        last_test: lastTest,
+        recent: recentTests,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/config', requireRole(['owner', 'admin']), async (req, res, next) => {
+  const companyId = req.header('x-company-id');
+  if (!companyId) {
+    return res.status(400).json({ error: 'Missing x-company-id header' });
+  }
+
+  const parsed = integrationConfigSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  try {
+    const slackWebhookUrl = normalizeOptionalUrl(parsed.data.slack_webhook_url);
+    const discordWebhookUrl = normalizeOptionalUrl(parsed.data.discord_webhook_url);
+
+    const result = await db.query(
+      `UPDATE companies
+       SET slack_webhook_url = $1,
+           discord_webhook_url = $2
+       WHERE id = $3
+       RETURNING id, slack_webhook_url, discord_webhook_url`,
+      [slackWebhookUrl, discordWebhookUrl, companyId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    await db.query(
+      `INSERT INTO audit_log (company_id, action, entity_type, details)
+       VALUES ($1, 'integration.config_updated', 'integration', $2)`,
+      [
+        companyId,
+        JSON.stringify({
+          slack_webhook_configured: Boolean(result.rows[0].slack_webhook_url),
+          discord_webhook_configured: Boolean(result.rows[0].discord_webhook_url),
+        }),
+      ]
+    );
+
+    res.json({
+      success: true,
+      outgoing: {
+        slack_webhook_url: result.rows[0].slack_webhook_url ?? null,
+        discord_webhook_url: result.rows[0].discord_webhook_url ?? null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/test-webhook', requireRole(['owner', 'admin']), async (req, res, next) => {
+  const companyId = req.header('x-company-id');
+  if (!companyId) {
+    return res.status(400).json({ error: 'Missing x-company-id header' });
+  }
+
+  const parsed = integrationTestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  try {
+    const companyRes = await db.query(
+      'SELECT name, slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1',
+      [companyId]
+    );
+    if (companyRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const company = companyRes.rows[0];
+    const explicitUrl = normalizeOptionalUrl(parsed.data.url);
+    const targetUrl =
+      parsed.data.type === 'slack'
+        ? explicitUrl ?? company.slack_webhook_url ?? null
+        : explicitUrl ?? company.discord_webhook_url ?? null;
+
+    if (!targetUrl) {
+      return res.status(400).json({ error: `Missing ${parsed.data.type} webhook URL` });
+    }
+
+    const message = `Integration test from Autonomiczne Biuro for ${company.name} at ${new Date().toISOString()}`;
+    const result =
+      parsed.data.type === 'slack'
+        ? await NotificationService.alertSlack(targetUrl, message)
+        : await NotificationService.alertDiscord(targetUrl, message);
+
+    await db.query(
+      `INSERT INTO audit_log (company_id, action, entity_type, details)
+       VALUES ($1, 'integration.webhook_tested', 'integration', $2)`,
+      [
+        companyId,
+        JSON.stringify({
+          type: parsed.data.type,
+          status: result.ok ? 'success' : 'failure',
+          target_url: targetUrl,
+          error: result.ok ? null : result.error ?? null,
+        }),
+      ]
+    );
+
+    if (!result.ok) {
+      return res.status(502).json({ error: result.error || 'Webhook test failed' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post('/slack/events', async (req: RawBodyRequest, res) => {
   try {

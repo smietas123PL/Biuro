@@ -268,24 +268,32 @@ export default function AgentsPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <input
+                id="agent-name"
+                name="agentName"
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 placeholder="Name"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
               <input
+                id="agent-role"
+                name="agentRole"
                 value={form.role}
                 onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
                 placeholder="Role"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
               <input
+                id="agent-title"
+                name="agentTitle"
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                 placeholder="Title"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
               <select
+                id="agent-runtime"
+                name="agentRuntime"
                 value={form.runtime}
                 onChange={(event) => setForm((current) => ({ ...current, runtime: event.target.value }))}
                 className="rounded-md border bg-background px-3 py-2 text-sm"
@@ -295,6 +303,8 @@ export default function AgentsPage() {
                 <option value="gemini">Gemini</option>
               </select>
               <input
+                id="agent-monthly-budget"
+                name="agentMonthlyBudgetUsd"
                 value={form.monthly_budget_usd}
                 onChange={(event) => setForm((current) => ({ ...current, monthly_budget_usd: event.target.value }))}
                 placeholder="Monthly budget (USD)"
@@ -304,6 +314,8 @@ export default function AgentsPage() {
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
               <select
+                id="agent-reports-to"
+                name="agentReportsTo"
                 value={form.reports_to}
                 onChange={(event) => setForm((current) => ({ ...current, reports_to: event.target.value }))}
                 className="rounded-md border bg-background px-3 py-2 text-sm"
@@ -316,6 +328,8 @@ export default function AgentsPage() {
                 ))}
               </select>
               <textarea
+                id="agent-system-prompt"
+                name="agentSystemPrompt"
                 value={form.system_prompt}
                 onChange={(event) => setForm((current) => ({ ...current, system_prompt: event.target.value }))}
                 placeholder="System prompt (optional)"

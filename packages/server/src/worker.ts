@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { db } from './db/client.js';
 import { logger } from './utils/logger.js';
-import { startOrchestrator, stopOrchestrator } from './orchestrator/scheduler.js';
+import { getActiveHeartbeatCount, startOrchestrator, stopOrchestrator } from './orchestrator/scheduler.js';
 import { runtimeRegistry } from './runtime/registry.js';
 
 let shuttingDown = false;
@@ -21,7 +21,8 @@ async function shutdown(signal: string, exitCode: number = 0) {
   forceExitTimer.unref();
 
   try {
-    stopOrchestrator();
+    await stopOrchestrator();
+    logger.info({ activeHeartbeats: getActiveHeartbeatCount() }, 'Heartbeat drain finished');
     await db.close();
     clearTimeout(forceExitTimer);
     logger.info('Worker stopped cleanly');

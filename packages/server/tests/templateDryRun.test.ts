@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTemplateImportDryRun, buildTemplatePreviewAuditDetails } from '../src/services/template.js';
+import { CompanyTemplateSchema, buildTemplateImportDryRun, buildTemplatePreviewAuditDetails } from '../src/services/template.js';
 import { getTemplatePresetById } from '../src/services/templatePresets.js';
 
 describe('buildTemplateImportDryRun', () => {
@@ -175,5 +175,37 @@ describe('buildTemplateImportDryRun', () => {
         tools_to_update: ['web_search'],
       },
     });
+  });
+
+  it('gracefully falls back to the default runtime when importing an unknown agent runtime', () => {
+    const parsed = CompanyTemplateSchema.safeParse({
+      version: '1.1',
+      company: {
+        name: 'Future Corp',
+        mission: 'Import templates across versions safely',
+      },
+      roles: ['owner'],
+      goals: [],
+      policies: [],
+      tools: [],
+      agents: [
+        {
+          ref: 'agent-1',
+          name: 'Nova',
+          role: 'operator',
+          runtime: 'future-runtime-v2',
+          monthly_budget_usd: 10,
+          tools: [],
+        },
+      ],
+      budgets: [],
+    });
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) {
+      throw new Error('Expected template to parse successfully');
+    }
+
+    expect(parsed.data.agents[0]?.runtime).toBe('claude');
   });
 });

@@ -71,6 +71,8 @@ export default function TaskDetailPage() {
 
           <div className="p-4 border-t bg-card flex gap-2">
             <input 
+              id="task-message"
+              name="taskMessage"
               className="flex-1 bg-muted rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="Send instruction to agent..."
               value={newMsg}

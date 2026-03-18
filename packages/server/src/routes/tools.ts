@@ -3,7 +3,7 @@ import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireRole } from '../middleware/auth.js';
 
-const router: Router = Router();
+const router: Router = Router({ mergeParams: true });
 
 const toolSchema = z.object({
   company_id: z.string().uuid(),
@@ -30,8 +30,10 @@ router.post('/', requireRole(['owner', 'admin']), async (req, res, next) => {
 // List tools for company
 router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
   try {
-    const { company_id } = req.query;
-    if (!company_id) return res.status(400).json({ error: 'Missing company_id' });
+    const companyId =
+      (typeof req.params.companyId === 'string' && req.params.companyId) ||
+      (typeof req.query.company_id === 'string' && req.query.company_id);
+    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
     const result = await db.query(
       `SELECT t.*, COUNT(at.agent_id)::int as agent_count
        FROM tools t
@@ -39,7 +41,7 @@ router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req,
        WHERE t.company_id = $1
        GROUP BY t.id
        ORDER BY t.created_at ASC`,
-      [company_id]
+      [companyId]
     );
     res.json(result.rows);
   } catch (err) { next(err); }

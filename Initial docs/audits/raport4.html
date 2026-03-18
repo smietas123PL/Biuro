@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomiczne Biuro — Raport v4</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,600;1,7..72,300;1,7..72,400&family=Azeret+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --paper: #f4f0e8;
+  --paper2: #ede9df;
+  --paper3: #e3ddd2;
+  --ink:    #0d0c0a;
+  --ink2:   #1e1c18;
+  --ink3:   #2e2c27;
+  --muted:  #6b6558;
+  --dim:    #4a4540;
+  --rule:   #b8b0a0;
+  --rule2:  #cec6b5;
+
+  --red:    #c0392b;
+  --red-l:  #f5e6e4;
+  --green:  #1a5c2e;
+  --green-l:#e4f0e8;
+  --amber:  #8b5e0a;
+  --amber-l:#f5ecd8;
+  --blue:   #1a3a6b;
+  --blue-l: #e4eaf5;
+
+  --display: 'Bebas Neue', Impact, sans-serif;
+  --body:    'Literata', Georgia, serif;
+  --mono:    'Azeret Mono', 'Courier New', monospace;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--body);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+.ani { opacity:0; animation: fadeIn .5s cubic-bezier(.25,1,.5,1) forwards; }
+.ani-1 { animation-delay:.05s; } .ani-2 { animation-delay:.1s; }
+.ani-3 { animation-delay:.15s; } .ani-4 { animation-delay:.2s; }
+.ani-5 { animation-delay:.25s; }
+
+/* ── MASTHEAD ── */
+.masthead {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0;
+  border-bottom: 6px solid var(--red);
+}
+.mh-top {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 56px;
+  border-bottom: 1px solid #333;
+  font-family: var(--mono); font-size: 11px; color: #888;
+  letter-spacing: .08em;
+}
+.mh-top strong { color: #bbb; }
+.mh-main {
+  padding: 48px 56px 36px;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 48px; align-items: end;
+}
+.mh-title {
+  font-family: var(--display);
+  font-size: clamp(72px, 11vw, 148px);
+  line-height: .88;
+  letter-spacing: 2px;
+  color: var(--paper);
+}
+.mh-title .accent { color: var(--red); }
+.mh-right {
+  text-align: right;
+  padding-bottom: 8px;
+}
+.mh-vol {
+  font-family: var(--mono); font-size: 11px; color: #666;
+  letter-spacing: .1em; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.mh-summary {
+  font-family: var(--body); font-size: 13px;
+  font-style: italic; color: #aaa;
+  max-width: 280px; line-height: 1.65; text-align: right;
+}
+.mh-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 56px;
+  border-top: 1px solid #2a2a2a;
+  font-family: var(--mono); font-size: 11px; color: #666;
+  letter-spacing: .08em;
+}
+.mh-tags { display: flex; gap: 16px; }
+.mh-tag {
+  padding: 3px 10px; border: 1px solid #333; border-radius: 2px;
+  font-size: 10px; letter-spacing: .1em;
+}
+.mh-tag-red { border-color: var(--red); color: #e88; }
+
+/* ── SCORES BAR ── */
+.scores {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  border-bottom: 3px double var(--rule);
+}
+.score-col {
+  padding: 20px 16px;
+  border-right: 1px solid var(--rule2);
+  text-align: center;
+  background: var(--paper2);
+}
+.score-col:last-child { border-right: none; }
+.sc-label {
+  font-family: var(--mono); font-size: 9px;
+  text-transform: uppercase; letter-spacing: .12em;
+  color: var(--muted); margin-bottom: 8px;
+}
+.sc-num { font-family: var(--display); font-size: 52px; line-height: 1; }
+.sc-delta { font-family: var(--mono); font-size: 11px; margin-top: 4px; }
+.s-green { color: var(--green); }
+.s-amber { color: var(--amber); }
+.s-red   { color: var(--red); }
+.d-up    { color: var(--green); }
+.d-flat  { color: var(--muted); }
+
+/* ── PAGE ── */
+.page { max-width: 1200px; margin: 0 auto; padding: 0 56px; }
+
+/* ── SECTION HEADER ── */
+.section { margin-top: 56px; margin-bottom: 0; }
+.section-rule {
+  display: flex; align-items: center; gap: 16px;
+  margin-bottom: 28px;
+}
+.sr-num {
+  font-family: var(--display);
+  font-size: 48px; line-height: 1; color: var(--rule);
+}
+.sr-body { flex: 1; }
+.sr-kicker {
+  font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--muted); margin-bottom: 4px;
+}
+.sr-title {
+  font-family: var(--display);
+  font-size: 34px; line-height: 1.05; letter-spacing: .5px;
+  color: var(--ink);
+}
+.sr-badge {
+  font-family: var(--mono); font-size: 10px;
+  font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  padding: 4px 12px; border: 1.5px solid currentColor;
+  align-self: center;
+}
+.sb-red   { color: var(--red);   border-color: var(--red); }
+.sb-green { color: var(--green); border-color: var(--green); }
+.sb-amber { color: var(--amber); border-color: var(--amber); }
+.sb-blue  { color: var(--blue);  border-color: var(--blue); }
+.hr { border: none; border-top: 2px solid var(--ink); margin-bottom: 28px; }
+.hr-thin { border: none; border-top: 1px solid var(--rule); margin: 20px 0; }
+
+/* ── DELTA COLUMNS ── */
+.delta-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1.5px solid var(--ink); }
+.delta-col { padding: 24px 26px; }
+.delta-col + .delta-col { border-left: 1.5px solid var(--ink); }
+.dc-head {
+  font-family: var(--display); font-size: 15px; letter-spacing: .8px;
+  margin-bottom: 16px; padding-bottom: 10px;
+  border-bottom: 2px double var(--rule);
+  text-transform: uppercase;
+}
+.dc-head-green { border-bottom-color: var(--green); }
+.dc-head-red   { border-bottom-color: var(--red); }
+.dc-item { display: flex; gap: 10px; margin-bottom: 12px; align-items: flex-start; }
+.dc-item:last-child { margin-bottom: 0; }
+.dc-bullet {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  margin-top: 2px; flex-shrink: 0; width: 20px;
+}
+.dc-text { font-size: 13.5px; line-height: 1.6; color: var(--dim); }
+.dc-text strong { color: var(--ink); font-weight: 600; }
+
+/* ── FINDING CARDS ── */
+.findings { display: flex; flex-direction: column; gap: 0; }
+.finding {
+  border: 1.5px solid var(--ink);
+  border-bottom: none;
+}
+.finding:last-child { border-bottom: 1.5px solid var(--ink); }
+
+.finding-head {
+  display: flex; align-items: center; gap: 0;
+  border-bottom: 1px solid var(--rule2);
+}
+.fh-sev {
+  font-family: var(--display); font-size: 13px; letter-spacing: .8px;
+  padding: 9px 16px;
+  border-right: 1px solid var(--rule2);
+  width: 110px; flex-shrink: 0; text-align: center;
+}
+.fh-sev-c  { background: var(--red);   color: #fff; }
+.fh-sev-h  { background: var(--amber); color: #fff; }
+.fh-sev-m  { background: var(--blue);  color: #fff; }
+.fh-sev-l  { background: var(--green); color: #fff; }
+.fh-sev-fx { background: var(--ink3);  color: var(--paper); }
+.fh-title {
+  font-family: var(--body); font-size: 14px; font-weight: 600;
+  padding: 9px 16px; flex: 1; color: var(--ink);
+}
+.fh-file {
+  font-family: var(--mono); font-size: 10px;
+  padding: 9px 16px; color: var(--muted);
+  border-left: 1px solid var(--rule2);
+  white-space: nowrap;
+}
+.finding-body {
+  padding: 16px 20px;
+  font-size: 13.5px; line-height: 1.75;
+  color: var(--dim); font-weight: 300;
+}
+.finding-body p { margin-bottom: 8px; }
+.finding-body p:last-child { margin-bottom: 0; }
+.finding-body strong { color: var(--ink); font-weight: 600; }
+.finding-body ul { padding-left: 18px; margin: 8px 0; line-height: 2.1; }
+
+/* ── CODE BLOCK ── */
+.code {
+  background: var(--ink2); color: #c8c0b0;
+  font-family: var(--mono); font-size: 12px; line-height: 1.9;
+  padding: 14px 16px; margin: 10px 0; overflow-x: auto;
+  border-left: 3px solid var(--rule);
+}
+.code .ftag {
+  display: block; font-size: 10px; text-transform: uppercase;
+  letter-spacing: .1em; color: #666;
+  margin-bottom: 8px; padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+.cb { color: #e07070; }
+.cg { color: #7ec88a; }
+.cm { color: #777; }
+.ck { color: #e0c070; }
+
+/* ── FIX ── */
+.fix {
+  background: var(--green-l);
+  border-left: 3px solid var(--green);
+  padding: 10px 14px; margin-top: 10px;
+  font-size: 13px; line-height: 1.7; color: var(--ink);
+}
+.fix strong { color: var(--green); font-weight: 700; }
+
+/* ── TABLE ── */
+.tbl { width: 100%; border-collapse: collapse; border: 1.5px solid var(--ink); font-size: 13px; }
+.tbl th {
+  font-family: var(--mono); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--paper);
+  background: var(--ink); padding: 9px 14px; text-align: left;
+}
+.tbl td {
+  padding: 10px 14px; border-bottom: 1px solid var(--rule2);
+  border-right: 1px solid var(--rule2); color: var(--dim); vertical-align: top;
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl td:last-child { border-right: none; }
+.tbl tr:nth-child(even) td { background: var(--paper2); }
+.tbl tr:hover td { background: var(--paper3); }
+.t-green { color: var(--green); font-weight: 600; }
+.t-red   { color: var(--red); font-weight: 600; }
+.t-amber { color: var(--amber); font-weight: 600; }
+.t-muted { color: var(--muted); font-style: italic; }
+
+code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--paper3); padding: 1px 5px;
+  border: 1px solid var(--rule2); color: var(--ink2);
+}
+
+/* ── PROGRESS ── */
+.pb-r { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.pb-l { width: 160px; font-family: var(--mono); font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.pb-t { flex: 1; height: 8px; background: var(--paper3); border: 1px solid var(--rule); }
+.pb-f { height: 100%; }
+.pb-p { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 38px; text-align: right; }
+
+/* ── PRIORITY LIST ── */
+.plist { display: flex; flex-direction: column; gap: 0; border: 1.5px solid var(--ink); }
+.prow {
+  display: grid; grid-template-columns: 64px 1fr auto;
+  align-items: start; gap: 0;
+  border-bottom: 1px solid var(--rule2);
+  transition: background .15s;
+}
+.prow:last-child { border-bottom: none; }
+.prow:hover { background: var(--paper2); }
+.pn {
+  font-family: var(--display); font-size: 36px; line-height: 1;
+  color: var(--rule); padding: 14px 16px;
+  border-right: 1px solid var(--rule2);
+  text-align: center; align-self: center;
+}
+.pc { padding: 14px 18px; }
+.pc h4 { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.pc p  { font-size: 13px; font-weight: 300; color: var(--dim); line-height: 1.6; }
+.pe {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .1em;
+  padding: 4px 12px; border-left: 1px solid var(--rule2);
+  align-self: start; margin-top: 14px; white-space: nowrap;
+}
+.pe-c { background: var(--red); color: #fff; }
+.pe-h { background: var(--amber); color: #fff; }
+.pe-m { background: var(--blue); color: #fff; }
+.pe-l { background: var(--paper3); color: var(--muted); }
+
+/* ── VERDICT ── */
+.verdict {
+  border: 3px double var(--ink);
+  padding: 36px 40px;
+  margin-top: 0;
+}
+.verdict-kicker {
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .16em; color: var(--muted); margin-bottom: 12px;
+}
+.verdict h3 {
+  font-family: var(--display); font-size: 36px; letter-spacing: .5px;
+  color: var(--ink); margin-bottom: 20px; line-height: 1.1;
+}
+.verdict p {
+  font-size: 14.5px; font-weight: 300; color: var(--dim);
+  line-height: 1.85; margin-bottom: 14px;
+}
+.verdict p:last-child { margin-bottom: 0; }
+.hl  { color: var(--ink); font-weight: 600; }
+.hlg { color: var(--green); font-weight: 600; }
+.hla { color: var(--amber); font-weight: 600; }
+.hlr { color: var(--red); font-weight: 600; }
+.hlb { color: var(--blue); font-weight: 600; }
+
+/* ── PULLQUOTE ── */
+.pullquote {
+  border-left: 4px solid var(--ink);
+  padding: 4px 0 4px 20px;
+  margin: 20px 0;
+  font-style: italic; font-size: 16px; color: var(--ink2);
+  line-height: 1.6;
+}
+
+/* ── FOOTER ── */
+.page-footer {
+  margin-top: 80px;
+  padding: 20px 56px;
+  border-top: 3px double var(--rule);
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  letter-spacing: .08em;
+}
+.pf-brand { font-family: var(--display); font-size: 18px; letter-spacing: 1px; color: var(--ink); }
+
+/* ── SPACER ── */
+.spacer { height: 48px; }
+</style>
+</head>
+<body>
+
+<!-- ════ MASTHEAD ════ -->
+<header class="masthead">
+  <div class="mh-top">
+    <span>AUTONOMICZNE BIURO · CODE REVIEW</span>
+    <strong>COMMIT: 1180762 · 50 PLIKÓW · +6438 LINII</strong>
+    <span>18 MARCA 2026</span>
+  </div>
+  <div class="mh-main">
+    <div class="mh-title ani ani-1">
+      RAPORT<br><span class="accent">V4</span>
+    </div>
+    <div class="mh-right ani ani-2">
+      <div class="mh-vol">Tom IV · Iteracja końcowa</div>
+      <div class="mh-summary">
+        Największy commit w historii projektu. Prawdziwy RAG, testy, budżety, szablony, Command Palette — i trzy problemy których nie ruszono.
+      </div>
+    </div>
+  </div>
+  <div class="mh-bottom">
+    <div class="mh-tags">
+      <span class="mh-tag">Vitest ✓</span>
+      <span class="mh-tag">Hybrid RAG ✓</span>
+      <span class="mh-tag">Templates ✓</span>
+      <span class="mh-tag">BudgetsPage ✓</span>
+      <span class="mh-tag">Graceful shutdown ✓</span>
+      <span class="mh-tag mh-tag-red">WS auth ✗</span>
+    </div>
+    <span>Wyd. przez Claude Sonnet 4.6</span>
+  </div>
+</header>
+
+<!-- ════ SCORES ════ -->
+<div class="scores ani ani-3">
+  <div class="score-col">
+    <div class="sc-label">Architektura</div>
+    <div class="sc-num s-green">9.0</div>
+    <div class="sc-delta d-up">▲ +0.5 od v3</div>
+  </div>
+  <div class="score-col">
+    <div class="sc-label">Bezpieczeństwo</div>
+    <div class="sc-num s-amber">8.0</div>
+    <div class="sc-delta d-flat">— bez zmian</div>
+  </div>
+  <div class="score-col">
+    <div class="sc-label">Jakość kodu</div>
+    <div class="sc-num s-green">8.0</div>
+    <div class="sc-delta d-up">▲ +1.0 od v3</div>
+  </div>
+  <div class="score-col">
+    <div class="sc-label">Testy</div>
+    <div class="sc-num s-amber">6.5</div>
+    <div class="sc-delta d-up">▲ +3.5 od v3</div>
+  </div>
+  <div class="score-col">
+    <div class="sc-label">Gotowość PROD</div>
+    <div class="sc-num s-green">8.0</div>
+    <div class="sc-delta d-up">▲ +1.0 od v3</div>
+  </div>
+</div>
+
+<!-- ════ PAGE BODY ════ -->
+<div class="page">
+
+  <!-- ── 01. DELTA ── -->
+  <div class="section ani ani-4">
+    <div class="section-rule">
+      <div class="sr-num">01</div>
+      <div class="sr-body">
+        <div class="sr-kicker">Commit 1180762 · 50 plików</div>
+        <div class="sr-title">NAJWIĘKSZY SPRINT W HISTORII PROJEKTU</div>
+      </div>
+      <span class="sr-badge sb-green">DELTA</span>
+    </div>
+    <div class="hr"></div>
+
+    <div class="delta-cols">
+      <div class="delta-col">
+        <div class="dc-head dc-head-green">✓ Zamknięte z raportów v1–v3</div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>Hybrid RAG</strong> — <code>generateEmbedding()</code> z OpenAI fallbackiem na deterministyczny hash-based embedding. Oba knowledge.ts i memory.ts używają prawdziwego wyszukiwania wektorowego z <code>embedding &lt;=&gt; $vector</code>.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>Testy — 6 plików Vitest</strong>: budgets.test.ts, embeddings.test.ts, templateDryRun.test.ts, templatePresets.test.ts, embeddingBackfill.test.ts, retrievalMetrics.test.ts. Pierwsza rzeczywista ochrona przed regresją.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>Template service kompletny</strong> — eksport i import goals, tools, policies, agents z <code>reports_to</code>, budgets, sanityzacja secretów. Pełny CompanyTemplateSchema z Zod. Presets: solo-founder, product-delivery i inne.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>BudgetsPage z prognozą</strong> — spending per agent, 7-dniowe sparklines, projection end-of-month, alert przy 80% limitu. Endpoint <code>/companies/:id/budgets-summary</code>.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>Graceful shutdown</strong> — worker.ts obsługuje SIGTERM/SIGINT/uncaughtException/unhandledRejection z 10s timeout force-exit. <code>stopOrchestrator()</code> + <code>db.close()</code>.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>Command Palette ⌘K</strong> — pełna implementacja w Layout.tsx z nawigacją po stronach, agentach, taskach, celach, szybkimi akcjami (pause/resume/terminate).</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>Live Activity Feed</strong> — Dashboard używa <code>useWebSocket()</code> do wyświetlania real-time heartbeatów z workerów.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>AuditLogPage cursor pagination</strong> — <code>next_cursor</code> z server-side, infinite scroll "Load more". Filtry po action, range czasowy.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>Retrieval metrics</strong> — <code>retrieval_metrics</code> tabela z schema_v12, <code>recordRetrievalMetric()</code> przy każdym wyszukiwaniu. Observability RAG pipeline.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>dev-user → poprawny UUID</strong> — <code>AUTH_ENABLED=false</code> używa <code>'00000000-0000-0000-0000-000000000000'</code> zamiast stringa "dev-user" (wcześniej łamało FK constraints).</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--green)">✓</span><div class="dc-text"><strong>TemplatesPage (646 linii)</strong> — pełny import/export UI, dry-run preview z listą zmian, presets gallery.</div></div>
+      </div>
+      <div class="delta-col">
+        <div class="dc-head dc-head-red">✗ Nadal otwarte po 4 raportach</div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--red)">✗</span><div class="dc-text"><strong>WebSocket bez autoryzacji</strong> — krytyczny problem z raportów v3. Każdy z UUID firmy może podsłuchać wszystkie live eventy. ws.ts nie zmieniony.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--red)">✗</span><div class="dc-text"><strong>Budget race condition</strong> — SELECT + UPDATE nadal w dwóch operacjach. Równoległe heartbeaty mogą jednocześnie przejść sprawdzenie limitu.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--red)">✗</span><div class="dc-text"><strong>gemini-3.1-flash-lite nie istnieje</strong> — <code>defaultModels.ts</code> definiuje nieistniejący model. Każdy agent Gemini bez custom model zakończy się błędem API.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--amber)">⚠</span><div class="dc-text"><strong>N+1 queries w context.ts</strong> — pętla while z osobnym SELECT per poziom hierarchii celów. CTE nie wdrożone.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--amber)">⚠</span><div class="dc-text"><strong>Polityki rate_limit i tool_restriction</strong> — wciąż brak case w evaluatePolicy(). Dead feature dostępna w UI.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--amber)">⚠</span><div class="dc-text"><strong>Docker DB password = "password"</strong> — hardcoded przez 4 raporty. Nie zmienione.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--amber)">⚠</span><div class="dc-text"><strong>ivfflat wymaga min. ~1000 wektorów</strong> — nowy indeks na pustej bazie daje gorsze wyniki niż sequential scan. Brak walidacji.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--amber)">⚠</span><div class="dc-text"><strong>Testy tylko unit, bez DB</strong> — żaden test nie dotyka bazy. Heartbeat, safety, context builder — nieprzetestowane. Graceful shutdown bez testu poprawności.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--amber)">⚠</span><div class="dc-text"><strong>Scheduler — brak LIMIT, brak terminated filter</strong> — thundering herd przy skalowaniu bez zmian.</div></div>
+        <div class="dc-item"><span class="dc-bullet" style="color:var(--amber)">⚠</span><div class="dc-text"><strong>OrgChartPage i IntegrationsPage</strong> — nadal nie istnieją mimo API.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ── 02. BEZPIECZEŃSTWO ── -->
+  <div class="section">
+    <div class="section-rule">
+      <div class="sr-num">02</div>
+      <div class="sr-body">
+        <div class="sr-kicker">Bezpieczeństwo · 4. raport z rzędu</div>
+        <div class="sr-title">TRZY OTWARTE PROBLEMY — DWA KRYTYCZNE</div>
+      </div>
+      <span class="sr-badge sb-red">PILNE</span>
+    </div>
+    <div class="hr"></div>
+    <div class="findings">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-c">CRITICAL</span>
+          <span class="fh-title">WebSocket — zero autoryzacji, eventy firmy dostępne publicznie po UUID</span>
+          <span class="fh-file">ws.ts · niezmieniony od v1</span>
+        </div>
+        <div class="finding-body">
+          <p>Przez 4 raporty i 4 sprinty poprawek <code>ws.ts</code> nie był dotknięty. Każdy kto zna UUID firmy — który pojawia się w URL dashboardu, nagłówkach API, logach — może nawiązać połączenie WebSocket i odbierać wszystkie live eventy: <code>agent.working</code>, <code>heartbeat.completed</code>, <code>approval.requested</code>. Te eventy zawierają tytuły tasków, myśli agentów i koszty operacji.</p>
+          <div class="code">
+            <span class="ftag">ws.ts — identyczny od commitu v1:</span>
+            <span class="cb">// Brak: token = url.searchParams.get('token')</span>
+            <span class="cb">// Brak: const session = await getSession(token)</span>
+            <span class="cb">// Brak: if (!session) { ws.close(4401, 'Unauthorized'); return; }</span>
+            <span class="cm">const companyId = url.searchParams.get('companyId');</span>
+            <span class="cm">if (!companyId) { ws.close(); return; }</span>
+            <span class="cm">this.clients.get(companyId)!.add(ws); // ← przyjmuje każdego</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Dodać do URL parametr <code>token</code>, zaimportować <code>getSession()</code> z <code>middleware/auth.ts</code>, sprawdzić <code>user_roles</code> dla companyId. Odrzucić przez <code>ws.close(4401)</code>. Frontend: dodać token do URL w <code>useWebSocket()</code>. Czas: ~2–3 godziny.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-c">CRITICAL</span>
+          <span class="fh-title">gemini-3.1-flash-lite nie istnieje w Gemini API — wszystkie agenty Gemini bez custom model crashują</span>
+          <span class="ffile">runtime/defaultModels.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Nowy plik <code>defaultModels.ts</code> definiuje <code>gemini: 'gemini-3.1-flash-lite'</code> — model który nie istnieje. Gemini API Google nie ma wersji 3.1 (najnowsza to 2.5 Flash / 2.0 Flash). Każdy heartbeat agenta z <code>runtime='gemini'</code> i bez ustawionego <code>agent_model</code> zakończy się błędem <code>404 Model not found</code> rzuconym przez SDK, co przejdzie przez catch i zostanie zalogowane jako error heartbeatu — agent zostanie auto-pauzowany przez safety system po 5 kolejnych błędach.</p>
+          <div class="code">
+            <span class="ftag">runtime/defaultModels.ts — nieistniejący model:</span>
+            <span class="cb">gemini: env.GEMINI_MODEL || 'gemini-3.1-flash-lite',</span>
+            <span class="cg">// Poprawka — jeden z istniejących modeli:</span>
+            <span class="cg">gemini: env.GEMINI_MODEL || 'gemini-2.0-flash',</span>
+            <span class="cm">// lub: 'gemini-2.5-flash-preview-05-20' (jeśli dostępny)</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka (1 minuta):</strong> Zmienić na <code>'gemini-2.0-flash'</code> lub <code>'gemini-2.5-flash'</code>. Sprawdzić listę dostępnych modeli: <code>https://ai.google.dev/gemini-api/docs/models</code>.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-h">HIGH</span>
+          <span class="fh-title">Budget race condition — SELECT + UPDATE w dwóch niezależnych operacjach</span>
+          <span class="fh-file">orchestrator/heartbeat.ts:28–35</span>
+        </div>
+        <div class="finding-body">
+          <p>Graceful shutdown naprawiony, ale race condition budżetu nadal istnieje. Sprawdzenie limitu i aktualizacja wydatków to dwie oddzielne operacje. Przy równoległych heartbeatach (co scheduler uruchamia dla wszystkich idle agentów jednocześnie) dwa procesy mogą przejść sprawdzenie w tym samym momencie — zanim którykolwiek zaktualizuje saldo.</p>
+          <div class="fix">
+            <strong>Poprawka atomowa:</strong> Zastąpić SELECT + UPDATE jednym zapytaniem: <code>UPDATE budgets SET spent_usd = spent_usd + $2 WHERE agent_id = $1 AND month = date_trunc('month', now())::date AND spent_usd + $2 &lt;= limit_usd RETURNING spent_usd</code>. Jeśli 0 wierszy — budżet przekroczony. Jedno round-trip, zero race condition.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-h">HIGH</span>
+          <span class="fh-title">Docker — hasło bazy danych "password" hardcoded przez wszystkie 4 raporty</span>
+          <span class="ffile">docker-compose.yml</span>
+        </div>
+        <div class="finding-body">
+          <p>Czwarty raport z rzędu. <code>POSTGRES_PASSWORD: password</code> i <code>postgres://biuro:password@db</code> w trzech miejscach pliku docker-compose. Każdy kto ma dostęp do repozytorium ma dostęp do produkcyjnej bazy. Jedna linia zmiany.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong> <code>POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}</code> — operator <code>:?</code> wymusi błąd przy braku zmiennej. Dodać <code>DB_PASSWORD=CHANGE_ME_$(openssl rand -hex 12)</code> do <code>.env.example</code> z komentarzem.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ── 03. NOWE FUNKCJE — OCENA ── -->
+  <div class="section">
+    <div class="section-rule">
+      <div class="sr-num">03</div>
+      <div class="sr-body">
+        <div class="sr-kicker">Ocena nowych funkcji</div>
+        <div class="sr-title">CO ZOSTAŁO ZBUDOWANE I JAK DOBRZE</div>
+      </div>
+      <span class="sr-badge sb-blue">ANALIZA</span>
+    </div>
+    <div class="hr"></div>
+    <div class="findings">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-l">DOBRY</span>
+          <span class="fh-title">Hybrid RAG — deterministyczny fallback to przemyślane rozwiązanie</span>
+          <span class="fh-file">services/embeddings.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Zamiast prostego "brak klucza API = crash", system wraca na <strong>deterministyczny hash-based embedding</strong>: tokenizacja, FNV hash, ważone wektory, normalizacja L2. To nie jest semantyczne wyszukiwanie, ale jest <em>powtarzalne</em> — to samo zdanie zawsze daje ten sam wektor. Hybrid search łączy wyniki wektorowe z lexical ILIKE scoring. Metryki retrieval zapisywane do <code>retrieval_metrics</code> tabeli.</p>
+          <p><strong>Uwaga:</strong> ivfflat index z <code>lists=100</code> wymaga minimum ~1000–3000 wektorów dla sensownych wyników. Na pustej bazie PostgreSQL i tak wykona sequential scan (poprawnie), ale ostrzeżenie przy tworzeniu indeksu jest warto dodać do dokumentacji.</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-l">DOBRY</span>
+          <span class="fh-title">Template service — pierwsza kompletna implementacja z dry-run preview</span>
+          <span class="ffile">services/template.ts · ~800 linii</span>
+        </div>
+        <div class="finding-body">
+          <p>Największy plik w projekcie. Export pokrywa teraz agentów z <code>reports_to_ref</code>, tools z przypisaniami, policies, goals z hierarchią parent_ref, budgets. Import z mapowaniem ref → nowy UUID. Dry-run zwraca dokładną listę zmian przed zastosowaniem. Sanityzacja secretów przez pattern matching na kluczach. Trzy presets: solo-founder, product-delivery i inne.</p>
+          <p><strong>Uwaga do poprawy:</strong> Import agenta z nieznanym <code>runtime</code> wartością przejdzie przez Zod (enum jest <code>['claude','openai','gemini']</code>), ale co jeśli ktoś wyeksportuje szablon z przyszłej wersji z nowym runtimem? Brak graceful degradation dla nieznanych runtimeów.</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-l">DOBRY</span>
+          <span class="fh-title">BudgetsPage — kompletna implementacja z prognozą i 7-dniowymi wykresami</span>
+          <span class="ffile">pages/BudgetsPage.tsx · utils/budgets.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Logika budżetowa wydzielona do <code>utils/budgets.ts</code> z czystymi funkcjami pure (<code>buildDailySpendSeries</code>, <code>buildBudgetForecast</code>, <code>summarizeAgentBudgets</code>). Właśnie te funkcje mają testy w <code>budgets.test.ts</code>. Frontend pokazuje progress bary per agent, alerty przy przekroczeniu, sparkline spending. Endpoint <code>/companies/:id/budgets-summary</code> zwraca wszystko w jednym wywołaniu.</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-m">UWAGA</span>
+          <span class="fh-title">Testy — tylko unit na pure functions, zero testów DB lub orchestratora</span>
+          <span class="ffile">tests/*.test.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>6 plików testowych to ogromny postęp, ale pokrycie jest selektywne. Testy pokrywają tylko kod bez side-effectów: <code>buildDailySpendSeries()</code>, <code>buildDeterministicEmbedding()</code>, template schema validation. Zero testów dla kodu który faktycznie może się posypać w produkcji:</p>
+          <ul>
+            <li><strong>Brak testów heartbeat</strong> — atomic checkout, budget enforcement, action processing</li>
+            <li><strong>Brak testów safety.ts</strong> — circular delegation detection, flood detection</li>
+            <li><strong>Brak testów graceful shutdown</strong> — czy taski są poprawnie odblokowywane?</li>
+            <li><strong>Brak testów auth middleware</strong> — token validation, role checking, RLS context</li>
+          </ul>
+          <p>Vitest config nie ma <code>testcontainers</code> ani <code>pg-mem</code> — żaden test nie może dotknąć bazy danych.</p>
+          <div class="fix">
+            <strong>Następny krok:</strong> Dodać <code>pg-mem</code> jako in-memory PostgreSQL dla testów jednostkowych z zapytaniami. Nie wymaga Dockera w CI. Zacząć od <code>safety.test.ts</code> — detectCircularDelegation jest algorytmem który można przetestować z mock DB bez kontenera.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-m">UWAGA</span>
+          <span class="fh-title">Graceful shutdown — stopOrchestrator() nie czeka na aktywne heartbeaty</span>
+          <span class="ffile">worker.ts · orchestrator/scheduler.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Graceful shutdown jest zdecydowanie lepszy niż brak obsługi SIGTERM, ale ma lukę: <code>stopOrchestrator()</code> woła <code>clearInterval(interval)</code> — co zapobiega <em>nowym</em> heartbeatom, ale nie czeka na zakończenie <em>aktywnych</em>. Heartbeaty uruchomione przed SIGTERM nadal działają w tle, a <code>db.close()</code> jest wywoływany zaraz po. Aktywny heartbeat który trafi na zamknięte połączenie z bazą rzuci błąd i task znów zostanie zablokowany.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong> Dodać licznik aktywnych heartbeatów: <code>let activeHeartbeats = 0</code>. Na początku każdego <code>processAgentHeartbeat</code>: <code>activeHeartbeats++</code>, w finally: <code>activeHeartbeats--</code>. W shutdown: <code>while (activeHeartbeats > 0) await sleep(200)</code> przed <code>db.close()</code>. Lub alternatywnie: po stopOrchestrator wykonać <code>UPDATE tasks SET status='assigned', locked_by=NULL WHERE locked_by IS NOT NULL</code>.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ── 04. PERSYSTUJĄCE DŁUGI ── -->
+  <div class="section">
+    <div class="section-rule">
+      <div class="sr-num">04</div>
+      <div class="sr-body">
+        <div class="sr-kicker">Tech debt · przez całą historię</div>
+        <div class="sr-title">PROBLEMY KTÓRE PRZETRWAŁY 4 RAPORTY</div>
+      </div>
+      <span class="sr-badge sb-amber">DŁUG</span>
+    </div>
+    <div class="hr"></div>
+    <div class="findings">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-m">MEDIUM</span>
+          <span class="fh-title">N+1 queries w buildAgentContext() — pętla while zamiast CTE</span>
+          <span class="ffile">orchestrator/context.ts · niezmieniony</span>
+        </div>
+        <div class="finding-body">
+          <p>Każdy heartbeat buduje hierarchię celów przez pętlę <code>while (currentGoalId)</code> z oddzielnym <code>SELECT</code> per poziom. Przy 5 poziomach celów i 20 agentach: ~100 extra zapytań na minutę. Rozwiązanie przez <code>WITH RECURSIVE</code> istnieje w kodzie <code>getDelegationDepth()</code> (heartbeat.ts linia 255) — identyczna technika, nie przeniesiona do context.ts.</p>
+          <div class="code">
+            <span class="ftag">context.ts — N+1 (niezmienione), vs getDelegationDepth (CTE, linia 255 heartbeat.ts):</span>
+            <span class="cb">while (currentGoalId) { // ← osobny SELECT per poziom</span>
+            <span class="cb">  const res = await db.query('SELECT title, parent_id FROM goals WHERE id = $1', ...);</span>
+            <span class="cg">// Gotowe rozwiązanie w tym samym pliku (heartbeat.ts):</span>
+            <span class="cg">"WITH RECURSIVE parents AS (SELECT id, parent_id FROM tasks WHERE id = $1</span>
+            <span class="cg"> UNION ALL SELECT t.id, t.parent_id FROM tasks t JOIN parents p ON t.id = p.parent_id)</span>
+            <span class="cg"> SELECT count(*) FROM parents"</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-m">MEDIUM</span>
+          <span class="fh-title">Polityki rate_limit i tool_restriction — 4. raport, nadal dead feature</span>
+          <span class="ffile">governance/policies.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Schema, Zod enum, API endpoint, TemplatesPage — wszystkie widzą i akceptują typy <code>rate_limit</code> i <code>tool_restriction</code>. Plik <code>evaluatePolicy()</code> nie ma dla nich case'ów od pierwszego commitu. Teraz gdy szablony mogą zawierać te polityki (i <code>templatePresets.ts</code> je definiuje), problem staje się widoczny dla użytkownika: zaimportuje szablon z polityką rate_limit, widzi ją w dashboardzie, a ona nic nie robi.</p>
+          <div class="fix">
+            <strong>Poprawka — rate_limit:</strong> <code>const count = await db.query("SELECT COUNT(*) FROM heartbeats WHERE agent_id = $1 AND created_at > now() - interval '1 hour'", [agentId]); if (parseInt(count.rows[0].count) > rules.max_per_hour) return { allowed: false, ... }</code><br>
+            <strong>Poprawka — tool_restriction:</strong> <code>if (rules.blocked_tools?.includes(payload.tool_name)) return { allowed: false, ... }</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-m">MEDIUM</span>
+          <span class="fh-title">Scheduler — brak LIMIT i terminated filter, thundering herd przy scale</span>
+          <span class="ffile">orchestrator/scheduler.ts · niezmieniony</span>
+        </div>
+        <div class="finding-body">
+          <p><code>SELECT id FROM agents WHERE status = 'idle'</code> — bez LIMIT. Przy 100 idle agentach scheduler uruchamia 100 goroutine jednocześnie, każda z własnym połączeniem do bazy i wywołaniem LLM API. Projekt celuje w "manage 20 agents" — ale nie ma żadnego zabezpieczenia przed przypadkowym skalowaniem. Jeden zepsuty deployment z pętlą agentów może wygenerować setki równoległych wywołań do Claude API.</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="fh-sev fh-sev-m">MEDIUM</span>
+          <span class="fh-title">OrgChartPage i IntegrationsPage — API istnieje, UI nadal zero</span>
+          <span class="ffile">pages/ · brak obu plików</span>
+        </div>
+        <div class="finding-body">
+          <p>Po 4 sprintach i 50-plikowym commicie nadal brak OrgChart (mimo że <code>reports_to</code> jest w bazie od v1) i IntegrationsPage (mimo że Slack/Discord/webhook API jest pełne). OrgChart to <em>wizualna tożsamość projektu</em> — "firma złożona z agentów" nabiera sensu dopiero gdy użytkownik widzi hierarchię. Bez tego projekt wygląda jak zaawansowany task manager, nie platforma orkiestracji.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ── 05. STAN DASHBOARD ── -->
+  <div class="section">
+    <div class="section-rule">
+      <div class="sr-num">05</div>
+      <div class="sr-body">
+        <div class="sr-kicker">Frontend · aktualna mapa stron</div>
+        <div class="sr-title">DASHBOARD PO 4 COMMITACH</div>
+      </div>
+      <span class="sr-badge sb-blue">STAN</span>
+    </div>
+    <div class="hr"></div>
+
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Strona</th><th>v1</th><th>v2</th><th>v3</th><th>v4 (aktualne)</th><th>Uwagi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>DashboardPage</code></td><td class="t-red">Mock</td><td class="t-green">Live</td><td class="t-green">Live</td><td class="t-green">+ Live Feed WS</td><td>Activity stream z useWebSocket()</td></tr>
+        <tr><td><code>AgentsPage</code></td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td>Stabilna</td></tr>
+        <tr><td><code>AgentDetailPage</code></td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td>Stabilna</td></tr>
+        <tr><td><code>TasksPage</code></td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td>Stabilna</td></tr>
+        <tr><td><code>GoalsPage</code></td><td class="t-red">Placeholder</td><td class="t-amber">Flat list</td><td class="t-green">Drzewo</td><td class="t-green">Drzewo</td><td>buildGoalTree() z wcięciami</td></tr>
+        <tr><td><code>ToolsPage</code></td><td class="t-red">Placeholder</td><td class="t-green">Grid</td><td class="t-green">Grid</td><td class="t-green">Grid</td><td>Stabilna</td></tr>
+        <tr><td><code>BudgetsPage</code></td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-green">Nowa ✓</td><td>Sparklines, forecast, alerty</td></tr>
+        <tr><td><code>TemplatesPage</code></td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-green">Nowa ✓</td><td>646 linii, dry-run preview, presets</td></tr>
+        <tr><td><code>AuditLogPage</code></td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">+ Cursor pagination</td><td>Infinite scroll, filtry</td></tr>
+        <tr><td><code>ApprovalsPage</code></td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td class="t-green">✓</td><td>Stabilna</td></tr>
+        <tr><td><code>AuthPage</code></td><td class="t-red">Brak</td><td class="t-green">Nowa</td><td class="t-green">✓</td><td class="t-green">✓</td><td>Stabilna</td></tr>
+        <tr><td><code>CommandPalette ⌘K</code></td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-green">Nowa ✓</td><td>Nawigacja, agenci, taski, akcje</td></tr>
+        <tr><td><code>OrgChartPage</code></td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-red">Nadal brak</td><td>reports_to w DB od v1, UI = zero</td></tr>
+        <tr><td><code>IntegrationsPage</code></td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-red">Brak</td><td class="t-red">Nadal brak</td><td>Slack/Discord/webhook API pełne</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ── 06. PRIORYTETY ── -->
+  <div class="section">
+    <div class="section-rule">
+      <div class="sr-num">06</div>
+      <div class="sr-body">
+        <div class="sr-kicker">Co robić teraz · kolejność</div>
+        <div class="sr-title">PRIORYTETY PO COMMICIE 1180762</div>
+      </div>
+      <span class="sr-badge sb-red">ROADMAP</span>
+    </div>
+    <div class="hr"></div>
+
+    <div class="plist">
+      <div class="prow">
+        <span class="pn">1</span>
+        <div class="pc">
+          <h4>🔴 WebSocket auth — token query param + session check</h4>
+          <p>Czwarty raport z rzędu. Dodać <code>?token=SESSION_TOKEN</code> do URL WS w frontend, po stronie serwera pobrać sesję i sprawdzić user_roles. <code>ws.close(4401)</code> przy braku dostępu. Czas: 2–3 godziny.</p>
+        </div>
+        <span class="pe pe-c">KRYTYCZNE</span>
+      </div>
+      <div class="prow">
+        <span class="pn">2</span>
+        <div class="pc">
+          <h4>🔴 gemini-3.1-flash-lite → gemini-2.0-flash</h4>
+          <p>Jedna zmiana w defaultModels.ts. Agenty Gemini crashują przy każdym heartbeacie z tym modelem — auto-pauzują się po 5 błędach. Czas: 1 minuta.</p>
+        </div>
+        <span class="pe pe-c">1 MINUTA</span>
+      </div>
+      <div class="prow">
+        <span class="pn">3</span>
+        <div class="pc">
+          <h4>🔴 Budget race → atomowy UPDATE z WHERE spent + new ≤ limit</h4>
+          <p>Zastąpić SELECT + UPDATE jednym zapytaniem które sprawdza i aktualizuje atomowo. Eliminuje możliwość przekroczenia limitu przy równoległych heartbeatach.</p>
+        </div>
+        <span class="pe pe-c">KRYTYCZNE</span>
+      </div>
+      <div class="prow">
+        <span class="pn">4</span>
+        <div class="pc">
+          <h4>🟡 Graceful shutdown — czekanie na aktywne heartbeaty</h4>
+          <p>Licznik aktywnych heartbeatów + while loop przed db.close(). Lub: UPDATE tasks SET status='assigned' WHERE locked_by IS NOT NULL po stopOrchestrator().</p>
+        </div>
+        <span class="pe pe-h">WYSOKI</span>
+      </div>
+      <div class="prow">
+        <span class="pn">5</span>
+        <div class="pc">
+          <h4>🟡 Docker DB password → ${DB_PASSWORD:?...}</h4>
+          <p>Czwarty raport z rzędu. Jedna zmiana, operator :? w compose wymusi błąd przy braku zmiennej. Dodać do .env.example z openssl rand.</p>
+        </div>
+        <span class="pe pe-h">1 LINIA</span>
+      </div>
+      <div class="prow">
+        <span class="pn">6</span>
+        <div class="pc">
+          <h4>🟡 Scheduler — LIMIT 20 + ORDER BY updated_at ASC</h4>
+          <p>Zapobiega thundering herd. MAX_CONCURRENT_HEARTBEATS jako env var. Filtr <code>AND status != 'terminated'</code> dla poprawności.</p>
+        </div>
+        <span class="pe pe-h">WYDAJNOŚĆ</span>
+      </div>
+      <div class="prow">
+        <span class="pn">7</span>
+        <div class="pc">
+          <h4>🟡 OrgChartPage — D3 lub React Flow z danymi reports_to</h4>
+          <p>Dane są w bazie od commitu v1. OrgChart to wizualna tożsamość projektu. Endpoint <code>/companies/:id/org-chart</code> istnieje i zwraca drzewiastą strukturę agentów.</p>
+        </div>
+        <span class="pe pe-h">UX</span>
+      </div>
+      <div class="prow">
+        <span class="pn">8</span>
+        <div class="pc">
+          <h4>🟡 Polityki rate_limit i tool_restriction — 2 case'y w switch</h4>
+          <p>4 raporty bez zmiany. Szablony już je definiują — użytkownicy widzą te polityki w UI i oczekują że działają. Implementacja: ~15 linii kodu.</p>
+        </div>
+        <span class="pe pe-h">FUNKCJA</span>
+      </div>
+      <div class="prow">
+        <span class="pn">9</span>
+        <div class="pc">
+          <h4>🟡 Context builder N+1 → WITH RECURSIVE</h4>
+          <p>Wzorzec CTE istnieje już w getDelegationDepth(). Skopiować do buildAgentContext(). Eliminuje N zapytań do bazy na każdy heartbeat.</p>
+        </div>
+        <span class="pe pe-m">WYDAJNOŚĆ</span>
+      </div>
+      <div class="prow">
+        <span class="pn">10</span>
+        <div class="pc">
+          <h4>🟢 Testy integracyjne — pg-mem lub testcontainers dla safety.ts i heartbeat.ts</h4>
+          <p>6 plików testowych, żaden nie dotyka DB. Dodać pg-mem jako in-memory PostgreSQL. Przetestować detectCircularDelegation, budget enforcement, atomic checkout.</p>
+        </div>
+        <span class="pe pe-m">JAKOŚĆ</span>
+      </div>
+      <div class="prow">
+        <span class="pn">11</span>
+        <div class="pc">
+          <h4>🟢 IntegrationsPage — UI dla Slack/Discord/webhook konfiguracji</h4>
+          <p>API management integracji jest kompletne. Brakuje strony do dodawania/usuwania integracji, testowania połączeń i przeglądania logów.</p>
+        </div>
+        <span class="pe pe-l">DŁUG</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ── 07. VERDICT ── -->
+  <div class="section">
+    <div class="section-rule">
+      <div class="sr-num">07</div>
+      <div class="sr-body">
+        <div class="sr-kicker">Werdykt końcowy</div>
+        <div class="sr-title">PO CZTERECH RAPORTACH</div>
+      </div>
+      <span class="sr-badge sb-blue">PODSUMOWANIE</span>
+    </div>
+    <div class="hr"></div>
+
+    <div style="margin-bottom: 32px;">
+      <div class="pb-r"><span class="pb-l">Architektura</span><div class="pb-t"><div class="pb-f" style="width:90%;background:var(--green);"></div></div><span class="pb-p">90%</span></div>
+      <div class="pb-r"><span class="pb-l">Bezpieczeństwo</span><div class="pb-t"><div class="pb-f" style="width:80%;background:var(--amber);"></div></div><span class="pb-p">80%</span></div>
+      <div class="pb-r"><span class="pb-l">Jakość kodu</span><div class="pb-t"><div class="pb-f" style="width:80%;background:var(--green);"></div></div><span class="pb-p">80%</span></div>
+      <div class="pb-r"><span class="pb-l">Testy</span><div class="pb-t"><div class="pb-f" style="width:45%;background:var(--amber);"></div></div><span class="pb-p">45%</span></div>
+      <div class="pb-r"><span class="pb-l">Feature completeness</span><div class="pb-t"><div class="pb-f" style="width:85%;background:var(--green);"></div></div><span class="pb-p">85%</span></div>
+    </div>
+
+    <div class="verdict">
+      <div class="verdict-kicker">Autonomiczne Biuro · Raport końcowy · Commit 1180762</div>
+      <h3>PROJEKT JEST GOTOWY NA BETA — Z JEDNYM WARUNKIEM</h3>
+      <p>
+        Cztery iteracje, cztery raporty, każdy sprint zamykający kilkanaście problemów. Ewolucja jest wyraźna i imponująca. Commit 1180762 — <span class="hlg">50 plików, 6400+ linii</span> — to największy skok jakościowy: prawdziwy RAG z deterministycznym fallbackiem, kompletny system szablonów, testy jednostkowe, BudgetsPage z prognozami, Command Palette, graceful shutdown, live activity feed.
+      </p>
+
+      <div class="pullquote">
+        Projekt przeszedł od "niebezpiecznego prototypu" do "solidnej platformy beta" w czterech tygodniach iteracji.
+      </div>
+
+      <p>
+        <span class="hlr">Jeden warunek blokujący:</span> WebSocket bez autoryzacji. Jeśli projekt ma być dostępny publicznie, każdy z UUID firmy może podsłuchać wszystkie operacje w czasie rzeczywistym. To 2–3 godziny pracy i jedyna rzecz stojąca między aktualnym kodem a bezpiecznym publicznym beta.
+      </p>
+      <p>
+        <span class="hlr">Jeden krytyczny bug:</span> <code>gemini-3.1-flash-lite</code> nie istnieje w API Google — poprawka to jedna minuta. Nienaprawiony, crash każdego agenta Gemini bez custom modelu.
+      </p>
+      <p>
+        Po zamknięciu tych dwóch rzeczy: <span class="hlb">backend API jest w ~95% gotowości</span>, frontend w ~85%, testy w ~45% (unit) / 0% (integration). <span class="hla">Główny dług techniczny to testy integracyjne</span> — safety.ts, heartbeat.ts i context.ts mają rosnącą złożoność bez żadnej siatki regresji.
+      </p>
+      <p>
+        Fundamenty są <span class="hlg">produkcyjnej jakości</span>. Hybrid RAG, kompletny template system, multi-tenant RLS, HMAC integrations, scrypt auth, Command Palette — to nie jest prototyp. To platforma.
+      </p>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+</div>
+
+<footer class="page-footer">
+  <span class="pf-brand">BIURO</span>
+  <span>Raport v4 · Commit 1180762 · Claude Sonnet 4.6 · 18.03.2026 · Warsaw, PL</span>
+  <span>Raporty: v1 → v2 → v3 → v4</span>
+</footer>
+
+</body>
+</html>

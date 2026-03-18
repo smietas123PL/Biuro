@@ -108,6 +108,8 @@ export default function AuthPage() {
             <div className="space-y-4">
               <Field label="Email">
                 <input
+                  id="login-email"
+                  name="email"
                   value={loginForm.email}
                   onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
                   type="email"
@@ -117,6 +119,8 @@ export default function AuthPage() {
               </Field>
               <Field label="Password">
                 <input
+                  id="login-password"
+                  name="password"
                   value={loginForm.password}
                   onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
                   type="password"
@@ -136,6 +140,8 @@ export default function AuthPage() {
             <div className="space-y-4">
               <Field label="Full name">
                 <input
+                  id="register-full-name"
+                  name="fullName"
                   value={registerForm.fullName}
                   onChange={(event) => setRegisterForm((current) => ({ ...current, fullName: event.target.value }))}
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
@@ -144,6 +150,8 @@ export default function AuthPage() {
               </Field>
               <Field label="Email">
                 <input
+                  id="register-email"
+                  name="email"
                   value={registerForm.email}
                   onChange={(event) => setRegisterForm((current) => ({ ...current, email: event.target.value }))}
                   type="email"
@@ -153,6 +161,8 @@ export default function AuthPage() {
               </Field>
               <Field label="Password">
                 <input
+                  id="register-password"
+                  name="password"
                   value={registerForm.password}
                   onChange={(event) => setRegisterForm((current) => ({ ...current, password: event.target.value }))}
                   type="password"
@@ -162,6 +172,8 @@ export default function AuthPage() {
               </Field>
               <Field label="Company name">
                 <input
+                  id="register-company-name"
+                  name="companyName"
                   value={registerForm.companyName}
                   onChange={(event) => setRegisterForm((current) => ({ ...current, companyName: event.target.value }))}
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
@@ -170,6 +182,8 @@ export default function AuthPage() {
               </Field>
               <Field label="Mission">
                 <textarea
+                  id="register-company-mission"
+                  name="companyMission"
                   value={registerForm.companyMission}
                   onChange={(event) => setRegisterForm((current) => ({ ...current, companyMission: event.target.value }))}
                   rows={4}

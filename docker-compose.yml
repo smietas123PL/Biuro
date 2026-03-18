@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: biuro
       POSTGRES_DB: autonomiczne_biuro
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     ports:
       - "5432:5432"
     volumes:
@@ -23,13 +23,14 @@ services:
     command: pnpm start
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://biuro:password@db:5432/autonomiczne_biuro
+      DATABASE_URL: postgres://biuro:${DB_PASSWORD:?DB_PASSWORD is required}@db:5432/autonomiczne_biuro
       PORT: 3100
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      MAX_CONCURRENT_HEARTBEATS: ${MAX_CONCURRENT_HEARTBEATS:-20}
     ports:
       - "3100:3100"
     depends_on:
@@ -49,12 +50,13 @@ services:
     command: pnpm worker
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://biuro:password@db:5432/autonomiczne_biuro
+      DATABASE_URL: postgres://biuro:${DB_PASSWORD:?DB_PASSWORD is required}@db:5432/autonomiczne_biuro
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      MAX_CONCURRENT_HEARTBEATS: ${MAX_CONCURRENT_HEARTBEATS:-20}
     depends_on:
       db:
         condition: service_healthy

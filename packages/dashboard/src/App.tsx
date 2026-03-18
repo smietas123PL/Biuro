@@ -12,6 +12,9 @@ import BudgetsPage from './pages/BudgetsPage';
 import TemplatesPage from './pages/TemplatesPage';
 import ToolsPage from './pages/ToolsPage';
 import AuthPage from './pages/AuthPage';
+import SettingsPage from './pages/SettingsPage';
+import IntegrationsPage from './pages/IntegrationsPage';
+import OrgChartPage from './pages/OrgChartPage';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -37,9 +40,12 @@ function App() {
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:id" element={<TaskDetailPage />} />
         <Route path="goals" element={<GoalsPage />} />
+        <Route path="org-chart" element={<OrgChartPage />} />
         <Route path="budgets" element={<BudgetsPage />} />
         <Route path="templates" element={<TemplatesPage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="tools" element={<ToolsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
         <Route path="audit" element={<AuditLogPage />} />
       </Route>

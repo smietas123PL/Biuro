@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { clearAuthToken, getAuthToken, getSelectedCompanyId } from '../lib/session';
+import { AUTH_EVENT, clearAuthToken, getAuthToken, getSelectedCompanyId } from '../lib/session';
 
 const API_BASE = '/api';
+
+type RequestConfig = {
+  suppressError?: boolean;
+};
 
 export function useApi() {
   const [pendingRequests, setPendingRequests] = useState(0);
@@ -17,7 +21,7 @@ export function useApi() {
     };
   }, []);
 
-  const request = useCallback(async (path: string, options?: RequestInit) => {
+  const request = useCallback(async (path: string, options?: RequestInit, config?: RequestConfig) => {
     const controller = new AbortController();
     activeControllersRef.current.add(controller);
     if (mountedRef.current) {
@@ -45,7 +49,7 @@ export function useApi() {
       if (!res.ok) throw new Error(data.error || 'API Error');
       return data;
     } catch (err: any) {
-      if (err.name !== 'AbortError' && mountedRef.current) {
+      if (err.name !== 'AbortError' && mountedRef.current && !config?.suppressError) {
         setError(err.message);
       }
       throw err;
@@ -62,12 +66,30 @@ export function useApi() {
 
 export function useWebSocket(companyId?: string) {
   const [lastEvent, setLastEvent] = useState<any>(null);
+  const [authVersion, setAuthVersion] = useState(0);
 
   useEffect(() => {
-    if (!companyId) return;
+    const handleAuthChange = () => {
+      setAuthVersion((current) => current + 1);
+    };
+
+    window.addEventListener(AUTH_EVENT, handleAuthChange);
+    return () => window.removeEventListener(AUTH_EVENT, handleAuthChange);
+  }, []);
+
+  useEffect(() => {
+    if (!companyId) {
+      setLastEvent(null);
+      return;
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?companyId=${companyId}`);
+    const token = getAuthToken();
+    const params = new URLSearchParams({ companyId });
+    if (token) {
+      params.set('token', token);
+    }
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?${params.toString()}`);
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -75,7 +97,7 @@ export function useWebSocket(companyId?: string) {
     };
 
     return () => ws.close();
-  }, [companyId]);
+  }, [authVersion, companyId]);
 
   return lastEvent;
 }

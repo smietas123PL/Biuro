@@ -80,8 +80,10 @@ function getStaticItems(role?: CompanyRole | null): NavigationPaletteItem[] {
     { kind: 'navigation', id: 'page-agents', label: 'Agents', description: 'Team roster and hierarchy', path: '/agents', section: 'Pages', keywords: ['people', 'org chart', 'team'] },
     { kind: 'navigation', id: 'page-tasks', label: 'Tasks', description: 'Backlog and current execution', path: '/tasks', section: 'Pages', keywords: ['work', 'backlog'] },
     { kind: 'navigation', id: 'page-goals', label: 'Goals', description: 'Goal tree and mission structure', path: '/goals', section: 'Pages', keywords: ['strategy', 'objectives'] },
+    { kind: 'navigation', id: 'page-org-chart', label: 'Org Chart', description: 'Reporting lines and company hierarchy', path: '/org-chart', section: 'Pages', keywords: ['hierarchy', 'reports_to', 'team structure'] },
     { kind: 'navigation', id: 'page-budgets', label: 'Budgets', description: 'Spend, caps and monthly forecast', path: '/budgets', section: 'Pages', keywords: ['costs', 'forecast', 'usage'] },
     { kind: 'navigation', id: 'page-templates', label: 'Templates', description: 'Local preset library and company setup imports', path: '/templates', section: 'Pages', keywords: ['presets', 'marketplace', 'setup'] },
+    { kind: 'navigation', id: 'page-integrations', label: 'Integrations', description: 'Slack and Discord setup overview', path: '/integrations', section: 'Pages', keywords: ['slack', 'discord', 'webhooks'] },
     { kind: 'navigation', id: 'page-tools', label: 'Tools', description: 'Registered tools and capabilities', path: '/tools', section: 'Pages', keywords: ['tooling', 'capabilities'] },
   ];
 
@@ -373,6 +375,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           <div className="flex items-center gap-3 rounded-2xl border bg-background px-4 py-3">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
+              id="command-palette-query"
+              name="commandPaletteQuery"
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}

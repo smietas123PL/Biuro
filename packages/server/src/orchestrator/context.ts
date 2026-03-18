@@ -21,13 +21,22 @@ export async function buildAgentContext(agentId: string, taskId: string): Promis
   // 2. Build Goal Hierarchy
   const hierarchy: string[] = [];
   if (task.goal_id) {
-    let currentGoalId = task.goal_id;
-    while (currentGoalId) {
-      const goalRes = await db.query('SELECT title, parent_id FROM goals WHERE id = $1', [currentGoalId]);
-      if (goalRes.rows.length === 0) break;
-      hierarchy.unshift(goalRes.rows[0].title);
-      currentGoalId = goalRes.rows[0].parent_id;
-    }
+    const goalHierarchyRes = await db.query(
+      `WITH RECURSIVE goal_path AS (
+         SELECT id, parent_id, title, 0 AS depth
+         FROM goals
+         WHERE id = $1
+         UNION ALL
+         SELECT g.id, g.parent_id, g.title, gp.depth + 1
+         FROM goals g
+         JOIN goal_path gp ON gp.parent_id = g.id
+       )
+       SELECT title
+       FROM goal_path
+       ORDER BY depth DESC`,
+      [task.goal_id]
+    );
+    hierarchy.push(...goalHierarchyRes.rows.map((row) => row.title as string));
   }
 
   // 3. Get History (Last 20 messages)

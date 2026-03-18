@@ -14,7 +14,7 @@ import { findRelatedMemories, storeMemory } from './memory.js';
 export async function processAgentHeartbeat(agentId: string) {
   const startedAt = Date.now();
   const claimRes = await db.query(
-    "UPDATE agents SET status = 'working' WHERE id = $1 AND status = 'idle' RETURNING id",
+    "UPDATE agents SET status = 'working' WHERE id = $1 AND status = 'idle' RETURNING id, company_id",
     [agentId]
   );
 
@@ -22,14 +22,19 @@ export async function processAgentHeartbeat(agentId: string) {
     return;
   }
 
+  const companyId = claimRes.rows[0].company_id as string;
   let task: any;
 
   try {
-    const budgetRes = await db.query(
-      'SELECT * FROM budgets WHERE agent_id = $1 AND month = date_trunc($2, now())::date',
-      [agentId, 'month']
-    );
-    if (budgetRes.rows.length > 0 && budgetRes.rows[0].spent_usd >= budgetRes.rows[0].limit_usd) {
+    const rateLimitPolicy = await evaluatePolicy(companyId, 'rate_limit', { agentId });
+    if (!rateLimitPolicy.allowed) {
+      logger.warn({ agentId, reason: rateLimitPolicy.reason }, 'Agent heartbeat blocked by rate limit policy');
+      await recordHeartbeat(agentId, 'idle', startedAt, { reason: rateLimitPolicy.reason ?? 'agent rate limit exceeded' });
+      return;
+    }
+
+    const budgetExceeded = await isAgentBudgetExceeded(agentId);
+    if (budgetExceeded) {
       logger.warn({ agentId }, 'Agent over budget, skipping heartbeat');
       await recordHeartbeat(agentId, 'budget_exceeded', startedAt, { reason: 'monthly budget exceeded' });
       return;
@@ -118,6 +123,7 @@ export async function processAgentHeartbeat(agentId: string) {
     const usage = response.usage;
     const costUsd = usage?.cost_usd ?? 0;
     const durationMs = Date.now() - startedAt;
+    const budgetApplication = await applyAgentBudgetSpend(agentId, costUsd);
 
     const newState = usage || {};
     await db.query(
@@ -134,7 +140,12 @@ export async function processAgentHeartbeat(agentId: string) {
         task.company_id,
         agentId,
         'heartbeat.completed',
-        JSON.stringify({ thought: response.thought, task_id: task.id, duration_ms: durationMs }),
+        JSON.stringify({
+          thought: response.thought,
+          task_id: task.id,
+          duration_ms: durationMs,
+          budget_capped: !budgetApplication.applied,
+        }),
         costUsd
       ]
     );
@@ -142,18 +153,16 @@ export async function processAgentHeartbeat(agentId: string) {
     await db.query(
       `INSERT INTO heartbeats (agent_id, task_id, status, duration_ms, cost_usd, details)
        VALUES ($1, $2, 'worked', $3, $4, $5)`,
-      [agentId, task.id, durationMs, costUsd, JSON.stringify({ thought: response.thought })]
-    );
-
-    await db.query(
-      `INSERT INTO budgets (agent_id, month, limit_usd, spent_usd)
-       SELECT id, date_trunc('month', now())::date, monthly_budget_usd, $2
-       FROM agents
-       WHERE id = $1
-       ON CONFLICT (agent_id, month) DO UPDATE
-       SET spent_usd = budgets.spent_usd + EXCLUDED.spent_usd,
-           limit_usd = GREATEST(budgets.limit_usd, EXCLUDED.limit_usd)`,
-      [agentId, costUsd]
+      [
+        agentId,
+        task.id,
+        durationMs,
+        costUsd,
+        JSON.stringify({
+          thought: response.thought,
+          budget_capped: !budgetApplication.applied,
+        }),
+      ]
     );
 
     for (const action of parsedActions.data as AgentAction[]) {
@@ -221,6 +230,11 @@ async function handleAction(agentId: string, task: any, action: AgentAction, res
 
     case 'use_tool':
       try {
+        const toolPolicy = await evaluatePolicy(task.company_id, 'tool_restriction', { tool_name: action.tool_name });
+        if (!toolPolicy.allowed) {
+          throw new Error(toolPolicy.reason || `Tool blocked by policy: ${action.tool_name}`);
+        }
+
         const canUse = await canUseTool(agentId, action.tool_name);
         if (!canUse) throw new Error(`Permission denied for tool: ${action.tool_name}`);
 
@@ -277,4 +291,94 @@ async function recordHeartbeat(agentId: string, status: string, startedAt: numbe
      VALUES ($1, $2, $3, $4)`,
     [agentId, status, Date.now() - startedAt, JSON.stringify(details)]
   );
+}
+
+async function isAgentBudgetExceeded(agentId: string) {
+  const budgetRes = await db.query(
+    `WITH seeded_budget AS (
+       INSERT INTO budgets (agent_id, month, limit_usd, spent_usd)
+       SELECT id, date_trunc('month', now())::date, monthly_budget_usd, 0
+       FROM agents
+       WHERE id = $1
+         AND monthly_budget_usd > 0
+       ON CONFLICT (agent_id, month) DO UPDATE
+       SET limit_usd = GREATEST(budgets.limit_usd, EXCLUDED.limit_usd)
+       RETURNING spent_usd::float AS spent_usd, limit_usd::float AS limit_usd
+     ),
+     current_budget AS (
+       SELECT spent_usd, limit_usd
+       FROM seeded_budget
+       UNION ALL
+       SELECT b.spent_usd::float AS spent_usd, b.limit_usd::float AS limit_usd
+       FROM budgets b
+       WHERE b.agent_id = $1
+         AND b.month = date_trunc('month', now())::date
+         AND NOT EXISTS (SELECT 1 FROM seeded_budget)
+     )
+     SELECT spent_usd >= limit_usd AS exceeded
+     FROM current_budget
+     LIMIT 1`,
+    [agentId]
+  );
+
+  if (budgetRes.rows.length === 0) {
+    return false;
+  }
+
+  return Boolean(budgetRes.rows[0].exceeded);
+}
+
+export async function applyAgentBudgetSpend(agentId: string, costUsd: number) {
+  if (costUsd <= 0) {
+    return { applied: true, capped: false };
+  }
+
+  const applyRes = await db.query(
+    `WITH seeded_budget AS (
+       INSERT INTO budgets (agent_id, month, limit_usd, spent_usd)
+       SELECT id, date_trunc('month', now())::date, monthly_budget_usd, $2::numeric
+       FROM agents
+       WHERE id = $1
+         AND monthly_budget_usd >= $2::numeric
+       ON CONFLICT (agent_id, month) DO UPDATE
+       SET limit_usd = GREATEST(budgets.limit_usd, EXCLUDED.limit_usd),
+           spent_usd = budgets.spent_usd + EXCLUDED.spent_usd
+       WHERE budgets.spent_usd + EXCLUDED.spent_usd <= budgets.limit_usd
+       RETURNING spent_usd::float AS spent_usd, limit_usd::float AS limit_usd
+     )
+     SELECT spent_usd, limit_usd
+     FROM seeded_budget`,
+    [agentId, costUsd]
+  );
+
+  if (applyRes.rows.length > 0) {
+    return { applied: true, capped: false };
+  }
+
+  const capExistingRes = await db.query(
+    `UPDATE budgets
+     SET spent_usd = limit_usd
+     WHERE agent_id = $1
+       AND month = date_trunc('month', now())::date
+       AND limit_usd > 0
+       AND spent_usd < limit_usd
+     RETURNING spent_usd::float AS spent_usd, limit_usd::float AS limit_usd`,
+    [agentId]
+  );
+  if (capExistingRes.rows.length > 0) {
+    return { applied: false, capped: true };
+  }
+
+  const seedCappedRes = await db.query(
+    `INSERT INTO budgets (agent_id, month, limit_usd, spent_usd)
+     SELECT id, date_trunc('month', now())::date, monthly_budget_usd, monthly_budget_usd
+     FROM agents
+     WHERE id = $1
+       AND monthly_budget_usd > 0
+     ON CONFLICT (agent_id, month) DO NOTHING
+     RETURNING spent_usd::float AS spent_usd, limit_usd::float AS limit_usd`,
+    [agentId]
+  );
+
+  return { applied: false, capped: seedCappedRes.rows.length > 0 };
 }

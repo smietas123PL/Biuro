@@ -1,20 +1,36 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { clearAuthToken, getAuthToken, getSelectedCompanyId } from '../lib/session';
 
 const API_BASE = '/api';
 
 export function useApi() {
-  const [loading, setLoading] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const activeControllersRef = useRef<Set<AbortController>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      activeControllersRef.current.forEach((controller) => controller.abort());
+      activeControllersRef.current.clear();
+    };
+  }, []);
 
   const request = useCallback(async (path: string, options?: RequestInit) => {
-    setLoading(true);
-    setError(null);
+    const controller = new AbortController();
+    activeControllersRef.current.add(controller);
+    if (mountedRef.current) {
+      setPendingRequests((count) => count + 1);
+      setError(null);
+    }
+
     try {
       const token = getAuthToken();
       const selectedCompanyId = getSelectedCompanyId();
       const res = await fetch(`${API_BASE}${path}`, {
         ...options,
+        signal: controller.signal,
         headers: {
           ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -29,14 +45,19 @@ export function useApi() {
       if (!res.ok) throw new Error(data.error || 'API Error');
       return data;
     } catch (err: any) {
-      setError(err.message);
+      if (err.name !== 'AbortError' && mountedRef.current) {
+        setError(err.message);
+      }
       throw err;
     } finally {
-      setLoading(false);
+      activeControllersRef.current.delete(controller);
+      if (mountedRef.current) {
+        setPendingRequests((count) => Math.max(0, count - 1));
+      }
     }
   }, []);
 
-  return { request, loading, error };
+  return { request, loading: pendingRequests > 0, error };
 }
 
 export function useWebSocket(companyId?: string) {

@@ -1,12 +1,23 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { randomBytes } from 'crypto';
 import { db } from '../db/client.js';
 import { z } from 'zod';
-import { v4 as uuidv4 } from 'uuid';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { requireAuth } from '../middleware/auth.js';
 import { AuthRequest } from '../utils/context.js';
+import { logger } from '../utils/logger.js';
+import { env } from '../env.js';
 
 const router: Router = Router();
+const authRateLimit = rateLimit({
+  windowMs: env.AUTH_RATE_LIMIT_WINDOW_MS,
+  max: env.AUTH_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Please try again later.' },
+});
+const SESSION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 const RegisterSchema = z.object({
   email: z.string().email(),
@@ -56,6 +67,10 @@ async function buildSessionPayload(userId: string, token: string) {
   };
 }
 
+function generateSessionToken() {
+  return randomBytes(32).toString('hex');
+}
+
 async function handleRegister(req: AuthRequest, res: any) {
   const result = RegisterSchema.safeParse(req.body);
   if (!result.success) return res.status(400).json({ error: result.error });
@@ -93,9 +108,8 @@ async function handleRegister(req: AuthRequest, res: any) {
         [userId, effectiveCompanyId, assignedRole]
       );
 
-      const token = uuidv4();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 3);
+      const token = generateSessionToken();
+      const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
       await client.query(
         'INSERT INTO user_sessions (user_id, token, expires_at) VALUES ($1, $2, $3)',
@@ -114,10 +128,10 @@ async function handleRegister(req: AuthRequest, res: any) {
   }
 }
 
-router.post('/signup', handleRegister);
-router.post('/register', handleRegister);
+router.post('/signup', authRateLimit, handleRegister);
+router.post('/register', authRateLimit, handleRegister);
 
-router.post('/login', async (req, res) => {
+router.post('/login', authRateLimit, async (req, res) => {
   const result = LoginSchema.safeParse(req.body);
   if (!result.success) return res.status(400).json({ error: result.error });
 
@@ -127,20 +141,17 @@ router.post('/login', async (req, res) => {
     const user = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     if (user.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
-    let validPassword = await verifyPassword(password, user.rows[0].pwd_hash);
-    if (!validPassword && user.rows[0].pwd_hash === `hash_${password}`) {
-      validPassword = true;
-      const upgradedHash = await hashPassword(password);
-      await db.query(
-        'UPDATE users SET pwd_hash = $1 WHERE id = $2',
-        [upgradedHash, user.rows[0].id]
-      );
+    const storedPasswordHash = user.rows[0].pwd_hash as string;
+    if (storedPasswordHash.startsWith('hash_')) {
+      logger.warn({ userId: user.rows[0].id }, 'Blocked legacy plaintext-style password hash');
+      return res.status(403).json({ error: 'Legacy password reset required' });
     }
+
+    const validPassword = await verifyPassword(password, storedPasswordHash);
     if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = uuidv4();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 3);
+    const token = generateSessionToken();
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
     await db.query(
       'INSERT INTO user_sessions (user_id, token, expires_at) VALUES ($1, $2, $3)',

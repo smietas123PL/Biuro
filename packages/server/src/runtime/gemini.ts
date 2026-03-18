@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../env.js';
-import { AgentContext, AgentResponse, IAgentRuntime, AgentAction } from '../types/agent.js';
+import { AgentActionsSchema, AgentContext, AgentResponse, IAgentRuntime, AgentAction } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 
 // Gemini 2.0 Flash pricing (per million tokens) - adjusting to current standard
@@ -18,8 +18,6 @@ export class GeminiRuntime implements IAgentRuntime {
   }
 
   async execute(context: AgentContext): Promise<AgentResponse> {
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
     const systemPrompt = `
 You are ${context.agent_name}, a ${context.agent_role} at ${context.company_name}.
 Company Mission: ${context.company_mission}
@@ -41,16 +39,29 @@ Example:
 ]
 </actions>
 `;
+    const model = this.genAI.getGenerativeModel({
+      model: context.agent_model || 'gemini-2.0-flash',
+      systemInstruction: systemPrompt,
+    });
+    const history = context.history
+      .map((entry) => ({
+        role: entry.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: entry.content }],
+      }))
+      .filter((entry) => entry.parts[0]?.text.trim().length > 0);
+    const firstUserMessageIndex = history.findIndex((entry) => entry.role === 'user');
+    const filteredHistory = firstUserMessageIndex >= 0
+      ? history.slice(firstUserMessageIndex)
+      : [];
 
     const chat = model.startChat({
-      history: context.history.map(h => ({
-        role: h.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: h.content }],
-      })),
+      history: filteredHistory,
     });
 
     try {
-      const result = await chat.sendMessage(systemPrompt);
+      const result = await chat.sendMessage(
+        context.current_task.description || context.current_task.title || 'Continue the current task.'
+      );
       const response = await result.response;
       const text = response.text();
 
@@ -68,7 +79,13 @@ Example:
         try {
           // Some models might put code blocks in the XML
           const cleanedActions = actionsMatch[1].replace(/```json\n?|\n?```/g, '').trim();
-          actions = JSON.parse(cleanedActions);
+          const parsedActions = JSON.parse(cleanedActions);
+          const validatedActions = AgentActionsSchema.safeParse(parsedActions);
+          if (validatedActions.success) {
+            actions = validatedActions.data;
+          } else {
+            logger.error({ issues: validatedActions.error.issues }, 'Gemini actions failed schema validation');
+          }
         } catch (e) {
           logger.error({ e, rawActions: actionsMatch[1] }, 'Failed to parse Gemini actions');
         }

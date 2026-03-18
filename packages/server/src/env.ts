@@ -8,6 +8,19 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
+  ALLOWED_ORIGINS: z
+    .string()
+    .default('http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    ),
+  SLACK_SIGNING_SECRET: z.string().optional(),
+  DISCORD_WEBHOOK_SECRET: z.string().optional(),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().default(20),
   AUTH_ENABLED: z
     .enum(['true', 'false'])
     .default('true')

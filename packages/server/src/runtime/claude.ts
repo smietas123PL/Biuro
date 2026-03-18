@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { env } from '../env.js';
-import { AgentContext, AgentResponse, IAgentRuntime } from '../types/agent.js';
+import { AgentActionsSchema, AgentContext, AgentResponse, IAgentRuntime } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 
 export class ClaudeRuntime implements IAgentRuntime {
@@ -64,10 +64,20 @@ Example:
 
       if (actionsMatch) {
         try {
-          actions = JSON.parse(actionsMatch[1].trim());
+          const parsedActions = JSON.parse(actionsMatch[1].trim());
+          const validatedActions = AgentActionsSchema.safeParse(parsedActions);
+          if (validatedActions.success) {
+            actions = validatedActions.data;
+          } else {
+            logger.error({ issues: validatedActions.error.issues }, 'Claude actions failed schema validation');
+          }
         } catch (e) {
           logger.error({ e, rawActions: actionsMatch[1] }, 'Failed to parse Claude actions');
         }
+      }
+
+      if (actions.length === 0) {
+        actions = [{ type: 'continue', thought: 'I will keep working on this.' }];
       }
 
       return {

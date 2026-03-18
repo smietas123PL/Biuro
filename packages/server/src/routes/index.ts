@@ -45,7 +45,6 @@ router.use('/companies/:companyId/tools', injectCompanyId, tools);
 router.use('/companies/:companyId/approvals', injectCompanyId, approvals);
 
 // === GLOBAL ROUTES ===
-router.use('/policies', companies);
 router.use('/agents', agents);
 router.use('/tasks', tasks);
 router.use('/goals', goals);

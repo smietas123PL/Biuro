@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { env } from './env.js';
 import { logger } from './utils/logger.js';
 import { db } from './db/client.js';
@@ -10,10 +11,33 @@ import { initWSHub } from './ws.js';
 const app = express();
 const server = createServer(app);
 const wsHub = initWSHub(server);
+const allowedOrigins = new Set(env.ALLOWED_ORIGINS);
+
+const captureRawBody: Parameters<typeof express.json>[0]['verify'] = (req, _res, buffer, encoding) => {
+  if (buffer.length === 0) {
+    return;
+  }
+
+  const bodyEncoding = typeof encoding === 'string' ? (encoding as BufferEncoding) : 'utf8';
+  (req as express.Request & { rawBody?: string }).rawBody = buffer.toString(bodyEncoding);
+};
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.disable('x-powered-by');
+app.use(helmet());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, false);
+  },
+  credentials: true,
+}));
+app.use(express.json({ verify: captureRawBody }));
+app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
 
 // Routes
 app.use('/api', routes);

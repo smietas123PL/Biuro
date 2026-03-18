@@ -6,6 +6,40 @@ import { MCPService } from '../services/mcp.js';
 
 const execPromise = promisify(exec);
 
+function getAllowedBashCommands(config: any): string[] {
+  const configuredCommands = config?.allowed_commands ?? config?.allowedCommands;
+  if (!Array.isArray(configuredCommands)) {
+    return [];
+  }
+
+  return configuredCommands
+    .filter((value): value is string => typeof value === 'string')
+    .map((command) => command.trim())
+    .filter(Boolean);
+}
+
+function validateBashCommand(tool: any, params: any) {
+  const command = typeof params?.command === 'string' ? params.command.trim() : '';
+  if (!command) {
+    throw new Error('Bash tool requires a non-empty command');
+  }
+
+  const allowedCommands = getAllowedBashCommands(tool.config);
+  if (allowedCommands.length === 0) {
+    throw new Error(`Bash tool "${tool.name}" is missing allowed_commands configuration`);
+  }
+
+  const isAllowed = allowedCommands.some(
+    (allowedCommand) => command === allowedCommand || command.startsWith(`${allowedCommand} `)
+  );
+
+  if (!isAllowed) {
+    throw new Error('Command not in whitelist');
+  }
+
+  return command;
+}
+
 export async function executeTool(agentId: string, taskId: string, toolName: string, params: any) {
   const startTime = Date.now();
   
@@ -29,9 +63,11 @@ export async function executeTool(agentId: string, taskId: string, toolName: str
         output = await handleBuiltin(tool.name, params);
         break;
       case 'bash':
-        // CAUTION: Extremely dangerous without proper containerization
-        // In this implementation, we assume a restricted workspace
-        const { stdout, stderr } = await execPromise(params.command, { timeout: 10000 });
+        const command = validateBashCommand(tool, params);
+        const { stdout, stderr } = await execPromise(command, {
+          timeout: 10000,
+          maxBuffer: 1024 * 1024,
+        });
         output = stdout || stderr;
         break;
       case 'http':

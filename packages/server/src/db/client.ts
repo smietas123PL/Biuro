@@ -40,9 +40,13 @@ export const db = {
   transaction: async <T>(
     fn: (client: pg.PoolClient) => Promise<T>
   ): Promise<T> => {
+    const context = contextStore.getStore();
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      if (context?.companyId) {
+        await client.query(`SELECT set_config('app.current_company_id', $1, true)`, [context.companyId]);
+      }
       const result = await fn(client);
       await client.query('COMMIT');
       return result;

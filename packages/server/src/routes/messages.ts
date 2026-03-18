@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
+import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
 
 // Create Message (manual or by system)
-router.post('/', async (req, res) => {
+router.post('/', requireRole(['owner', 'admin', 'member']), async (req, res) => {
   const { company_id, task_id, from_agent, to_agent, content, type, metadata } = req.body;
   const result = await db.query(
     `INSERT INTO messages (company_id, task_id, from_agent, to_agent, content, type, metadata)
@@ -16,7 +17,7 @@ router.post('/', async (req, res) => {
 });
 
 // List for Task
-router.get('/task/:taskId', async (req, res) => {
+router.get('/task/:taskId', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res) => {
   const result = await db.query(
     'SELECT * FROM messages WHERE task_id = $1 ORDER BY created_at ASC',
     [req.params.taskId]

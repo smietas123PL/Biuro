@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
+import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -13,7 +14,7 @@ const toolSchema = z.object({
 });
 
 // Create tool
-router.post('/', async (req, res, next) => {
+router.post('/', requireRole(['owner', 'admin']), async (req, res, next) => {
   try {
     const parsed = toolSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error });
@@ -27,7 +28,7 @@ router.post('/', async (req, res, next) => {
 });
 
 // List tools for company
-router.get('/', async (req, res, next) => {
+router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
   try {
     const { company_id } = req.query;
     if (!company_id) return res.status(400).json({ error: 'Missing company_id' });

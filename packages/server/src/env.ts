@@ -8,6 +8,10 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
+  AUTH_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   PORT: z.coerce.number().default(3100),
   HEARTBEAT_INTERVAL_MS: z.coerce.number().default(30000),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),

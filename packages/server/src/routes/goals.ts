@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
+import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -12,7 +13,7 @@ const createGoalSchema = z.object({
 });
 
 // Create
-router.post('/', async (req, res) => {
+router.post('/', requireRole(['owner', 'admin', 'member']), async (req, res) => {
   const parsed = createGoalSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
@@ -25,7 +26,7 @@ router.post('/', async (req, res) => {
 });
 
 // List
-router.get('/', async (req, res) => {
+router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res) => {
   const { company_id } = req.query;
   const result = await db.query(
     'SELECT * FROM goals WHERE company_id = $1 ORDER BY created_at ASC',
@@ -35,7 +36,7 @@ router.get('/', async (req, res) => {
 });
 
 // Update
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireRole(['owner', 'admin', 'member']), async (req, res) => {
   const { status, title, description } = req.body;
   const result = await db.query(
     `UPDATE goals SET 

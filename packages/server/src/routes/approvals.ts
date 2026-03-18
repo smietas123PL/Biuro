@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
+import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -13,7 +14,7 @@ const policySchema = z.object({
 });
 
 // List approvals (filtered by company)
-router.get('/', async (req, res, next) => {
+router.get('/', requireRole(['owner', 'admin']), async (req, res, next) => {
   try {
     const { company_id } = req.query;
     let q = 'SELECT * FROM approvals';
@@ -29,7 +30,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // Resolve approval
-router.post('/:id/resolve', async (req, res, next) => {
+router.post('/:id/resolve', requireRole(['owner', 'admin']), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status, notes } = req.body;

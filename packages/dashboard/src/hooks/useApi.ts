@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { clearAuthToken, getAuthToken, getSelectedCompanyId } from '../lib/session';
 
 const API_BASE = '/api';
 
@@ -10,14 +11,21 @@ export function useApi() {
     setLoading(true);
     setError(null);
     try {
+      const token = getAuthToken();
+      const selectedCompanyId = getSelectedCompanyId();
       const res = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
-          'Content-Type': 'application/json',
+          ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(selectedCompanyId ? { 'x-company-id': selectedCompanyId } : {}),
           ...options?.headers,
         },
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (res.status === 401) {
+        clearAuthToken();
+      }
       if (!res.ok) throw new Error(data.error || 'API Error');
       return data;
     } catch (err: any) {

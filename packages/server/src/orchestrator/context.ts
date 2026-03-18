@@ -56,6 +56,7 @@ export async function buildAgentContext(agentId: string, taskId: string): Promis
     company_mission: agent.company_mission,
     agent_name: agent.name,
     agent_role: agent.role,
+    agent_model: agent.model,
     agent_system_prompt: agent.system_prompt,
     knowledge_context,
     goal_hierarchy: hierarchy,

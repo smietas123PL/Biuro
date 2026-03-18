@@ -1,6 +1,7 @@
 services:
   db:
     image: ankane/pgvector:latest
+    restart: unless-stopped
     environment:
       POSTGRES_USER: biuro
       POSTGRES_DB: autonomiczne_biuro
@@ -9,40 +10,69 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biuro -d autonomiczne_biuro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   server:
     build: 
       context: .
       dockerfile: packages/server/Dockerfile
     command: pnpm start
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://biuro:password@db:5432/autonomiczne_biuro
       PORT: 3100
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
     ports:
       - "3100:3100"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/api/health >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   worker:
     build:
       context: .
       dockerfile: packages/server/Dockerfile
     command: pnpm worker
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://biuro:password@db:5432/autonomiczne_biuro
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   dashboard:
     build:
       context: .
       dockerfile: packages/dashboard/Dockerfile
+    restart: unless-stopped
     ports:
       - "3000:80"
     depends_on:
-      - server
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   pgdata:

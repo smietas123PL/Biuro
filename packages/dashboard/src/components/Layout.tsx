@@ -12,6 +12,7 @@ import {
 import { clsx } from 'clsx';
 import { useState } from 'react';
 import { useCompany } from '../context/CompanyContext';
+import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -32,6 +33,7 @@ export function Layout() {
     createCompany,
     loading,
   } = useCompany();
+  const { user, logout } = useAuth();
   const [showCompanyForm, setShowCompanyForm] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [companyMission, setCompanyMission] = useState('');
@@ -117,9 +119,16 @@ export function Layout() {
             </button>
           </div>
           <div className="flex items-center gap-4">
-             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
-               <Users className="w-4 h-4" />
-             </div>
+            <div className="text-right">
+              <div className="text-sm font-medium text-foreground">{user?.full_name || user?.email}</div>
+              <div className="text-xs text-muted-foreground">Authenticated session</div>
+            </div>
+            <button
+              onClick={() => void logout()}
+              className="rounded-md border px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              Log out
+            </button>
           </div>
         </header>
 

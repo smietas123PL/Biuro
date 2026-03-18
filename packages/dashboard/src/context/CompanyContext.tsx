@@ -6,6 +6,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from './AuthContext';
+import { COMPANY_STORAGE_KEY } from '../lib/session';
 
 type Company = {
   id: string;
@@ -29,18 +31,17 @@ type CompanyContextValue = {
   createCompany: (input: CreateCompanyInput) => Promise<Company>;
 };
 
-const STORAGE_KEY = 'biuro.selectedCompanyId';
-
 const CompanyContext = createContext<CompanyContextValue | null>(null);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const { request, error } = useApi();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const syncSelectedCompany = (nextCompanies: Company[], preferredId?: string | null) => {
-    const requestedId = preferredId ?? selectedCompanyId ?? localStorage.getItem(STORAGE_KEY);
+    const requestedId = preferredId ?? selectedCompanyId ?? localStorage.getItem(COMPANY_STORAGE_KEY);
     const matchingCompany = requestedId
       ? nextCompanies.find((company) => company.id === requestedId) ?? null
       : null;
@@ -48,13 +49,20 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
     setSelectedCompanyIdState(nextSelectedId);
     if (nextSelectedId) {
-      localStorage.setItem(STORAGE_KEY, nextSelectedId);
+      localStorage.setItem(COMPANY_STORAGE_KEY, nextSelectedId);
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(COMPANY_STORAGE_KEY);
     }
   };
 
   const refreshCompanies = async () => {
+    if (!isAuthenticated) {
+      setCompanies([]);
+      setSelectedCompanyIdState(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const data = (await request('/companies')) as Company[];
@@ -66,16 +74,21 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const storedCompanyId = localStorage.getItem(STORAGE_KEY);
-    if (storedCompanyId) {
+    if (authLoading) {
+      return;
+    }
+
+    const storedCompanyId = localStorage.getItem(COMPANY_STORAGE_KEY);
+    if (isAuthenticated && storedCompanyId) {
       setSelectedCompanyIdState(storedCompanyId);
     }
+
     void refreshCompanies();
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const setSelectedCompanyId = (companyId: string) => {
     setSelectedCompanyIdState(companyId);
-    localStorage.setItem(STORAGE_KEY, companyId);
+    localStorage.setItem(COMPANY_STORAGE_KEY, companyId);
   };
 
   const createCompany = async (input: CreateCompanyInput) => {

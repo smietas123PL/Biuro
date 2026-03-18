@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
+import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -15,7 +16,7 @@ const createTaskSchema = z.object({
 });
 
 // Create
-router.post('/', async (req, res, next) => {
+router.post('/', requireRole(['owner', 'admin', 'member']), async (req, res, next) => {
   try {
     const parsed = createTaskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error });
@@ -40,7 +41,7 @@ router.post('/', async (req, res, next) => {
 });
 
 // Get by ID
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
   try {
     if (!req.params.id || req.params.id === 'undefined') return res.status(400).json({ error: 'Invalid ID' });
     const result = await db.query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
@@ -50,7 +51,7 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // Post message to task
-router.post('/:id/messages', async (req, res, next) => {
+router.post('/:id/messages', requireRole(['owner', 'admin', 'member']), async (req, res, next) => {
   try {
     if (!req.params.id || req.params.id === 'undefined') return res.status(400).json({ error: 'Invalid ID' });
     const taskRes = await db.query('SELECT company_id FROM tasks WHERE id = $1', [req.params.id]);
@@ -66,7 +67,7 @@ router.post('/:id/messages', async (req, res, next) => {
 });
 
 // Get messages for task
-router.get('/:id/messages', async (req, res, next) => {
+router.get('/:id/messages', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
   try {
     if (!req.params.id || req.params.id === 'undefined') return res.status(400).json({ error: 'Invalid ID' });
     const result = await db.query(
@@ -78,7 +79,7 @@ router.get('/:id/messages', async (req, res, next) => {
 });
 
 // List (with filters)
-router.get('/', async (req, res, next) => {
+router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
   try {
     const { company_id, assigned_to, status } = req.query;
     if (!company_id) return res.status(400).json({ error: 'Missing company_id' });
@@ -101,7 +102,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // Update Status
-router.patch('/:id/status', async (req, res, next) => {
+router.patch('/:id/status', requireRole(['owner', 'admin', 'member']), async (req, res, next) => {
   try {
     const { status } = req.body;
     const result = await db.query(
@@ -114,7 +115,7 @@ router.patch('/:id/status', async (req, res, next) => {
 });
 
 // Update Assignment
-router.patch('/:id/assign', async (req, res, next) => {
+router.patch('/:id/assign', requireRole(['owner', 'admin', 'member']), async (req, res, next) => {
   try {
     const { assigned_to } = req.body;
     const result = await db.query(

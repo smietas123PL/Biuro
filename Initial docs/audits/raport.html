@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Raport Audytu — Autonomiczne Biuro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" />
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #13161e;
+      --surface2: #1a1e29;
+      --border: #252a38;
+      --border2: #2e3547;
+      --accent: #4f7fff;
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --orange: #fb923c;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+
+    .hero {
+      background: linear-gradient(135deg, #0d0f14 0%, #111827 50%, #0d1525 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 56px 0 40px; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 60% at 70% 40%, rgba(79,127,255,.07) 0%, transparent 70%);
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 0 32px; position: relative; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(79,127,255,.1); border: 1px solid rgba(79,127,255,.25);
+      color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 600;
+      letter-spacing: .1em; text-transform: uppercase;
+      padding: 5px 12px; border-radius: 4px; margin-bottom: 20px;
+    }
+    .hero h1 { font-size: 36px; font-weight: 700; letter-spacing: -.5px; line-height: 1.2; margin-bottom: 12px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--text2); font-size: 15px; max-width: 560px; }
+    .meta { display: flex; gap: 32px; margin-top: 32px; flex-wrap: wrap; }
+    .meta-item { display: flex; flex-direction: column; gap: 3px; }
+    .meta-label { font-size: 11px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+    .meta-value { font-size: 13px; color: var(--text2); }
+
+    .scorebar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 28px 0; }
+    .scores {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px;
+      background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    }
+    .score-cell { background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 6px; }
+    .score-cell .slabel { font-size: 11px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: .07em; }
+    .score-cell .val { font-size: 26px; font-weight: 700; font-family: var(--mono); }
+    .score-cell .sdesc { font-size: 12px; color: var(--text3); }
+    .c-green { color: var(--green); } .c-yellow { color: var(--yellow); }
+    .c-red { color: var(--red); } .c-orange { color: var(--orange); } .c-blue { color: var(--accent); }
+
+    .content { padding: 48px 0 80px; }
+    .section { margin-bottom: 48px; }
+    .section-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .section-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+    }
+    .icon-green { background: rgba(52,211,153,.12); } .icon-red { background: rgba(248,113,113,.12); }
+    .icon-yellow { background: rgba(251,191,36,.12); } .icon-blue { background: rgba(79,127,255,.12); }
+    .section h2 { font-size: 19px; font-weight: 600; }
+    .section-subtitle { font-size: 13px; color: var(--text3); margin-left: auto; font-family: var(--mono); }
+
+    .finding { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+    .finding-header { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px; }
+    .severity {
+      font-family: var(--mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+      padding: 3px 8px; border-radius: 3px; flex-shrink: 0; margin-top: 2px; white-space: nowrap;
+    }
+    .sev-critical { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.25); }
+    .sev-high { background: rgba(251,146,60,.15); color: var(--orange); border: 1px solid rgba(251,146,60,.25); }
+    .sev-medium { background: rgba(251,191,36,.15); color: var(--yellow); border: 1px solid rgba(251,191,36,.25); }
+    .sev-low { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.25); }
+    .sev-info { background: rgba(79,127,255,.15); color: var(--accent); border: 1px solid rgba(79,127,255,.25); }
+    .finding-title { font-size: 14px; font-weight: 600; line-height: 1.4; flex: 1; }
+    .finding-loc { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-top: 3px; }
+    .finding-body { padding: 0 20px 20px 52px; border-top: 1px solid var(--border); }
+    .finding-body p { color: var(--text2); font-size: 14px; margin-top: 12px; }
+    .code-block {
+      background: #0a0c12; border: 1px solid var(--border2); border-radius: 6px; padding: 14px 16px;
+      font-family: var(--mono); font-size: 12px; color: #a8c0e8;
+      margin-top: 12px; overflow-x: auto; white-space: pre; line-height: 1.6;
+    }
+    .hi-bad { color: #f87171; } .hi-good { color: #34d399; } .hi-comment { color: #4b5a73; }
+    .fix-label {
+      display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .08em; color: var(--green); margin-top: 14px; margin-bottom: 4px;
+    }
+
+    .strength-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .strength-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 18px 20px; border-left: 3px solid var(--green);
+    }
+    .strength-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .strength-card p { font-size: 13px; color: var(--text2); }
+
+    .roadmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    @media (max-width: 700px) { .roadmap { grid-template-columns: 1fr; } }
+    .road-col { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
+    .road-col h4 { font-size: 12px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
+    .road-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .road-item:last-child { border-bottom: none; }
+    .road-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+    .dot-red { background: var(--red); } .dot-orange { background: var(--orange); } .dot-green { background: var(--green); }
+    .road-item p { font-size: 13px; color: var(--text2); }
+
+    .summary-table { width: 100%; border-collapse: collapse; }
+    .summary-table th {
+      text-align: left; font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text3); padding: 10px 14px; border-bottom: 1px solid var(--border2);
+    }
+    .summary-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .summary-table tr:last-child td { border-bottom: none; }
+    .summary-table tr:hover td { background: var(--surface2); }
+    .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+    footer {
+      border-top: 1px solid var(--border); padding: 32px 0; color: var(--text3); font-size: 13px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <div class="badge">Raport audytu kodu &nbsp;&middot;&nbsp; Autonomiczne Biuro</div>
+    <h1>Przegląd projektu<br /><span>Autonomiczne Biuro</span></h1>
+    <p>Kompleksowa ocena jakości kodu, architektury, bezpieczeństwa i gotowości produkcyjnej projektu do orkiestracji autonomicznych firm AI.</p>
+    <div class="meta">
+      <div class="meta-item"><span class="meta-label">Repozytorium</span><span class="meta-value">smietas123PL / Biuro</span></div>
+      <div class="meta-item"><span class="meta-label">Data audytu</span><span class="meta-value">18 marca 2026</span></div>
+      <div class="meta-item"><span class="meta-label">Stack</span><span class="meta-value">Node.js &middot; TypeScript &middot; React &middot; PostgreSQL</span></div>
+      <div class="meta-item"><span class="meta-label">Architektura</span><span class="meta-value">Monorepo (pnpm workspaces)</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="scorebar">
+  <div class="container">
+    <div class="scores">
+      <div class="score-cell"><span class="slabel">Ogólna ocena</span><span class="val c-yellow">5.8</span><span class="sdesc">/ 10 &mdash; Alfa / Prototyp</span></div>
+      <div class="score-cell"><span class="slabel">Bezpieczeństwo</span><span class="val c-red">3/10</span><span class="sdesc">Krytyczne braki</span></div>
+      <div class="score-cell"><span class="slabel">Architektura</span><span class="val c-yellow">6/10</span><span class="sdesc">Dobra koncepcja, niekompletna</span></div>
+      <div class="score-cell"><span class="slabel">Jakość kodu</span><span class="val c-yellow">6/10</span><span class="sdesc">Typowy szkielet iteracyjny</span></div>
+      <div class="score-cell"><span class="slabel">Kompletność</span><span class="val c-orange">4/10</span><span class="sdesc">Wiele stub&apos;ów / placeholder&apos;ów</span></div>
+      <div class="score-cell"><span class="slabel">Testy</span><span class="val c-red">2/10</span><span class="sdesc">Praktycznie brak</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+<div class="container">
+
+  <!-- MOCNE STRONY -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-green">&#10003;</div>
+      <h2>Mocne strony projektu</h2>
+    </div>
+    <div class="strength-grid">
+      <div class="strength-card">
+        <h4>Ambitna, spójna koncepcja</h4>
+        <p>Projekt mapuje realne problemy orkiestracji agentów (budżety, hierarchie, heartbeaty) na dobrze przemyślany model domenowy. README jest wyjątkowo dobrej jakości &mdash; pełne diagramy, CLI, FAQ.</p>
+      </div>
+      <div class="strength-card">
+        <h4>Solidny schemat bazy danych</h4>
+        <p>Schema v1&ndash;v8 dobrze modeluje kompanie, agentów, zadania, polityki i audit_log. UUID PK, ON DELETE CASCADE, CHECK constraints, UNIQUE &mdash; poprawne wzorce PostgreSQL.</p>
+      </div>
+      <div class="strength-card">
+        <h4>Atomowy checkout zadań</h4>
+        <p><code>FOR UPDATE SKIP LOCKED</code> w heartbeat.ts to prawidłowe rozwiązanie problemu wyścigu przy równoległych agentach. To najlepsza techniczna decyzja w projekcie.</p>
+      </div>
+      <div class="strength-card">
+        <h4>Modułowy system runtime&apos;ów</h4>
+        <p>Interfejs <code>IAgentRuntime</code> z registry pozwala dodawać nowe LLM bez modyfikacji rdzenia. Claude, OpenAI, Gemini &mdash; dobra abstrakcja strategia design pattern.</p>
+      </div>
+      <div class="strength-card">
+        <h4>Safety system w heartbeat</h4>
+        <p>Detekcja pętli delegacji, flood wiadomości, auto-pause &mdash; skoordynowane bezpieczeństwo operacyjne, rzadkie w projektach na tym etapie.</p>
+      </div>
+      <div class="strength-card">
+        <h4>Monorepo + Docker Compose</h4>
+        <p>pnpm workspaces + docker-compose z osobnym workerem i dashboardem to dojrzała struktura deploymentu dla projektu open-source.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- KRYTYCZNE -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-red">!</div>
+      <h2>Problemy krytyczne (bezpieczeństwo)</h2>
+      <span class="section-subtitle">natychmiastowe działanie</span>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-critical">KRYTYCZNE</span>
+        <div>
+          <div class="finding-title">Hasła hashowane jako "hash_&lt;password&gt;" &mdash; BRAK bcrypt</div>
+          <div class="finding-loc">packages/server/src/routes/auth.ts &middot; linia ~20</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Hasła są &bdquo;hashowane&rdquo; przez konkatenację z prefixem. To plaintext storage &mdash; każdy z dostępem do bazy może odczytać wszystkie hasła. Absolutnie niedopuszczalne w jakimkolwiek deploymencie.</p>
+        <div class="code-block"><span class="hi-comment">// OBECNY KOD &mdash; KRYTYCZNA PODATNOŚĆ</span>
+const pwdHash = <span class="hi-bad">`hash_${password}`</span>;
+
+<span class="hi-comment">// POPRAWKA &mdash; użyj bcrypt</span>
+<span class="hi-good">import bcrypt from 'bcrypt';
+const pwdHash = await bcrypt.hash(password, 12);
+// Weryfikacja:
+const valid = await bcrypt.compare(password, user.pwd_hash);</span></div>
+        <span class="fix-label">Wymagane zmiany:</span>
+        <p>Zainstaluj <code>bcrypt</code> lub <code>argon2</code>. Usuń komentarz &bdquo;In a real app, use bcrypt&rdquo; i wdróż teraz. Wszystkie obecne konta mają niezabezpieczone hasła.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-critical">KRYTYCZNE</span>
+        <div>
+          <div class="finding-title">AUTH_ENABLED=false domyślnie &mdash; brak autentykacji w produkcji</div>
+          <div class="finding-loc">.env.example &middot; docker-compose.yml</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Domyślna konfiguracja całkowicie pomija autentykację. Każdy, kto zna URL API, może tworzyć agentów, uruchamiać narzędzia i wydawać środki. Docker Compose nie ustawia <code>AUTH_ENABLED=true</code>.</p>
+        <div class="code-block"><span class="hi-comment"># docker-compose.yml &mdash; brak AUTH_ENABLED=true</span>
+server:
+  environment:
+    DATABASE_URL: ...
+    <span class="hi-bad"># AUTH_ENABLED nie ustawione &rarr; domyślnie false</span>
+
+<span class="hi-good"># POPRAWKA
+    AUTH_ENABLED: "true"</span></div>
+        <span class="fix-label">Wymagane zmiany:</span>
+        <p>Ustaw <code>AUTH_ENABLED=true</code> w docker-compose. Opcja <code>false</code> powinna być tylko dla local dev &mdash; zaktualizuj README.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-critical">KRYTYCZNE</span>
+        <div>
+          <div class="finding-title">Brak walidacji danych z LLM przed wykonaniem narzędzi (prompt injection)</div>
+          <div class="finding-loc">packages/server/src/orchestrator/heartbeat.ts</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Akcje z odpowiedzi LLM (action.tool_name, action.params) nie są walidowane schematem przed wykonaniem. Złośliwy lub manipulowany model może zwrócić dowolną nazwę narzędzia lub parametry, które trafią do executora.</p>
+        <div class="code-block"><span class="hi-comment">// RYZYKO: action pochodzi z LLM, może być manipulowany</span>
+const result = await executeTool(agentId, task.id,
+  <span class="hi-bad">action.tool_name</span>,  <span class="hi-comment">// brak walidacji</span>
+  <span class="hi-bad">action.params</span>      <span class="hi-comment">// brak walidacji</span>
+);
+
+<span class="hi-good">// POPRAWKA: waliduj przez zod przed wykonaniem
+const ActionSchema = z.object({
+  tool_name: z.string().regex(/^[a-z_]+$/),
+  params: z.record(z.unknown())
+});
+const safe = ActionSchema.parse(action);</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WYSOKIE -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-yellow">&#9650;</div>
+      <h2>Wysokie priorytety (architektura i stabilność)</h2>
+      <span class="section-subtitle">przed alpha release</span>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-high">WYSOKIE</span>
+        <div>
+          <div class="finding-title">db.transaction() prawdopodobnie nie istnieje w client.ts &mdash; atomowy checkout niepewny</div>
+          <div class="finding-loc">packages/server/src/db/client.ts &middot; heartbeat.ts linia ~25</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Heartbeat wywołuje <code>db.transaction(async (client) =&gt; ...)</code>, ale standardowy <code>pg.Pool</code> tej metody nie posiada. Jeśli client.ts jej nie implementuje, atomowy checkout zadań w ogóle nie działa &mdash; dwóch agentów może pobrać to samo zadanie.</p>
+        <div class="code-block"><span class="hi-good">// Wymagana implementacja w packages/server/src/db/client.ts:
+export const db = {
+  query: pool.query.bind(pool),
+  transaction: async (fn) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally { client.release(); }
+  }
+};</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-high">WYSOKIE</span>
+        <div>
+          <div class="finding-title">Heartbeat nie zmienia statusu agenta na 'working' &mdash; wielokrotne równoległe uruchomienia</div>
+          <div class="finding-loc">packages/server/src/orchestrator/heartbeat.ts &middot; scheduler.ts</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Scheduler pobiera tylko agentów ze statusem <code>'idle'</code>. Ale heartbeat nigdzie nie ustawia agenta na <code>'working'</code>. Oznacza to, że w każdym interwale (30s) ten sam agent może być uruchomiony wielokrotnie równolegle.</p>
+        <div class="code-block"><span class="hi-comment">// Dodać na początku heartbeat:</span>
+<span class="hi-good">await db.query("UPDATE agents SET status='working' WHERE id=$1", [agentId]);</span>
+<span class="hi-comment">// ...i w bloku finally:</span>
+<span class="hi-good">await db.query("UPDATE agents SET status='idle' WHERE id=$1", [agentId]);</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-high">WYSOKIE</span>
+        <div>
+          <div class="finding-title">8 plików schema_v*.sql bez systemu śledzenia migracji</div>
+          <div class="finding-loc">packages/server/src/db/schema.sql &ndash; schema_v8.sql</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Schema ewoluowała przez 8 addytywnych plików SQL. Plik <code>migrate.ts</code> istnieje, ale bez tabeli śledzenia wersji użytkownik musi uruchamiać każdy plik ręcznie i w odpowiedniej kolejności. To niemożliwe do utrzymania.</p>
+        <div class="code-block"><span class="hi-good">// migrate.ts powinien implementować:
+// 1. CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY)
+// 2. Sprawdź które v1..v8 nie zostały zastosowane
+// 3. Uruchom brakujące w kolejności
+// 4. Zapisz wersję
+
+// Alternatywa: użyj drizzle-kit, prisma migrate lub db-migrate</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-high">WYSOKIE</span>
+        <div>
+          <div class="finding-title">Claude runtime: hardkodowany przestarzały model claude-3-5-sonnet-20240620</div>
+          <div class="finding-loc">packages/server/src/runtime/claude.ts &middot; linia ~50</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Model z połowy 2024 zamiast aktualnego. Schema ma kolumnę <code>model</code> w tabeli agents, ale runtime ją całkowicie ignoruje &mdash; to też oznacza, że per-agent konfiguracja modelu nie działa.</p>
+        <div class="code-block"><span class="hi-bad">model: 'claude-3-5-sonnet-20240620',</span>
+
+<span class="hi-good">// POPRAWKA: użyj modelu z kontekstu agenta
+model: context.agent_model ?? 'claude-sonnet-4-6',</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-high">WYSOKIE</span>
+        <div>
+          <div class="finding-title">Dashboard: DashboardPage z fikcyjnymi danymi, większość stron to Placeholder</div>
+          <div class="finding-loc">packages/dashboard/src/App.tsx</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Strona główna wyświetla hardkodowane liczby (12 agentów, 45 tasków, $12.42). Strony Goals, Tools i inne to puste komponenty Placeholder. Rozbieżność między obszernym README a rzeczywistym stanem UI jest istotna dla projektu open-source.</p>
+        <div class="code-block"><span class="hi-bad">&lt;Route path="goals" element={&lt;Placeholder title="Goals" /&gt;} /&gt;
+&lt;p className="text-2xl font-bold"&gt;12&lt;/p&gt;  // zawsze "12 agentów"</span>
+
+<span class="hi-good">// Wymagane: useApi hook + /api/companies/:id/stats
+const { data } = useApi('/companies/' + companyId + '/stats');
+&lt;p&gt;{data?.active_agents ?? '...'}&lt;/p&gt;</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-high">WYSOKIE</span>
+        <div>
+          <div class="finding-title">docker-compose nie przekazuje kluczy API do server/worker &mdash; agenci nie będą działać</div>
+          <div class="finding-loc">docker-compose.yml</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Server container ma tylko <code>GOOGLE_API_KEY</code>. Brak <code>ANTHROPIC_API_KEY</code> i <code>OPENAI_API_KEY</code>. Claude runtime falluje na mock, OpenAI zwróci 401. Worker też nie ma kluczy.</p>
+        <div class="code-block"><span class="hi-good">server:
+  environment:
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+    GOOGLE_API_KEY: ${GOOGLE_API_KEY}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ŚREDNIE -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-yellow">&#8764;</div>
+      <h2>Średnie priorytety (jakość i kompletność)</h2>
+      <span class="section-subtitle">przed beta release</span>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-medium">ŚREDNIE</span>
+        <div>
+          <div class="finding-title">Podwójne liczenie kosztów: budgets + company_credits</div>
+          <div class="finding-loc">heartbeat.ts linia ~90 + services/billing.ts</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Heartbeat aktualizuje tabelę <code>budgets</code> bezpośrednio (~linia 90), a następnie wywołuje <code>BillingService.recordUsage()</code> przy <code>complete_task</code>, co odejmuje ponownie z <code>company_credits</code>. Każdy ukończony task liczy koszt dwukrotnie.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-medium">ŚREDNIE</span>
+        <div>
+          <div class="finding-title">Safety: limity z README (60/h heartbeat, 100 tools/task, 24h) nie są zaimplementowane</div>
+          <div class="finding-loc">packages/server/src/orchestrator/safety.ts</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>README dokumentuje 9 mechanizmów ochrony. Kod implementuje tylko 3: circular delegation, message flood i consecutive errors. Brakuje: rate limit heartbeat, limit tool calls per task, max task duration, budget per task.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-medium">ŚREDNIE</span>
+        <div>
+          <div class="finding-title">Brak walidacji Zod w większości tras REST</div>
+          <div class="finding-loc">packages/server/src/routes/</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Trasy auth mają Zod (<code>SignupSchema</code>), ale agents, tasks, goals, policies &mdash; większość nie waliduje body. Brak walidacji to ryzyko błędów runtime i zniekształconych danych w bazie.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-medium">ŚREDNIE</span>
+        <div>
+          <div class="finding-title">Parsowanie odpowiedzi LLM przez regex &mdash; kruche</div>
+          <div class="finding-loc">packages/server/src/runtime/claude.ts linia ~60</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Odpowiedź agenta parsowana przez regex. Każda zmiana formatu lub nieoczekiwany znak w JSON powoduje cichą awarię (puste actions). Lepsza jest ekstrakcja przez Anthropic tool_use (JSON schema).</p>
+        <div class="code-block"><span class="hi-bad">const actionsMatch = text.match(/&lt;actions&gt;([\s\S]*?)&lt;\/actions&gt;/);</span>
+
+<span class="hi-good">// Alternatywa: Anthropic tool_use wymusza strukturę
+tools: [{ name: "act", input_schema: { type: "object", ... } }]</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-medium">ŚREDNIE</span>
+        <div>
+          <div class="finding-title">Brak restart policy i healthcheck w docker-compose</div>
+          <div class="finding-loc">docker-compose.yml</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Server i worker nie mają <code>restart: unless-stopped</code> ani <code>healthcheck</code>. Crash agenta nie jest automatycznie naprawiany. Endpoint <code>/api/health</code> istnieje w README, ale nie jest używany przez Docker.</p>
+        <div class="code-block"><span class="hi-good">server:
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:3100/api/health"]
+    interval: 30s
+    retries: 3</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NISKIE -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-blue">i</div>
+      <h2>Niskie priorytety i dobre praktyki</h2>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-low">NISKIE</span>
+        <div>
+          <div class="finding-title">Brak indeksów na często odpytywanych kolumnach &mdash; seq scan przy &gt;1k rekordów</div>
+          <div class="finding-loc">packages/server/src/db/schema.sql</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Heartbeat odpytuje <code>tasks WHERE assigned_to AND status IN (...)</code> i <code>heartbeats WHERE agent_id AND created_at</code> bez indeksów. Przy 1000+ rekordach każdy heartbeat (co 30s) będzie pełny scan.</p>
+        <div class="code-block"><span class="hi-good">CREATE INDEX idx_tasks_agent_status ON tasks(assigned_to, status);
+CREATE INDEX idx_heartbeats_agent_time ON heartbeats(agent_id, created_at DESC);
+CREATE INDEX idx_audit_company ON audit_log(company_id, created_at DESC);
+CREATE INDEX idx_messages_task_agent ON messages(task_id, from_agent, created_at);</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-low">NISKIE</span>
+        <div>
+          <div class="finding-title">7 plików verify*.ts w src/ &mdash; dług techniczny zaciemniający strukturę</div>
+          <div class="finding-loc">packages/server/src/verify1b.ts &mdash; verify5_intelligence.ts</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Prawdopodobnie skrypty weryfikacji faz development. Nie opisane w README, nie mają testów, zaciemniają strukturę projektu. Należy przenieść do <code>scripts/</code> lub usunąć przed pierwszym publicznym release.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-header">
+        <span class="severity sev-info">INFO</span>
+        <div>
+          <div class="finding-title">README: placeholder linki (GitHub, Discord, Documentation) wskazują na # lub your-org</div>
+          <div class="finding-loc">readme.md &mdash; footer</div>
+        </div>
+      </div>
+      <div class="finding-body">
+        <p>Stopka zawiera <code>https://github.com/your-org/autonomiczne-biuro</code> i <code>[Discord](#)</code> &mdash; kopiuj-wklej z szablonu. Obniża wiarygodność projektu open-source i utrudnia odkrywalność.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROADMAP NAPRAWCZY -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-blue">&#9654;</div>
+      <h2>Rekomendowany plan naprawczy</h2>
+    </div>
+    <div class="roadmap">
+      <div class="road-col">
+        <h4 style="color:var(--red)">Tydzień 1 &mdash; Krytyczne</h4>
+        <div class="road-item"><span class="road-dot dot-red"></span><p>Wdrożyć bcrypt/argon2 dla haseł</p></div>
+        <div class="road-item"><span class="road-dot dot-red"></span><p>Ustawić AUTH_ENABLED=true w docker-compose</p></div>
+        <div class="road-item"><span class="road-dot dot-red"></span><p>Dodać walidację Zod akcji z LLM</p></div>
+        <div class="road-item"><span class="road-dot dot-red"></span><p>Zaimplementować db.transaction() lub potwierdzić istnienie</p></div>
+        <div class="road-item"><span class="road-dot dot-red"></span><p>Dodać klucze API do docker-compose env</p></div>
+      </div>
+      <div class="road-col">
+        <h4 style="color:var(--orange)">Tydzień 2&ndash;3 &mdash; Wysokie</h4>
+        <div class="road-item"><span class="road-dot dot-orange"></span><p>Naprawić status agenta working/idle w heartbeat</p></div>
+        <div class="road-item"><span class="road-dot dot-orange"></span><p>Skonsolidować 8 plików SQL + migrate.ts z tracking&apos;iem</p></div>
+        <div class="road-item"><span class="road-dot dot-orange"></span><p>Zaktualizować model Claude do aktualnej wersji</p></div>
+        <div class="road-item"><span class="road-dot dot-orange"></span><p>Podłączyć DashboardPage do API /stats</p></div>
+        <div class="road-item"><span class="road-dot dot-orange"></span><p>Dodać restart policy + healthcheck w Docker</p></div>
+      </div>
+      <div class="road-col">
+        <h4 style="color:var(--green)">Tydzień 4+ &mdash; Jakość</h4>
+        <div class="road-item"><span class="road-dot dot-green"></span><p>Zaimplementować brakujące safety limity (60/h, 100 tools)</p></div>
+        <div class="road-item"><span class="road-dot dot-green"></span><p>Naprawić podwójne liczenie kosztów</p></div>
+        <div class="road-item"><span class="road-dot dot-green"></span><p>Zastąpić regex tool_use API Anthropic</p></div>
+        <div class="road-item"><span class="road-dot dot-green"></span><p>Dodać indeksy DB na kluczowych kolumnach</p></div>
+        <div class="road-item"><span class="road-dot dot-green"></span><p>Wdrożyć brakujące strony dashboard (Goals, Tools)</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABELA PODSUMOWANIE -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-blue">&#9776;</div>
+      <h2>Podsumowanie wszystkich znalezisk</h2>
+    </div>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead>
+          <tr><th>#</th><th>Problem</th><th>Kategoria</th><th>Priorytet</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>Hasła hashowane jako hash_&lt;password&gt;</td><td>Bezpieczeństwo</td><td><span class="severity sev-critical" style="font-size:10px">KRYTYCZNE</span></td></tr>
+          <tr><td>2</td><td>AUTH_ENABLED=false domyślnie</td><td>Bezpieczeństwo</td><td><span class="severity sev-critical" style="font-size:10px">KRYTYCZNE</span></td></tr>
+          <tr><td>3</td><td>Brak walidacji akcji LLM (prompt injection)</td><td>Bezpieczeństwo</td><td><span class="severity sev-critical" style="font-size:10px">KRYTYCZNE</span></td></tr>
+          <tr><td>4</td><td>db.transaction() &mdash; atomowy checkout niepewny</td><td>Architektura</td><td><span class="severity sev-high" style="font-size:10px">WYSOKIE</span></td></tr>
+          <tr><td>5</td><td>Agent nie zmienia statusu na working</td><td>Logika biznesowa</td><td><span class="severity sev-high" style="font-size:10px">WYSOKIE</span></td></tr>
+          <tr><td>6</td><td>8 plików SQL bez systemu migracji</td><td>Infrastruktura</td><td><span class="severity sev-high" style="font-size:10px">WYSOKIE</span></td></tr>
+          <tr><td>7</td><td>Hardkodowany przestarzały model Claude</td><td>Konfiguracja</td><td><span class="severity sev-high" style="font-size:10px">WYSOKIE</span></td></tr>
+          <tr><td>8</td><td>Dashboard z hardkodowanymi danymi / placeholder</td><td>Frontend</td><td><span class="severity sev-high" style="font-size:10px">WYSOKIE</span></td></tr>
+          <tr><td>9</td><td>Brak kluczy API w docker-compose</td><td>DevOps</td><td><span class="severity sev-high" style="font-size:10px">WYSOKIE</span></td></tr>
+          <tr><td>10</td><td>Podwójne liczenie kosztów</td><td>Logika biznesowa</td><td><span class="severity sev-medium" style="font-size:10px">ŚREDNIE</span></td></tr>
+          <tr><td>11</td><td>Brakujące safety limity z README</td><td>Safety</td><td><span class="severity sev-medium" style="font-size:10px">ŚREDNIE</span></td></tr>
+          <tr><td>12</td><td>Brak walidacji Zod w trasach REST</td><td>Jakość kodu</td><td><span class="severity sev-medium" style="font-size:10px">ŚREDNIE</span></td></tr>
+          <tr><td>13</td><td>Parsowanie LLM przez regex &mdash; kruche</td><td>Jakość kodu</td><td><span class="severity sev-medium" style="font-size:10px">ŚREDNIE</span></td></tr>
+          <tr><td>14</td><td>Brak restart policy i healthcheck w Docker</td><td>DevOps</td><td><span class="severity sev-medium" style="font-size:10px">ŚREDNIE</span></td></tr>
+          <tr><td>15</td><td>Brak indeksów DB na kluczowych kolumnach</td><td>Wydajność</td><td><span class="severity sev-low" style="font-size:10px">NISKIE</span></td></tr>
+          <tr><td>16</td><td>Pliki verify*.ts w src/ &mdash; dług techniczny</td><td>Jakość kodu</td><td><span class="severity sev-low" style="font-size:10px">NISKIE</span></td></tr>
+          <tr><td>17</td><td>Placeholder linki w README</td><td>Dokumentacja</td><td><span class="severity sev-info" style="font-size:10px">INFO</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <span>Autonomiczne Biuro &middot; Raport audytu kodu &middot; Marzec 2026</span>
+    <span>Wygenerowano przez Claude Sonnet 4.6</span>
+  </footer>
+
+</div>
+</div>
+</body>
+</html>

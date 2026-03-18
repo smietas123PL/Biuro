@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Pause, Play, UserMinus, Plus, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Pause, Play, UserMinus, Plus, X, GitBranchPlus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useApi } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
@@ -14,10 +15,53 @@ const initialForm = {
   reports_to: '',
 };
 
+type AgentRecord = {
+  id: string;
+  name: string;
+  role: string;
+  title?: string | null;
+  runtime: 'claude' | 'openai' | 'gemini' | string;
+  system_prompt?: string | null;
+  monthly_budget_usd?: number;
+  reports_to?: string | null;
+  status: 'idle' | 'working' | 'paused' | 'terminated' | string;
+};
+
+type AgentNode = AgentRecord & {
+  children: AgentNode[];
+};
+
+function buildAgentTree(agents: AgentRecord[]) {
+  const nodeMap = new Map<string, AgentNode>();
+  for (const agent of agents) {
+    nodeMap.set(agent.id, { ...agent, children: [] });
+  }
+
+  const roots: AgentNode[] = [];
+  for (const agent of agents) {
+    const node = nodeMap.get(agent.id);
+    if (!node) {
+      continue;
+    }
+
+    if (agent.reports_to) {
+      const manager = nodeMap.get(agent.reports_to);
+      if (manager) {
+        manager.children.push(node);
+        continue;
+      }
+    }
+
+    roots.push(node);
+  }
+
+  return roots;
+}
+
 export default function AgentsPage() {
   const { request, loading, error } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
-  const [agents, setAgents] = useState<any[]>([]);
+  const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [showHireModal, setShowHireModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialForm);
@@ -70,6 +114,10 @@ export default function AgentsPage() {
     return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to manage agents.</div>;
   }
 
+  const activeAgents = agents.filter((agent) => agent.status !== 'terminated');
+  const agentTree = buildAgentTree(activeAgents);
+  const managerCount = activeAgents.filter((agent) => activeAgents.some((candidate) => candidate.reports_to === agent.id)).length;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -88,6 +136,31 @@ export default function AgentsPage() {
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
+      <div className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">Organization View</h3>
+            <p className="text-sm text-muted-foreground">Hierarchy built from `reports_to`, so you can see the team shape at a glance.</p>
+          </div>
+          <div className="flex gap-3 text-xs text-muted-foreground">
+            <span className="rounded-full bg-muted px-3 py-1">{activeAgents.length} active agents</span>
+            <span className="rounded-full bg-muted px-3 py-1">{managerCount} managers</span>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {agentTree.map((agent) => (
+            <AgentTreeNode key={agent.id} node={agent} depth={0} />
+          ))}
+
+          {agentTree.length === 0 && !loading && (
+            <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+              No reporting structure yet. Assign managers when hiring agents to see the org chart here.
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-6">
         <div className="border rounded-lg overflow-hidden bg-card">
           <table className="w-full text-left">
@@ -104,7 +177,9 @@ export default function AgentsPage() {
               {agents.map((agent) => (
                 <tr key={agent.id} className="hover:bg-accent/50 transition-colors">
                   <td className="px-6 py-4">
-                    <div className="font-semibold">{agent.name}</div>
+                    <Link to={`/agents/${agent.id}`} className="font-semibold text-foreground transition-colors hover:text-primary">
+                      {agent.name}
+                    </Link>
                     <div className="text-sm text-muted-foreground">{agent.title || agent.role}</div>
                   </td>
                   <td className="px-6 py-4">
@@ -112,6 +187,7 @@ export default function AgentsPage() {
                       className={clsx(
                         'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize',
                         agent.status === 'idle' && 'bg-green-100 text-green-700',
+                        agent.status === 'working' && 'bg-sky-100 text-sky-700',
                         agent.status === 'paused' && 'bg-yellow-100 text-yellow-700',
                         agent.status === 'terminated' && 'bg-red-100 text-red-700',
                       )}
@@ -266,6 +342,58 @@ export default function AgentsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AgentTreeNode({ node, depth }: { node: AgentNode; depth: number }) {
+  return (
+    <div className="space-y-3">
+      <div
+        className="rounded-2xl border bg-muted/20 p-4 shadow-sm"
+        style={{ marginLeft: `${depth * 20}px` }}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link to={`/agents/${node.id}`} className="font-semibold text-foreground transition-colors hover:text-primary">
+                {node.name}
+              </Link>
+              <span className="rounded-full bg-background px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                {node.runtime}
+              </span>
+              <span
+                className={clsx(
+                  'rounded-full px-2 py-1 text-[11px] uppercase tracking-wide',
+                  node.status === 'working' && 'bg-sky-100 text-sky-700',
+                  node.status === 'idle' && 'bg-emerald-100 text-emerald-700',
+                  node.status === 'paused' && 'bg-amber-100 text-amber-700',
+                  node.status === 'terminated' && 'bg-rose-100 text-rose-700'
+                )}
+              >
+                {node.status}
+              </span>
+              {depth > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-[11px] text-sky-700">
+                  <GitBranchPlus className="h-3.5 w-3.5" />
+                  Reports into manager
+                </span>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">{node.title || node.role}</div>
+          </div>
+
+          {node.children.length > 0 && (
+            <div className="rounded-full bg-background px-3 py-1 text-xs text-muted-foreground">
+              {node.children.length} direct report{node.children.length === 1 ? '' : 's'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {node.children.map((child) => (
+        <AgentTreeNode key={child.id} node={child} depth={depth + 1} />
+      ))}
     </div>
   );
 }

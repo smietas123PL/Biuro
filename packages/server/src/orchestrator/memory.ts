@@ -1,41 +1,116 @@
 import { db } from '../db/client.js';
+import { generateEmbedding, toPgVector } from '../services/embeddings.js';
+import { recordRetrievalMetric } from '../services/retrievalMetrics.js';
 import { logger } from '../utils/logger.js';
+
+function clampLimit(limit: number) {
+  return Math.max(1, Math.min(limit, 10));
+}
+
+async function searchMemoriesLexically(companyId: string, query: string, limit: number) {
+  const pattern = `%${query.trim().replace(/\s+/g, '%')}%`;
+  const res = await db.query(
+    `SELECT content, created_at
+     FROM agent_memory
+     WHERE company_id = $1
+       AND content ILIKE $2
+     ORDER BY created_at DESC
+     LIMIT $3`,
+    [companyId, pattern, limit]
+  );
+
+  return res.rows.map((row) => row.content);
+}
 
 export async function storeMemory(companyId: string, agentId: string, taskId: string, content: string) {
   try {
-    // 1. Generate Embedding (Mocked for now, in prod call OpenAI/Anthropic)
-    const mockEmbedding = Array(1536).fill(0).map(() => Math.random());
-    
+    const embedding = await generateEmbedding(content);
+
     await db.query(
       `INSERT INTO agent_memory (company_id, agent_id, task_id, content, embedding)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [companyId, agentId, taskId, content, JSON.stringify(mockEmbedding)]
+       VALUES ($1, $2, $3, $4, $5::vector)`,
+      [companyId, agentId, taskId, content, toPgVector(embedding.vector)]
     );
-    
-    logger.info({ agentId, taskId }, 'Stored new experience in memory');
+
+    logger.info({ agentId, taskId, source: embedding.source }, 'Stored new experience in memory');
   } catch (err: any) {
     logger.error({ err }, 'Failed to store memory');
   }
 }
 
-export async function findRelatedMemories(companyId: string, query: string, limit: number = 3) {
+export async function findRelatedMemories(
+  companyId: string,
+  query: string,
+  limit: number = 3,
+  options: { agentId?: string; taskId?: string; consumer?: string } = {}
+) {
   try {
-    // 1. Generate Query Embedding (Mocked)
-    const mockEmbedding = Array(1536).fill(0).map(() => Math.random());
+    const normalizedQuery = query.trim();
+    const safeLimit = clampLimit(limit);
+    const startedAt = Date.now();
+    if (!normalizedQuery) {
+      return [];
+    }
 
-    // 2. Vector Search (using cosine distance <=> operator)
+    const embedding = await generateEmbedding(normalizedQuery);
+    const lexicalMatches = await searchMemoriesLexically(companyId, normalizedQuery, safeLimit);
+
     const res = await db.query(
-      `SELECT content, metadata, (embedding <=> $1) as distance
+      `SELECT content, metadata, (embedding <=> $1::vector) AS distance
        FROM agent_memory
        WHERE company_id = $2
-       ORDER BY distance ASC
+         AND embedding IS NOT NULL
+       ORDER BY embedding <=> $1::vector ASC, created_at DESC
        LIMIT $3`,
-      [JSON.stringify(mockEmbedding), companyId, limit]
+      [toPgVector(embedding.vector), companyId, safeLimit]
     );
+    const vectorMatches = res.rows.map((row) => row.content as string);
+    const lexicalSet = new Set(lexicalMatches);
+    const overlapCount = vectorMatches.filter((content) => lexicalSet.has(content)).length;
 
-    return res.rows.map(row => row.content);
+    if (res.rows.length > 0) {
+      const firstDistance = res.rows[0]?.distance;
+      await recordRetrievalMetric({
+        companyId,
+        agentId: options.agentId,
+        taskId: options.taskId,
+        scope: 'memory',
+        consumer: options.consumer ?? 'unknown',
+        query: normalizedQuery,
+        limitRequested: safeLimit,
+        resultCount: vectorMatches.length,
+        lexicalCandidateCount: lexicalMatches.length,
+        vectorCandidateCount: vectorMatches.length,
+        overlapCount,
+        topDistance: typeof firstDistance === 'number' ? firstDistance : Number(firstDistance ?? 0),
+        embeddingSource: embedding.source,
+        embeddingModel: embedding.model,
+        latencyMs: Date.now() - startedAt,
+      });
+      return vectorMatches;
+    }
+
+    await recordRetrievalMetric({
+      companyId,
+      agentId: options.agentId,
+      taskId: options.taskId,
+      scope: 'memory',
+      consumer: options.consumer ?? 'unknown',
+      query: normalizedQuery,
+      limitRequested: safeLimit,
+      resultCount: lexicalMatches.length,
+      lexicalCandidateCount: lexicalMatches.length,
+      vectorCandidateCount: 0,
+      overlapCount: 0,
+      topDistance: null,
+      embeddingSource: embedding.source,
+      embeddingModel: embedding.model,
+      latencyMs: Date.now() - startedAt,
+    });
+
+    return lexicalMatches;
   } catch (err: any) {
     logger.error({ err }, 'Failed to retrieve memories');
-    return [];
+    return searchMemoriesLexically(companyId, query, clampLimit(limit));
   }
 }

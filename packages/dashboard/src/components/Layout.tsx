@@ -7,18 +7,24 @@ import {
   Wrench, 
   ShieldCheck, 
   Activity, 
-  Settings 
+  Settings,
+  WalletCards,
+  Search,
+  Layers3,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
+import { CommandPalette } from './CommandPalette';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Users, label: 'Agents', path: '/agents' },
   { icon: CheckSquare, label: 'Tasks', path: '/tasks' },
   { icon: Target, label: 'Goals', path: '/goals' },
+  { icon: WalletCards, label: 'Budgets', path: '/budgets' },
+  { icon: Layers3, label: 'Templates', path: '/templates' },
   { icon: Wrench, label: 'Tools', path: '/tools' },
   { icon: ShieldCheck, label: 'Approvals', path: '/approvals' },
   { icon: Activity, label: 'Audit Log', path: '/audit' },
@@ -38,6 +44,7 @@ export function Layout() {
   const [companyName, setCompanyName] = useState('');
   const [companyMission, setCompanyMission] = useState('');
   const [submittingCompany, setSubmittingCompany] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
 
   const handleCreateCompany = async () => {
     if (!companyName.trim()) return;
@@ -54,6 +61,18 @@ export function Layout() {
       setSubmittingCompany(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setShowCommandPalette(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, []);
 
   return (
     <div className="flex h-screen bg-background">
@@ -119,6 +138,16 @@ export function Layout() {
             </button>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowCommandPalette(true)}
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              <Search className="h-4 w-4" />
+              Search
+              <span className="rounded border bg-background px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                Ctrl K
+              </span>
+            </button>
             <div className="text-right">
               <div className="text-sm font-medium text-foreground">{user?.full_name || user?.email}</div>
               <div className="text-xs text-muted-foreground">Authenticated session</div>
@@ -168,6 +197,7 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+      <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
     </div>
   );
 }

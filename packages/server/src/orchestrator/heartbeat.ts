@@ -69,13 +69,24 @@ export async function processAgentHeartbeat(agentId: string) {
     }
 
     logger.info({ agentId, taskId: task.id }, 'Agent starting task work');
-    getWSHub()?.broadcast(task.company_id, 'agent.working', { agentId, taskId: task.id });
 
-    const memories = await findRelatedMemories(task.company_id, task.title + ' ' + task.description);
+    const memories = await findRelatedMemories(task.company_id, task.title + ' ' + task.description, 3, {
+      agentId,
+      taskId: task.id,
+      consumer: 'heartbeat_memory',
+    });
 
-    const agentRes = await db.query('SELECT runtime FROM agents WHERE id = $1', [agentId]);
+    const agentRes = await db.query('SELECT runtime, name FROM agents WHERE id = $1', [agentId]);
     const runtimeName = agentRes.rows[0].runtime;
+    const agentName = agentRes.rows[0].name;
     const runtime = runtimeRegistry.getRuntime(runtimeName);
+
+    getWSHub()?.broadcast(task.company_id, 'agent.working', {
+      agentId,
+      agentName,
+      taskId: task.id,
+      taskTitle: task.title,
+    });
 
     const context = await buildAgentContext(agentId, task.id);
     if (memories.length > 0) {

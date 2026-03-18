@@ -49,8 +49,8 @@ export function requireAuth() {
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!env.AUTH_ENABLED) {
-      req.user = { id: 'dev-user', companyId, role: companyId ? 'owner' : undefined };
-      return contextStore.run(companyId ? { companyId, userId: req.user.id, role: req.user.role } : {}, () => {
+      req.user = { id: '00000000-0000-0000-0000-000000000000', companyId, role: companyId ? 'owner' : undefined };
+      return contextStore.run(companyId ? { companyId, userId: req.user.id, role: req.user.role } : { userId: req.user.id }, () => {
         next();
       });
     }
@@ -81,8 +81,8 @@ export function requireRole(roles: string[]) {
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!env.AUTH_ENABLED) {
-      req.user = { id: 'dev-user', companyId, role: companyId ? 'owner' : undefined };
-      return contextStore.run(companyId ? { companyId, role: 'owner' } : {}, () => {
+      req.user = { id: '00000000-0000-0000-0000-000000000000', companyId, role: companyId ? 'owner' : undefined };
+      return contextStore.run(companyId ? { companyId, role: 'owner', userId: req.user.id } : { userId: req.user.id }, () => {
         next();
       });
     }

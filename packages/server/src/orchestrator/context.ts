@@ -46,7 +46,11 @@ export async function buildAgentContext(agentId: string, taskId: string): Promis
   }));
 
   // 4. Search Knowledge Base
-  const knowledgeRes = await KnowledgeService.search(agent.company_id, task.description || task.title);
+  const knowledgeRes = await KnowledgeService.search(agent.company_id, task.description || task.title, 5, {
+    agentId,
+    taskId,
+    consumer: 'agent_context',
+  });
   const knowledge_context = knowledgeRes.length > 0
     ? `COMPANY KNOWLEDGE:\n${knowledgeRes.map(k => `--- ${k.title} ---\n${k.content}`).join('\n')}`
     : undefined;

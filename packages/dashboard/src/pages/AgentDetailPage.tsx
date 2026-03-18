@@ -4,6 +4,12 @@ import { useApi } from '../hooks/useApi';
 import { Bot, Activity, Wrench, Shield } from 'lucide-react';
 import { useCompany } from '../context/CompanyContext';
 
+type AuditLogResponse = {
+  items: any[];
+  has_more: boolean;
+  next_cursor: { created_at: string; id: string } | null;
+};
+
 export default function AgentDetailPage() {
   const { id } = useParams();
   const { request } = useApi();
@@ -17,12 +23,14 @@ export default function AgentDetailPage() {
       const data = await request(`/agents/${id}`);
       setAgent(data);
       const [logData, budgetData, heartbeatData] = await Promise.all([
-        selectedCompanyId ? request(`/companies/${selectedCompanyId}/audit-log?limit=100`) : Promise.resolve([]),
+        selectedCompanyId
+          ? (request(`/companies/${selectedCompanyId}/audit-log?limit=100`) as Promise<AuditLogResponse>)
+          : Promise.resolve({ items: [], has_more: false, next_cursor: null } satisfies AuditLogResponse),
         request(`/agents/${id}/budgets`),
         request(`/agents/${id}/heartbeats`),
       ]);
       setLogs([
-        ...logData.filter((log: any) => log.agent_id === id),
+        ...logData.items.filter((log: any) => log.agent_id === id),
         ...heartbeatData.map((heartbeat: any) => ({
           id: `${heartbeat.timestamp}-${heartbeat.status}`,
           action: `heartbeat.${heartbeat.status}`,

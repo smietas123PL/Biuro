@@ -7,7 +7,11 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_EMBEDDING_MODEL: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
+  CLAUDE_MODEL: z.string().optional(),
+  OPENAI_MODEL: z.string().optional(),
+  GEMINI_MODEL: z.string().optional(),
   ALLOWED_ORIGINS: z
     .string()
     .default('http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173')

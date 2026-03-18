@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireRole } from '../middleware/auth.js';
+import { defaultModelsByRuntime } from '../runtime/defaultModels.js';
 
 const router: Router = Router();
 
@@ -25,17 +26,12 @@ router.post('/', requireRole(['owner', 'admin', 'member']), async (req, res, nex
     if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
     const { company_id, name, role, title, runtime, model, system_prompt, config, reports_to, monthly_budget_usd } = parsed.data;
-    const defaultModelByRuntime = {
-      claude: 'claude-3-5-sonnet-20240620',
-      openai: 'gpt-4o',
-      gemini: 'gemini-2.0-flash',
-    } as const;
     const monthlyBudgetUsd = monthly_budget_usd ?? 0;
     const agent = await db.transaction(async (client) => {
       const result = await client.query(
         `INSERT INTO agents (company_id, name, role, title, runtime, model, system_prompt, config, reports_to, monthly_budget_usd) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-        [company_id, name, role, title, runtime, model ?? defaultModelByRuntime[runtime], system_prompt, JSON.stringify(config || {}), reports_to || null, monthlyBudgetUsd]
+        [company_id, name, role, title, runtime, model ?? defaultModelsByRuntime[runtime], system_prompt, JSON.stringify(config || {}), reports_to || null, monthlyBudgetUsd]
       );
       const createdAgent = result.rows[0];
 

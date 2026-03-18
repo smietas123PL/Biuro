@@ -9,10 +9,13 @@ import { useApi } from '../hooks/useApi';
 import { useAuth } from './AuthContext';
 import { COMPANY_STORAGE_KEY } from '../lib/session';
 
+export type CompanyRole = 'owner' | 'admin' | 'member' | 'viewer';
+
 type Company = {
   id: string;
   name: string;
   mission?: string;
+  role: CompanyRole;
 };
 
 type CreateCompanyInput = {
@@ -95,12 +98,17 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     const company = (await request('/companies', {
       method: 'POST',
       body: JSON.stringify(input),
-    })) as Company;
+    })) as Omit<Company, 'role'>;
 
-    const nextCompanies = [company, ...companies];
+    const companyWithRole: Company = {
+      ...company,
+      role: 'owner',
+    };
+
+    const nextCompanies = [companyWithRole, ...companies];
     setCompanies(nextCompanies);
-    setSelectedCompanyId(company.id);
-    return company;
+    setSelectedCompanyId(companyWithRole.id);
+    return companyWithRole;
   };
 
   const selectedCompany =

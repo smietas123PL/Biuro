@@ -7,9 +7,12 @@
     "dev": "tsx watch src/index.ts",
     "dev:worker": "tsx watch src/worker.ts",
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "node dist/index.js",
     "worker": "node dist/worker.js",
-    "migrate": "tsx src/db/migrate.ts"
+    "migrate": "tsx src/db/migrate.ts",
+    "backfill:embeddings": "tsx src/scripts/backfillEmbeddings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
@@ -38,6 +41,7 @@
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.9"
   }
 }

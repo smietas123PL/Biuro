@@ -243,7 +243,7 @@ async function main() {
     () => fetchJson(`${API_URL}/api/companies/${COMPANY_ID}/agents`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: 'Alice', role: 'ceo', title: 'CEO', runtime: 'claude',
+        name: 'Alice', role: 'ceo', title: 'CEO', runtime: 'gemini',
         system_prompt: 'You are Alice.', monthly_budget_usd: 2.00
       })
     }),
@@ -259,7 +259,7 @@ async function main() {
     () => fetchJson(`${API_URL}/api/companies/${COMPANY_ID}/agents`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: 'Bob', role: 'developer', title: 'Senior Developer', runtime: 'claude',
+        name: 'Bob', role: 'developer', title: 'Senior Developer', runtime: 'gemini',
         system_prompt: 'You are Bob.', monthly_budget_usd: 5.00,
         reports_to: CEO_ID
       })

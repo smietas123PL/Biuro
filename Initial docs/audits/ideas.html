@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomiczne Biuro — Ideas</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Darker+Grotesque:wght@300;400;500;600;700;900&display=swap');
+
+:root {
+  --ink:    #09090b;
+  --ink2:   #0f1012;
+  --ink3:   #16171b;
+  --ln:     #1e2026;
+  --ln2:    #282c36;
+  --muted:  #3d4358;
+  --dim:    #6b7591;
+  --body:   #a8b4d0;
+  --bright: #dce5f8;
+  --paper:  #eef2ff;
+
+  --gold:   #e8c97a;
+  --gold2:  #f5dfa0;
+  --gold-b: rgba(232,201,122,.08);
+  --cyan:   #5de8d4;
+  --cyan-b: rgba(93,232,212,.07);
+  --rose:   #f97dab;
+  --rose-b: rgba(249,125,171,.07);
+
+  --serif: 'Playfair Display', Georgia, serif;
+  --sans:  'Darker Grotesque', sans-serif;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  background: var(--ink);
+  color: var(--body);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── GRAIN OVERLAY ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: .7;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lineGrow {
+  from { scaleX: 0; }
+  to   { scaleX: 1; }
+}
+@keyframes glow {
+  0%, 100% { opacity: .4; }
+  50%       { opacity: 1; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-in {
+  opacity: 0;
+  animation: fadeUp .7s cubic-bezier(.22,1,.36,1) forwards;
+}
+
+/* ── MASTHEAD ── */
+.masthead {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 0 72px 72px;
+  overflow: hidden;
+}
+
+.masthead-bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 70% 20%, rgba(232,201,122,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 80% at 10% 80%, rgba(93,232,212,.04) 0%, transparent 55%),
+    linear-gradient(180deg, #09090b 0%, #0b0d12 100%);
+}
+
+.masthead-rule {
+  position: absolute;
+  top: 0; left: 72px; right: 72px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: .35;
+}
+
+.masthead-label {
+  position: absolute;
+  top: 40px; left: 72px;
+  font-family: var(--sans);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+.masthead-number {
+  position: absolute;
+  top: 40px; right: 72px;
+  font-family: var(--serif);
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.masthead-big {
+  position: relative;
+  font-family: var(--serif);
+  font-size: clamp(64px, 10vw, 128px);
+  font-weight: 900;
+  line-height: .92;
+  letter-spacing: -3px;
+  color: var(--paper);
+  margin-bottom: 36px;
+}
+.masthead-big em {
+  font-style: italic;
+  color: var(--gold);
+  display: block;
+}
+
+.masthead-sub {
+  max-width: 520px;
+  font-size: 17px;
+  font-weight: 300;
+  color: var(--dim);
+  line-height: 1.75;
+  margin-bottom: 40px;
+  animation: fadeUp .9s .3s cubic-bezier(.22,1,.36,1) both;
+}
+
+.masthead-meta {
+  display: flex; gap: 32px; align-items: center;
+  font-size: 12px; font-weight: 500;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted);
+  animation: fadeUp .8s .5s cubic-bezier(.22,1,.36,1) both;
+}
+.masthead-meta-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--gold);
+  animation: glow 2.5s ease-in-out infinite;
+}
+
+.scroll-hint {
+  position: absolute; bottom: 72px; right: 72px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  font-size: 10px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase;
+  color: var(--muted);
+  animation: float 3s ease-in-out infinite;
+}
+.scroll-hint::after {
+  content: '';
+  width: 1px; height: 48px;
+  background: linear-gradient(180deg, var(--muted), transparent);
+}
+
+/* ── DIVIDER ── */
+.section-divider {
+  position: relative;
+  display: flex; align-items: center; gap: 24px;
+  margin: 0 72px 64px;
+  padding-top: 80px;
+}
+.sd-num {
+  font-family: var(--serif);
+  font-size: 96px; font-weight: 900; font-style: italic;
+  color: var(--ink3);
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+.sd-text {
+  flex: 1;
+}
+.sd-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 6px;
+}
+.sd-title {
+  font-family: var(--serif);
+  font-size: 38px; font-weight: 700; font-style: italic;
+  color: var(--bright); line-height: 1.1; letter-spacing: -.5px;
+}
+.sd-title em { font-style: normal; }
+.sd-title .gold { color: var(--gold); }
+.sd-title .cyan { color: var(--cyan); }
+.sd-title .rose { color: var(--rose); }
+.sd-line {
+  height: 1px;
+  background: linear-gradient(90deg, var(--ln2), transparent);
+  margin-top: 16px;
+}
+
+/* ── IDEA CARDS — TECH ── */
+.ideas-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+  margin: 0 72px 0;
+  padding-bottom: 24px;
+}
+
+.idea-card {
+  background: var(--ink2);
+  border: 1px solid var(--ln);
+  border-radius: 12px;
+  padding: 28px 28px 24px;
+  position: relative;
+  overflow: hidden;
+  transition: transform .25s cubic-bezier(.22,1,.36,1), border-color .25s, box-shadow .25s;
+  cursor: default;
+}
+.idea-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--ln2);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.idea-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent, var(--gold)), transparent);
+  opacity: 0;
+  transition: opacity .3s;
+}
+.idea-card:hover::before { opacity: 1; }
+
+/* Column span variants */
+.span-4  { grid-column: span 4; }
+.span-5  { grid-column: span 5; }
+.span-6  { grid-column: span 6; }
+.span-7  { grid-column: span 7; }
+.span-8  { grid-column: span 8; }
+.span-12 { grid-column: span 12; }
+
+.card-index {
+  font-family: var(--serif);
+  font-size: 56px; font-weight: 900; font-style: italic;
+  color: var(--ln2);
+  line-height: 1;
+  margin-bottom: 16px;
+  user-select: none;
+}
+.card-tag {
+  display: inline-block;
+  font-size: 10px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: 3px 10px; border-radius: 3px;
+  margin-bottom: 14px;
+}
+.tag-gold   { background: var(--gold-b); color: var(--gold); border: 1px solid rgba(232,201,122,.2); }
+.tag-cyan   { background: var(--cyan-b); color: var(--cyan); border: 1px solid rgba(93,232,212,.2); }
+.tag-rose   { background: var(--rose-b); color: var(--rose); border: 1px solid rgba(249,125,171,.2); }
+
+.card-title {
+  font-family: var(--serif);
+  font-size: 20px; font-weight: 700;
+  color: var(--bright); line-height: 1.2;
+  margin-bottom: 12px; letter-spacing: -.3px;
+}
+.card-body {
+  font-size: 13.5px; font-weight: 400;
+  color: var(--dim); line-height: 1.75;
+}
+.card-body strong { color: var(--body); font-weight: 600; }
+
+.card-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ln);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.card-effort {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.card-impact {
+  display: flex; gap: 4px;
+}
+.impact-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+}
+.impact-dot.on  { background: var(--gold); }
+.impact-dot.off { background: var(--ln2); }
+
+/* Tag colors per section */
+.section-tech  .card-tag { }
+.section-ux    .card-tag { }
+.section-wow   .card-tag { }
+
+/* ── WOW CARDS ── */
+.wow-grid {
+  margin: 0 72px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.wow-card {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  min-height: 400px;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 32px;
+  cursor: default;
+  transition: transform .3s cubic-bezier(.22,1,.36,1);
+}
+.wow-card:hover { transform: scale(1.015); }
+
+.wow-bg {
+  position: absolute; inset: 0;
+  background: var(--wbg);
+  z-index: 0;
+}
+.wow-bg::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, transparent 30%, rgba(0,0,0,.85) 100%);
+}
+
+.wow-glyph {
+  position: absolute;
+  top: 28px; right: 28px;
+  font-size: 80px; line-height: 1;
+  opacity: .12;
+  user-select: none;
+  animation: float 4s ease-in-out infinite;
+  z-index: 1;
+}
+
+.wow-content { position: relative; z-index: 2; }
+.wow-num {
+  font-family: var(--serif);
+  font-size: 14px; font-style: italic;
+  color: rgba(255,255,255,.4);
+  margin-bottom: 12px;
+}
+.wow-title {
+  font-family: var(--serif);
+  font-size: 26px; font-weight: 900;
+  color: #fff; line-height: 1.15;
+  margin-bottom: 14px; letter-spacing: -.4px;
+}
+.wow-body {
+  font-size: 13.5px; font-weight: 400;
+  color: rgba(255,255,255,.6); line-height: 1.75;
+}
+.wow-body strong { color: rgba(255,255,255,.9); font-weight: 600; }
+.wow-pill {
+  display: inline-block;
+  margin-top: 18px;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase;
+  padding: 5px 14px; border-radius: 20px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.15);
+  color: rgba(255,255,255,.7);
+  backdrop-filter: blur(4px);
+}
+
+/* ── WOW BG COLORS ── */
+.wc-1 { --wbg: linear-gradient(135deg, #0d1117 0%, #1a0a2e 50%, #0f172a 100%); }
+.wc-2 { --wbg: linear-gradient(135deg, #0d1117 0%, #0a2818 50%, #091a0f 100%); }
+.wc-3 { --wbg: linear-gradient(135deg, #0d1117 0%, #2a0d0d 50%, #1a0a0a 100%); }
+
+.wc-1 .wow-bg { background: linear-gradient(135deg, #0d1117 0%, #1a0a2e 50%, #0f172a 100%); }
+.wc-2 .wow-bg { background: linear-gradient(135deg, #0d1117 0%, #0a2818 50%, #091a0f 100%); }
+.wc-3 .wow-bg { background: linear-gradient(135deg, #0d1117 0%, #2a0d0d 50%, #1a0a0a 100%); }
+
+.wc-1 .wow-title { color: #c4b5fd; }
+.wc-2 .wow-title { color: #6ee7b7; }
+.wc-3 .wow-title { color: #fca5a5; }
+
+/* ── UX IDEAS — horizontal cards ── */
+.ux-list {
+  margin: 0 72px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.ux-item {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 28px;
+  background: var(--ink2);
+  border: 1px solid var(--ln);
+  transition: background .2s, border-color .2s, transform .2s cubic-bezier(.22,1,.36,1);
+  position: relative; overflow: hidden;
+}
+.ux-item:first-child { border-radius: 10px 10px 0 0; }
+.ux-item:last-child  { border-radius: 0 0 10px 10px; }
+.ux-item + .ux-item  { border-top: none; }
+.ux-item:hover {
+  background: var(--ink3);
+  border-color: var(--ln2);
+  transform: translateX(4px);
+  z-index: 2;
+}
+
+.ux-num {
+  font-family: var(--serif);
+  font-size: 36px; font-weight: 900; font-style: italic;
+  color: var(--ln2); user-select: none; line-height: 1;
+}
+.ux-main {}
+.ux-title {
+  font-family: var(--serif);
+  font-size: 18px; font-weight: 700;
+  color: var(--bright); line-height: 1.2;
+  margin-bottom: 6px; letter-spacing: -.2px;
+}
+.ux-desc {
+  font-size: 13.5px; font-weight: 400;
+  color: var(--dim); line-height: 1.65;
+}
+.ux-desc strong { color: var(--body); font-weight: 600; }
+.ux-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase;
+  padding: 5px 14px; border-radius: 20px; white-space: nowrap;
+  align-self: start;
+}
+.ub-rose { background: var(--rose-b); color: var(--rose); border: 1px solid rgba(249,125,171,.2); }
+.ub-cyan { background: var(--cyan-b); color: var(--cyan); border: 1px solid rgba(93,232,212,.2); }
+.ub-gold { background: var(--gold-b); color: var(--gold); border: 1px solid rgba(232,201,122,.2); }
+
+/* ── FOOTER ── */
+.page-footer {
+  position: relative; z-index: 1;
+  margin-top: 100px;
+  padding: 36px 72px;
+  border-top: 1px solid var(--ln);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.pf-left {
+  font-family: var(--serif);
+  font-size: 20px; font-style: italic;
+  color: var(--muted);
+}
+.pf-right {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── STAGGER ANIMATIONS ── */
+.idea-card:nth-child(1)  { animation: fadeUp .6s .10s both; }
+.idea-card:nth-child(2)  { animation: fadeUp .6s .15s both; }
+.idea-card:nth-child(3)  { animation: fadeUp .6s .20s both; }
+.idea-card:nth-child(4)  { animation: fadeUp .6s .25s both; }
+.idea-card:nth-child(5)  { animation: fadeUp .6s .30s both; }
+.idea-card:nth-child(6)  { animation: fadeUp .6s .35s both; }
+.idea-card:nth-child(7)  { animation: fadeUp .6s .40s both; }
+.idea-card:nth-child(8)  { animation: fadeUp .6s .45s both; }
+.idea-card:nth-child(9)  { animation: fadeUp .6s .50s both; }
+.idea-card:nth-child(10) { animation: fadeUp .6s .55s both; }
+.ux-item:nth-child(1)  { animation: fadeUp .6s .10s both; }
+.ux-item:nth-child(2)  { animation: fadeUp .6s .18s both; }
+.ux-item:nth-child(3)  { animation: fadeUp .6s .26s both; }
+.ux-item:nth-child(4)  { animation: fadeUp .6s .34s both; }
+.ux-item:nth-child(5)  { animation: fadeUp .6s .42s both; }
+.wow-card:nth-child(1) { animation: fadeUp .7s .10s both; }
+.wow-card:nth-child(2) { animation: fadeUp .7s .22s both; }
+.wow-card:nth-child(3) { animation: fadeUp .7s .34s both; }
+
+/* ── DECORATIVE ELEMENTS ── */
+.deco-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--ln), transparent);
+  pointer-events: none;
+}
+
+/* responsive minimal */
+@media (max-width: 900px) {
+  .masthead, .section-divider, .ideas-grid, .ux-list, .wow-grid, .page-footer { margin-left: 24px; margin-right: 24px; padding-left: 0; padding-right: 0; }
+  .masthead { padding: 0 24px 48px; }
+  .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 12; }
+  .wow-grid { grid-template-columns: 1fr; }
+  .ux-item { grid-template-columns: 48px 1fr; }
+  .ux-badge { display: none; }
+  h1.masthead-big { font-size: 52px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ MASTHEAD ═══════════════ -->
+<section class="masthead">
+  <div class="masthead-bg"></div>
+  <div class="masthead-rule"></div>
+  <div class="masthead-label">Autonomiczne Biuro · Product Strategy</div>
+  <div class="masthead-number">18 / 03 / 2026</div>
+
+  <h1 class="masthead-big fade-in" style="animation-delay:.1s">
+    18
+    <em>Kierunków</em>
+  </h1>
+
+  <p class="masthead-sub">
+    Gdzie iść dalej? Analiza pełnej historii kodu, trzech raportów i architektury systemu —
+    zestawiona w osiemnaście konkretnych kierunków działań podzielonych na trzy kategorie.
+  </p>
+
+  <div class="masthead-meta">
+    <span>10 × Backend / Infra</span>
+    <div class="masthead-meta-dot"></div>
+    <span>5 × UI/UX</span>
+    <div class="masthead-meta-dot"></div>
+    <span>3 × WOW</span>
+  </div>
+
+  <div class="scroll-hint">Scroll</div>
+</section>
+
+
+<!-- ═══════════════ SEKCJA A — BACKEND / INFRA ═══════════════ -->
+<div class="section-divider">
+  <div class="sd-num">A</div>
+  <div class="sd-text">
+    <div class="sd-label">Kategoria pierwsza</div>
+    <div class="sd-title">Backend, Infrastruktura &amp; <span class="gold">Logika</span></div>
+    <div class="sd-line"></div>
+  </div>
+</div>
+
+<div class="ideas-grid section-tech">
+
+  <!-- 1 -->
+  <div class="idea-card span-5" style="--accent:var(--gold)">
+    <div class="card-index">01</div>
+    <div class="card-tag tag-gold">Bezpieczeństwo</div>
+    <div class="card-title">Prawdziwe RAG — Voyage AI zamiast Math.random()</div>
+    <div class="card-body">
+      Zamienić losowe embeddingi w <strong>knowledge.ts</strong> i <strong>memory.ts</strong> na wywołania Voyage AI lub <code>text-embedding-3-small</code>. Dodać <code>ORDER BY embedding &lt;=&gt; $vector LIMIT 5</code> do knowledge search. Agenci zaczną <strong>naprawdę</strong> pamiętać wcześniejsze zadania i korzystać z bazy wiedzy — co jest przecież jednym z kluczowych selling points projektu.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~1 dzień</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="idea-card span-7" style="--accent:var(--gold)">
+    <div class="card-index">02</div>
+    <div class="card-tag tag-gold">Architektura</div>
+    <div class="card-title">Shared Types Package — koniec z podwójną definicją typów</div>
+    <div class="card-body">
+      Stworzyć <strong>packages/types/</strong> z eksportami wszystkich encji DB (Agent, Task, Company, Goal…). Generować je ze schematu SQL przez <code>kysely-codegen</code> lub <code>pg-to-ts</code>. Frontend i backend przestają ręcznie synchronizować interfejsy — <strong>błędy typów wykrywane w czasie kompilacji</strong>, nie w runtime. Każda zmiana schematu automatycznie propaguje się do dashboardu przez TS.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~2 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div class="idea-card span-4" style="--accent:var(--cyan)">
+    <div class="card-index">03</div>
+    <div class="card-tag tag-cyan">Infrastruktura</div>
+    <div class="card-title">node-pg-migrate — koniec z schema_v*.sql</div>
+    <div class="card-body">
+      Zastąpić własny runner przez <strong>node-pg-migrate</strong> z tabelą <code>pgmigrations</code>. Każda migracja to timestamp + up/down. Deployment produkcyjny staje się deterministyczny — <strong>nigdy więcej "nie wiem który stan ma baza"</strong>.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~4h</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <div class="idea-card span-8" style="--accent:var(--cyan)">
+    <div class="card-index">04</div>
+    <div class="card-tag tag-cyan">Testy</div>
+    <div class="card-title">Test Suite — Vitest + Testcontainers; zero excuses</div>
+    <div class="card-body">
+      Projekt ma 3200+ linii krytycznej logiki i zero testów. Start: <strong>safety.test.ts</strong> (8 przypadków: circular delegation, message flood, consecutive errors), <strong>policies.test.ts</strong> (5 typów polityk), <strong>heartbeat.test.ts</strong> (atomic checkout, budget enforcement). Narzędzia: Vitest dla szybkości, <code>@testcontainers/postgresql</code> dla izolowanej bazy na każdy test suite. CI wymagać <strong>80% coverage na orchestrator/</strong>.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~3 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <div class="idea-card span-6" style="--accent:var(--gold)">
+    <div class="card-index">05</div>
+    <div class="card-tag tag-gold">Architektura</div>
+    <div class="card-title">Event Bus — Redis Streams zamiast poll + WebSocket push</div>
+    <div class="card-body">
+      Aktualny model: worker → bezpośrednio do WS hub przez importy. Problem przy skalowaniu: dwa procesy workera nie widzą nawzajem swoich eventów. <strong>Redis Streams</strong> jako event bus: każde zdarzenie (heartbeat, approval, task.done) trafia do streamu, WS hub subskrybuje, wszystkie instancje widzą wszystkie eventy. Umożliwia <strong>horizontal scaling</strong> worker bez zmian w dashboard.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~3 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6 -->
+  <div class="idea-card span-6" style="--accent:var(--gold)">
+    <div class="card-index">06</div>
+    <div class="card-tag tag-gold">Runtime</div>
+    <div class="card-title">Anthropic Tool Use API — koniec z XML regex parserem</div>
+    <div class="card-body">
+      Zamiast parsować <code>&lt;thought&gt;</code> i <code>&lt;actions&gt;</code> regexem (łamie się przy długich odpowiedziach), użyć natywnego <strong>Anthropic Tool Use</strong>. Zdefiniować każdą akcję (<code>complete_task</code>, <code>delegate</code>, <code>use_tool</code>…) jako tool schema. Model zwraca strukturyzowane <code>tool_use</code> bloki — <strong>zero parsowania, 100% typesafe</strong>. Eliminuje całą klasę "agent nie działa bo model odpowiedział inaczej niż oczekiwano".
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~2 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7 -->
+  <div class="idea-card span-7" style="--accent:var(--cyan)">
+    <div class="card-index">07</div>
+    <div class="card-tag tag-cyan">Obserwabilność</div>
+    <div class="card-title">OpenTelemetry Tracing — pełna widoczność przez cały heartbeat cycle</div>
+    <div class="card-body">
+      Każdy heartbeat to 8+ kroków (budget check, task checkout, context build, LLM call, action processing…). Aktualnie traceback przez logi Pino. Z <strong>OpenTelemetry</strong>: każdy heartbeat to span, każdy krok to child span z timestamp, koszt LLM jako atrybut, błędy z stack trace. Eksport do <strong>Jaeger lub Tempo</strong>. Debugowanie "dlaczego agent nie wykonał zadania" spada z 30 minut do 30 sekund.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~2 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8 -->
+  <div class="idea-card span-5" style="--accent:var(--gold)">
+    <div class="card-index">08</div>
+    <div class="card-tag tag-gold">Bezpieczeństwo</div>
+    <div class="card-title">Bash Sandbox — Docker exec z izolacją sieci i filesystem</div>
+    <div class="card-body">
+      Whitelist komend to dobry start, ale agent może nadal wykonać dozwoloną komendę (<code>git</code>, <code>python</code>) w destrukcyjny sposób. <strong>Docker exec</strong> z <code>--network none --memory 128m --cpus 0.5 -v workspace:/w:rw --read-only</code> daje prawdziwą izolację. Żaden kod agenta nie ma dostępu do sieci ani plików poza workspace.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~2 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9 -->
+  <div class="idea-card span-5" style="--accent:var(--cyan)">
+    <div class="card-index">09</div>
+    <div class="card-tag tag-cyan">Architektura</div>
+    <div class="card-title">Template Marketplace — preset library z GitHub</div>
+    <div class="card-body">
+      Aktualny export pomija połowę danych firmy. Po naprawieniu: dodać <strong>publiczne repozytorium szablonów</strong> (content-agency.json, dev-shop.json, solo-founder.json). Endpoint <code>GET /api/templates/presets</code> pobiera listę z GitHub releases. Import jednym kliknięciem. Społeczność może PR-ować nowe szablony.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~3 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10 -->
+  <div class="idea-card span-7" style="--accent:var(--gold)">
+    <div class="card-index">10</div>
+    <div class="card-tag tag-gold">Biznes</div>
+    <div class="card-title">Multi-Provider LLM Router — Portkey lub LiteLLM jako middleware</div>
+    <div class="card-body">
+      Aktualnie każdy runtime to osobna klasa z osobną logiką. <strong>LiteLLM proxy</strong> jako warstwa unifikuje wszystkich providerów pod jednym API (<code>claude/</code>, <code>openai/</code>, <code>gemini/</code>, <code>groq/</code>…). Zyski: automatyczny fallback gdy provider zwróci 429, load balancing między kluczami API, caching promptów dla powtarzalnych kontekstów, <strong>cost tracking w jednym miejscu</strong>. Można dodać nowy provider bez zmiany kodu orchestratora.
+    </div>
+    <div class="card-footer">
+      <span class="card-effort">~2 dni</span>
+      <div class="card-impact">
+        <div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot on"></div><div class="impact-dot off"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /ideas-grid -->
+
+
+<!-- ═══════════════ SEKCJA B — UI/UX ═══════════════ -->
+<div class="section-divider">
+  <div class="sd-num">B</div>
+  <div class="sd-text">
+    <div class="sd-label">Kategoria druga</div>
+    <div class="sd-title">UI/UX &amp; <span class="cyan">Doświadczenie</span> Użytkownika</div>
+    <div class="sd-line"></div>
+  </div>
+</div>
+
+<div class="ux-list">
+
+  <!-- U1 -->
+  <div class="ux-item">
+    <div class="ux-num">U1</div>
+    <div class="ux-main">
+      <div class="ux-title">Live Activity Feed — stream heartbeatów w czasie rzeczywistym z animacją</div>
+      <div class="ux-desc">
+        Sidebar lub dedykowana sekcja dashboardu pokazująca <strong>live scroll agentów przy pracy</strong>: każdy heartbeat pojawia się jako wiersz z nazwą agenta, myślą, kosztem i timestampem. Dane już są przez WebSocket — brakuje tylko komponentu React który podłącza <code>useWebSocket()</code> i renderuje przesuwający się log. Efekt: dashboard zaczyna "żyć", użytkownik widzi że coś się dzieje bez odświeżania.
+      </div>
+    </div>
+    <span class="ux-badge ub-cyan">Real-time</span>
+  </div>
+
+  <!-- U2 -->
+  <div class="ux-item">
+    <div class="ux-num">U2</div>
+    <div class="ux-main">
+      <div class="ux-title">OrgChart — interaktywna wizualizacja hierarchii agentów</div>
+      <div class="ux-desc">
+        Dane <code>reports_to</code> są w bazie od początku projektu; brakuje wyłącznie frontendu. <strong>D3.js force graph</strong> lub <strong>React Flow</strong> z węzłami agentów, kolorowanymi według statusu (idle/working/paused), połączonymi liniami hierarchii. Klik na agenta otwiera jego szczegóły. To jest <strong>wizualna tożsamość projektu</strong> — "firma złożona z agentów AI" nabiera sensu gdy widzi się org chart.
+      </div>
+    </div>
+    <span class="ux-badge ub-rose">Flagship</span>
+  </div>
+
+  <!-- U3 -->
+  <div class="ux-item">
+    <div class="ux-num">U3</div>
+    <div class="ux-main">
+      <div class="ux-title">BudgetsPage — monitoring kosztów z prognozą end-of-month</div>
+      <div class="ux-desc">
+        API <code>/agents/:id/budgets</code> i <code>/companies/:id/costs</code> istnieje i zwraca dane. Brakuje strony która pokazuje: pasek <strong>wydane / limit USD</strong> per agent, wykres dzienny (Recharts sparkline), i <strong>prognoza do końca miesiąca</strong> oparta na średnim koszcie ostatnich 7 dni. Alert gdy agent osiągnie 80% limitu. To jedna z najważniejszych stron dla kogoś kto płaci za LLM API własną kartą.
+      </div>
+    </div>
+    <span class="ux-badge ub-gold">Priorytet</span>
+  </div>
+
+  <!-- U4 -->
+  <div class="ux-item">
+    <div class="ux-num">U4</div>
+    <div class="ux-main">
+      <div class="ux-title">Mobile-first Approvals — szybkie zatwierdź/odrzuć z powiadomieniem push</div>
+      <div class="ux-desc">
+        Kluczowy flow: agent prosi o zatwierdzenie → użytkownik dostaje powiadomienie → zatwierdza na telefonie. Aktualnie <code>ApprovalsPage</code> jest responsywna ale brakuje <strong>Web Push Notifications</strong> (Service Worker + VAPID keys). Integracja z istniejącym <code>NotificationService</code>. Efekt: użytkownik może zarządzać firmą AI ze smartfona w 30 sekund gdy jest poza biurem.
+      </div>
+    </div>
+    <span class="ux-badge ub-rose">Mobile</span>
+  </div>
+
+  <!-- U5 -->
+  <div class="ux-item">
+    <div class="ux-num">U5</div>
+    <div class="ux-main">
+      <div class="ux-title">Command Palette — ⌘K do wszystkiego w systemie</div>
+      <div class="ux-desc">
+        Użytkownicy zarządzający wieloma agentami i taskami potrzebują szybkiej nawigacji. <strong>⌘K palette</strong> (np. <code>cmdk</code> library) z global search po agentach, taskach, celach, możliwością zatrudnienia agenta bez wchodzenia w formularz, i szybkimi akcjami (pause agent X, create task, view logs). Power-user feature który sprawia że dashboard czuje się jak <strong>profesjonalne narzędzie, nie kolejna aplikacja webowa</strong>.
+      </div>
+    </div>
+    <span class="ux-badge ub-cyan">Power UX</span>
+  </div>
+
+</div><!-- /ux-list -->
+
+
+<!-- ═══════════════ SEKCJA C — WOW ═══════════════ -->
+<div class="section-divider">
+  <div class="sd-num">C</div>
+  <div class="sd-text">
+    <div class="sd-label">Kategoria trzecia · Efekt WOW</div>
+    <div class="sd-title">Pomysły które <span class="rose">zmieniają</span> wszystko</div>
+    <div class="sd-line"></div>
+  </div>
+</div>
+
+<div class="wow-grid">
+
+  <!-- W1 -->
+  <div class="wow-card wc-1">
+    <div class="wow-bg"></div>
+    <div class="wow-glyph">🧠</div>
+    <div class="wow-content">
+      <div class="wow-num">WOW · 01</div>
+      <div class="wow-title">Agent Replay — cofnij czas i obejrzyj co robił agent</div>
+      <div class="wow-body">
+        Audit log i heartbeats są w bazie. Zbudować <strong>time-travel debugger</strong>: slider przez historię firmy, rekonstrukcja stanu każdego agenta w dowolnym momencie, odtwarzanie decyzji krok po kroku z myślami agenta, kosztami i akcjami. Możliwość <strong>"fork"</strong> — cofnięcie decyzji i uruchomienie agenta z innym promptem od tego momentu. Nieistniejący feature w żadnym obecnym narzędziu do orkiestracji agentów.
+      </div>
+      <span class="wow-pill">Time-travel debugging</span>
+    </div>
+  </div>
+
+  <!-- W2 -->
+  <div class="wow-card wc-2">
+    <div class="wow-bg"></div>
+    <div class="wow-glyph">📡</div>
+    <div class="wow-content">
+      <div class="wow-num">WOW · 02</div>
+      <div class="wow-title">Agent-to-Agent Marketplace — wynajmij agenta innej firmy</div>
+      <div class="wow-body">
+        Multi-tenant architektura jest już gotowa. Rozszerzyć o <strong>cross-company agent contracts</strong>: firma A może wystawić agenta (np. "Senior Developer, $0.05/task") na publicznym marketplace. Firma B zleca mu zadania przez standardowe API, płaci przez billing system, wyniki wracają jako wiadomości. Każdy deployment Autonomicznego Biura staje się węzłem w sieci. <strong>Pierwsza platforma gdzie firmy AI robią biznes między sobą</strong>.
+      </div>
+      <span class="wow-pill">Agent economy</span>
+    </div>
+  </div>
+
+  <!-- W3 -->
+  <div class="wow-card wc-3">
+    <div class="wow-bg"></div>
+    <div class="wow-glyph">⚡</div>
+    <div class="wow-content">
+      <div class="wow-num">WOW · 03</div>
+      <div class="wow-title">Naturalny język jako interfejs — "zatrudnij CTO który umie Rust"</div>
+      <div class="wow-body">
+        Zamiast formularzy — <strong>conversational onboarding</strong>. Użytkownik pisze: "Chcę zbudować SaaS do zarządzania magazynem, zatrudnij mi zespół". System sam generuje org chart, tworzy agentów z odpowiednimi promptami, ustawia cele i polityki, i pyta tylko o zatwierdzenie. Pod spodem: Claude analizuje intent i tłumaczy na serię wywołań API. <strong>Czas od "chcę zacząć" do "firma działa" spada do 2 minut.</strong>
+      </div>
+      <span class="wow-pill">Natural language ops</span>
+    </div>
+  </div>
+
+</div><!-- /wow-grid -->
+
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="page-footer">
+  <div class="pf-left">Autonomiczne Biuro · Ideas</div>
+  <div class="pf-right">Wygenerowano · Claude Sonnet 4.6 · 18.03.2026</div>
+</footer>
+
+</body>
+</html>

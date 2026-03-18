@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { env } from '../env.js';
 import { AgentActionsSchema, AgentContext, AgentResponse, IAgentRuntime } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
+import { defaultModelsByRuntime } from './defaultModels.js';
 
 export class ClaudeRuntime implements IAgentRuntime {
   private client: Anthropic;
@@ -48,7 +49,7 @@ Example:
       }
 
       const response = await this.client.messages.create({
-        model: context.agent_model || 'claude-3-5-sonnet-20240620',
+        model: context.agent_model || defaultModelsByRuntime.claude,
         max_tokens: 4096,
         system: systemPrompt,
         messages,

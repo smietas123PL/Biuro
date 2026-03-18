@@ -1,25 +1,46 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { KnowledgeService } from '../services/knowledge.js';
 import { AuthRequest } from '../utils/context.js';
 
 const router: Router = Router();
+const KnowledgeDocumentSchema = z.object({
+  title: z.string().trim().min(1),
+  content: z.string().trim().min(1),
+  metadata: z.record(z.unknown()).optional(),
+});
+const KnowledgeSearchSchema = z.object({
+  q: z.string().trim().min(1),
+  limit: z.coerce.number().int().min(1).max(25).default(5),
+});
 
 router.post('/', async (req: AuthRequest, res) => {
-  const { title, content, metadata } = req.body;
+  const parsed = KnowledgeDocumentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  const { title, content, metadata } = parsed.data;
   const companyId = req.user?.companyId;
-  if (!companyId) return res.status(400).send('Company ID missing');
+  if (!companyId) return res.status(400).json({ error: 'Company ID missing' });
   
   const id = await KnowledgeService.addDocument(companyId, title, content, metadata);
-  res.send({ id });
+  res.json({ id });
 });
 
 router.get('/search', async (req: AuthRequest, res) => {
-  const { q, limit } = req.query;
+  const parsed = KnowledgeSearchSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
   const companyId = req.user?.companyId;
-  if (!companyId) return res.status(400).send('Company ID missing');
+  if (!companyId) return res.status(400).json({ error: 'Company ID missing' });
   
-  const results = await KnowledgeService.search(companyId, q as string, parseInt(limit as string) || 5);
-  res.send(results);
+  const results = await KnowledgeService.search(companyId, parsed.data.q, parsed.data.limit, {
+    consumer: 'knowledge_api',
+  });
+  res.json(results);
 });
 
 export default router;

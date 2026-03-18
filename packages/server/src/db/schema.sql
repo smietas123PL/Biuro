@@ -39,7 +39,7 @@ CREATE TABLE agents (
   title         TEXT,
   reports_to    UUID REFERENCES agents(id) ON DELETE SET NULL,
   runtime       TEXT NOT NULL DEFAULT 'claude',
-  model         TEXT NOT NULL DEFAULT 'claude-3-5-sonnet-20240620',
+  model         TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
   system_prompt TEXT,
   config        JSONB DEFAULT '{}',
   status        TEXT NOT NULL DEFAULT 'idle'

@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { env } from '../env.js';
 import { AgentActionsSchema, AgentContext, AgentResponse, IAgentRuntime } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
+import { defaultModelsByRuntime } from './defaultModels.js';
 
 export class OpenAIRuntime implements IAgentRuntime {
   private client: OpenAI;
@@ -34,7 +35,7 @@ Respond with your thought process AND specific actions in JSON format inside <th
 
     try {
       const response = await this.client.chat.completions.create({
-        model: context.agent_model || 'gpt-4o',
+        model: context.agent_model || defaultModelsByRuntime.openai,
         messages,
       });
 

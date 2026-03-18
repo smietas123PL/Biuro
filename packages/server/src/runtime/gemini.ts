@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../env.js';
 import { AgentActionsSchema, AgentContext, AgentResponse, IAgentRuntime, AgentAction } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
+import { defaultModelsByRuntime } from './defaultModels.js';
 
 // Gemini 2.0 Flash pricing (per million tokens) - adjusting to current standard
 const COST_PER_MTK_INPUT = 0.10;
@@ -40,7 +41,7 @@ Example:
 </actions>
 `;
     const model = this.genAI.getGenerativeModel({
-      model: context.agent_model || 'gemini-2.0-flash',
+      model: context.agent_model || defaultModelsByRuntime.gemini,
       systemInstruction: systemPrompt,
     });
     const history = context.history

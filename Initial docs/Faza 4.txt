@@ -1,0 +1,3814 @@
+Faza 4 — Templates, RBAC, Integracje, Scheduled Reports, CLI
+________________________________________
+Nowe pliki
+text
+packages/server/src/
+├── templates/
+│   ├── exporter.ts                  ← NEW
+│   ├── importer.ts                  ← NEW
+│   ├── sanitizer.ts                 ← NEW
+│   └── presets/
+│       ├── saas-startup.json        ← NEW
+│       ├── content-agency.json      ← NEW
+│       └── dev-shop.json            ← NEW
+├── auth/
+│   ├── middleware.ts                ← NEW
+│   ├── tokens.ts                   ← NEW
+│   ├── rbac.ts                     ← NEW
+│   └── roles.ts                    ← NEW
+├── integrations/
+│   ├── slack.ts                    ← NEW
+│   ├── discord.ts                  ← NEW
+│   ├── email.ts                    ← NEW
+│   ├── webhooks.ts                 ← NEW
+│   └── registry.ts                ← NEW
+├── reports/
+│   ├── generator.ts               ← NEW
+│   ├── scheduler.ts               ← NEW
+│   ├── templates/
+│   │   ├── daily-summary.ts       ← NEW
+│   │   ├── weekly-report.ts       ← NEW
+│   │   └── cost-report.ts         ← NEW
+│   └── formatters/
+│       ├── markdown.ts            ← NEW
+│       ├── html.ts                ← NEW
+│       └── json.ts                ← NEW
+├── routes/
+│   ├── templates.ts               ← NEW
+│   ├── auth.ts                    ← NEW
+│   ├── integrations.ts            ← NEW
+│   ├── reports.ts                 ← NEW
+│   └── index.ts                   ← UPDATED
+├── db/
+│   └── schema-v4.sql              ← NEW
+
+packages/cli/                       ← NEW
+├── package.json
+├── tsconfig.json
+├── src/
+│   ├── index.ts
+│   ├── commands/
+│   │   ├── init.ts
+│   │   ├── company.ts
+│   │   ├── agent.ts
+│   │   ├── task.ts
+│   │   ├── template.ts
+│   │   ├── status.ts
+│   │   └── logs.ts
+│   └── utils/
+│       ├── api.ts
+│       └── ui.ts
+
+packages/dashboard/src/
+├── pages/
+│   ├── SettingsPage.tsx           ← NEW (full)
+│   ├── TemplatePage.tsx           ← NEW
+│   ├── IntegrationsPage.tsx       ← NEW
+│   ├── ReportsPage.tsx            ← NEW
+│   └── LoginPage.tsx              ← NEW
+├── components/
+│   ├── ProtectedRoute.tsx         ← NEW
+│   ├── NotificationBell.tsx       ← NEW
+│   ├── TemplateCard.tsx           ← NEW
+│   └── ReportViewer.tsx           ← NEW
+├── context/
+│   └── AuthContext.tsx            ← NEW
+└── App.tsx                        ← UPDATED
+________________________________________
+Baza danych — nowe tabele
+src/db/schema-v4.sql
+SQL
+-- ================================================
+-- FAZA 4 — Auth, Templates, Integrations, Reports
+-- ================================================
+
+-- ============ USERS & AUTH ============
+
+CREATE TABLE users (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email       TEXT NOT NULL UNIQUE,
+  name        TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role        TEXT NOT NULL DEFAULT 'member'
+    CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
+  avatar_url  TEXT,
+  last_login  TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE user_companies (
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  role        TEXT NOT NULL DEFAULT 'member'
+    CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
+  joined_at   TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (user_id, company_id)
+);
+
+CREATE TABLE api_keys (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  key_hash    TEXT NOT NULL,
+  key_prefix  TEXT NOT NULL,           -- first 8 chars for display
+  permissions JSONB DEFAULT '["*"]',
+  last_used   TIMESTAMPTZ,
+  expires_at  TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE sessions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  ip_address  TEXT,
+  user_agent  TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_sessions_token ON sessions(token_hash);
+CREATE INDEX idx_sessions_user ON sessions(user_id);
+CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
+
+-- ============ TEMPLATES ============
+
+CREATE TABLE templates (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  description TEXT,
+  version     TEXT NOT NULL DEFAULT '1.0.0',
+  author      TEXT,
+  tags        TEXT[] DEFAULT '{}',
+  data        JSONB NOT NULL,           -- full company snapshot
+  is_public   BOOLEAN DEFAULT false,
+  downloads   INT DEFAULT 0,
+  created_by  UUID REFERENCES users(id),
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_templates_public ON templates(is_public);
+CREATE INDEX idx_templates_tags ON templates USING GIN(tags);
+
+-- ============ INTEGRATIONS ============
+
+CREATE TABLE integrations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL
+    CHECK (type IN ('slack', 'discord', 'email', 'webhook', 'telegram')),
+  name        TEXT NOT NULL,
+  config      JSONB NOT NULL DEFAULT '{}',   -- encrypted in practice
+  events      TEXT[] DEFAULT '{}',            -- which events to forward
+  enabled     BOOLEAN DEFAULT true,
+  last_triggered TIMESTAMPTZ,
+  error_count INT DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_integrations_company ON integrations(company_id);
+
+CREATE TABLE integration_log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  integration_id  UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+  event_type      TEXT NOT NULL,
+  payload         JSONB DEFAULT '{}',
+  status          TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'skipped')),
+  error           TEXT,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_integration_log_integration ON integration_log(integration_id);
+
+-- ============ SCHEDULED REPORTS ============
+
+CREATE TABLE scheduled_reports (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL
+    CHECK (type IN ('daily_summary', 'weekly_report', 'cost_report', 'custom')),
+  schedule    TEXT NOT NULL,              -- cron expression: '0 9 * * *'
+  config      JSONB DEFAULT '{}',
+  recipients  JSONB DEFAULT '[]',         -- integration IDs or emails
+  format      TEXT DEFAULT 'markdown'
+    CHECK (format IN ('markdown', 'html', 'json')),
+  enabled     BOOLEAN DEFAULT true,
+  last_run    TIMESTAMPTZ,
+  next_run    TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_scheduled_reports_company ON scheduled_reports(company_id);
+CREATE INDEX idx_scheduled_reports_next ON scheduled_reports(next_run);
+
+CREATE TABLE report_history (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id   UUID NOT NULL REFERENCES scheduled_reports(id) ON DELETE CASCADE,
+  content     TEXT NOT NULL,
+  format      TEXT NOT NULL,
+  metadata    JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- ============ NOTIFICATIONS ============
+
+CREATE TABLE notifications (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  message     TEXT,
+  data        JSONB DEFAULT '{}',
+  read        BOOLEAN DEFAULT false,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_notifications_user ON notifications(user_id, read);
+CREATE INDEX idx_notifications_company ON notifications(company_id);
+
+-- ============ TRIGGERS ============
+
+CREATE TRIGGER trg_templates_updated BEFORE UPDATE ON templates
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_integrations_updated BEFORE UPDATE ON integrations
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+________________________________________
+Auth System
+src/auth/tokens.ts
+TypeScript
+import crypto from 'crypto';
+import { db } from '../db/client.js';
+
+const TOKEN_EXPIRY_HOURS = 72;
+const API_KEY_PREFIX_LENGTH = 8;
+
+export function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export function generateToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+export function generateApiKey(): { key: string; prefix: string } {
+  const key = `biuro_${crypto.randomBytes(24).toString('hex')}`;
+  const prefix = key.slice(0, API_KEY_PREFIX_LENGTH);
+  return { key, prefix };
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(`${salt}:${derivedKey.toString('hex')}`);
+    });
+  });
+}
+
+export async function verifyPassword(
+  password: string,
+  hash: string
+): Promise<boolean> {
+  const [salt, key] = hash.split(':');
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(
+        crypto.timingSafeEqual(Buffer.from(key, 'hex'), derivedKey)
+      );
+    });
+  });
+}
+
+export async function createSession(
+  userId: string,
+  ip?: string,
+  userAgent?: string
+): Promise<string> {
+  const token = generateToken();
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(
+    Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000
+  );
+
+  await db.query(
+    `INSERT INTO sessions (user_id, token_hash, expires_at, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, tokenHash, expiresAt, ip, userAgent]
+  );
+
+  await db.query(
+    'UPDATE users SET last_login = now() WHERE id = $1',
+    [userId]
+  );
+
+  return token;
+}
+
+export async function validateSession(
+  token: string
+): Promise<{ userId: string; email: string; role: string } | null> {
+  const tokenHash = hashToken(token);
+  const result = await db.query(
+    `SELECT s.user_id, u.email, u.role, u.name
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = $1 AND s.expires_at > now()`,
+    [tokenHash]
+  );
+
+  if (result.rows.length === 0) return null;
+
+  return {
+    userId: result.rows[0].user_id,
+    email: result.rows[0].email,
+    role: result.rows[0].role,
+  };
+}
+
+export async function validateApiKey(
+  key: string
+): Promise<{ userId: string; permissions: string[] } | null> {
+  const keyHash = hashToken(key);
+  const result = await db.query(
+    `SELECT ak.user_id, ak.permissions
+     FROM api_keys ak
+     WHERE ak.key_hash = $1
+       AND (ak.expires_at IS NULL OR ak.expires_at > now())`,
+    [keyHash]
+  );
+
+  if (result.rows.length === 0) return null;
+
+  await db.query(
+    'UPDATE api_keys SET last_used = now() WHERE key_hash = $1',
+    [keyHash]
+  );
+
+  return {
+    userId: result.rows[0].user_id,
+    permissions: result.rows[0].permissions,
+  };
+}
+
+export async function invalidateSession(token: string): Promise<void> {
+  await db.query(
+    'DELETE FROM sessions WHERE token_hash = $1',
+    [hashToken(token)]
+  );
+}
+src/auth/roles.ts
+TypeScript
+export type Role = 'owner' | 'admin' | 'member' | 'viewer';
+
+export interface Permission {
+  resource: string;
+  actions: string[];
+}
+
+const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  owner: [
+    { resource: '*', actions: ['*'] },
+  ],
+  admin: [
+    { resource: 'company', actions: ['read', 'update'] },
+    { resource: 'agent', actions: ['*'] },
+    { resource: 'task', actions: ['*'] },
+    { resource: 'goal', actions: ['*'] },
+    { resource: 'tool', actions: ['*'] },
+    { resource: 'policy', actions: ['*'] },
+    { resource: 'approval', actions: ['*'] },
+    { resource: 'budget', actions: ['*'] },
+    { resource: 'integration', actions: ['*'] },
+    { resource: 'report', actions: ['*'] },
+    { resource: 'template', actions: ['read', 'create', 'import'] },
+    { resource: 'audit', actions: ['read'] },
+    { resource: 'user', actions: ['read'] },
+  ],
+  member: [
+    { resource: 'company', actions: ['read'] },
+    { resource: 'agent', actions: ['read', 'create', 'update'] },
+    { resource: 'task', actions: ['read', 'create', 'update'] },
+    { resource: 'goal', actions: ['read', 'create'] },
+    { resource: 'tool', actions: ['read'] },
+    { resource: 'policy', actions: ['read'] },
+    { resource: 'approval', actions: ['read', 'create'] },
+    { resource: 'budget', actions: ['read'] },
+    { resource: 'audit', actions: ['read'] },
+    { resource: 'report', actions: ['read'] },
+  ],
+  viewer: [
+    { resource: 'company', actions: ['read'] },
+    { resource: 'agent', actions: ['read'] },
+    { resource: 'task', actions: ['read'] },
+    { resource: 'goal', actions: ['read'] },
+    { resource: 'tool', actions: ['read'] },
+    { resource: 'audit', actions: ['read'] },
+    { resource: 'report', actions: ['read'] },
+  ],
+};
+
+export function hasPermission(
+  role: Role,
+  resource: string,
+  action: string
+): boolean {
+  const perms = ROLE_PERMISSIONS[role];
+  if (!perms) return false;
+
+  return perms.some(
+    (p) =>
+      (p.resource === '*' || p.resource === resource) &&
+      (p.actions.includes('*') || p.actions.includes(action))
+  );
+}
+src/auth/rbac.ts
+TypeScript
+import { db } from '../db/client.js';
+import { hasPermission, type Role } from './roles.js';
+
+/**
+ * Check if a user has permission for a resource in a company.
+ */
+export async function checkAccess(
+  userId: string,
+  companyId: string,
+  resource: string,
+  action: string
+): Promise<boolean> {
+  // Get user's role in this company
+  const result = await db.query(
+    `SELECT uc.role
+     FROM user_companies uc
+     WHERE uc.user_id = $1 AND uc.company_id = $2`,
+    [userId, companyId]
+  );
+
+  if (result.rows.length === 0) {
+    // Check global role (owner sees everything they own)
+    const user = await db.query(
+      'SELECT role FROM users WHERE id = $1',
+      [userId]
+    );
+    if (user.rows[0]?.role === 'owner') return true;
+    return false;
+  }
+
+  const role = result.rows[0].role as Role;
+  return hasPermission(role, resource, action);
+}
+
+/**
+ * Get all company IDs a user has access to.
+ */
+export async function getUserCompanies(userId: string): Promise<string[]> {
+  const result = await db.query(
+    'SELECT company_id FROM user_companies WHERE user_id = $1',
+    [userId]
+  );
+  return result.rows.map((r) => r.company_id);
+}
+src/auth/middleware.ts
+TypeScript
+import type { Request, Response, NextFunction } from 'express';
+import { validateSession, validateApiKey } from './tokens.js';
+import { checkAccess } from './rbac.js';
+import { logger } from '../utils/logger.js';
+
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    userId: string;
+    email: string;
+    role: string;
+  };
+}
+
+/**
+ * Authentication middleware.
+ * Supports Bearer tokens and API keys.
+ * If AUTH_ENABLED=false, skips auth (development mode).
+ */
+export function authenticate(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  // Dev mode — skip auth
+  if (process.env.AUTH_ENABLED !== 'true') {
+    req.user = {
+      userId: 'dev-user',
+      email: 'dev@localhost',
+      role: 'owner',
+    };
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+
+    // Check if it's an API key
+    if (token.startsWith('biuro_')) {
+      validateApiKey(token).then((result) => {
+        if (!result) {
+          return res.status(401).json({ error: 'Invalid API key' });
+        }
+        req.user = {
+          userId: result.userId,
+          email: '',
+          role: 'member',
+        };
+        next();
+      });
+    } else {
+      // Session token
+      validateSession(token).then((result) => {
+        if (!result) {
+          return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+        req.user = result;
+        next();
+      });
+    }
+  } else {
+    return res.status(401).json({ error: 'Invalid auth format' });
+  }
+}
+
+/**
+ * Authorization middleware factory.
+ * Usage: authorize('agent', 'create')
+ */
+export function authorize(resource: string, action: string) {
+  return async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    if (process.env.AUTH_ENABLED !== 'true') return next();
+
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+    // Get company ID from route params or body
+    const companyId =
+      req.params.companyId ||
+      req.params.id ||
+      req.body?.company_id;
+
+    if (!companyId) {
+      // Some routes don't need company-level auth
+      return next();
+    }
+
+    const allowed = await checkAccess(userId, companyId, resource, action);
+    if (!allowed) {
+      logger.warn(
+        { userId, companyId, resource, action },
+        'Access denied'
+      );
+      return res.status(403).json({
+        error: `Insufficient permissions: ${resource}.${action}`,
+      });
+    }
+
+    next();
+  };
+}
+src/routes/auth.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import {
+  hashPassword,
+  verifyPassword,
+  createSession,
+  invalidateSession,
+  generateApiKey,
+  hashToken,
+} from '../auth/tokens.js';
+import { authenticate, type AuthenticatedRequest } from '../auth/middleware.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const registerSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  password: z.string().min(8),
+});
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
+
+// Register
+router.post('/register', async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const { email, name, password } = parsed.data;
+
+  // Check existing
+  const existing = await db.query(
+    'SELECT id FROM users WHERE email = $1',
+    [email]
+  );
+  if (existing.rows.length > 0) {
+    return res.status(409).json({ error: 'Email already registered' });
+  }
+
+  const passwordHash = await hashPassword(password);
+
+  // First user is owner
+  const userCount = await db.query('SELECT COUNT(*) FROM users');
+  const role = parseInt(userCount.rows[0].count) === 0 ? 'owner' : 'member';
+
+  const result = await db.query(
+    `INSERT INTO users (email, name, password_hash, role)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, email, name, role`,
+    [email, name, passwordHash, role]
+  );
+
+  const user = result.rows[0];
+  const token = await createSession(
+    user.id,
+    req.ip,
+    req.headers['user-agent']
+  );
+
+  res.status(201).json({
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    token,
+  });
+});
+
+// Login
+router.post('/login', async (req, res) => {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const { email, password } = parsed.data;
+
+  const result = await db.query(
+    'SELECT * FROM users WHERE email = $1',
+    [email]
+  );
+  if (result.rows.length === 0) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const user = result.rows[0];
+  const valid = await verifyPassword(password, user.password_hash);
+  if (!valid) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const token = await createSession(
+    user.id,
+    req.ip,
+    req.headers['user-agent']
+  );
+
+  res.json({
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    token,
+  });
+});
+
+// Logout
+router.post('/logout', authenticate, async (req: AuthenticatedRequest, res) => {
+  const token = req.headers.authorization?.slice(7);
+  if (token) await invalidateSession(token);
+  res.json({ ok: true });
+});
+
+// Me
+router.get('/me', authenticate, async (req: AuthenticatedRequest, res) => {
+  const result = await db.query(
+    'SELECT id, email, name, role, last_login, created_at FROM users WHERE id = $1',
+    [req.user!.userId]
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+  const companies = await db.query(
+    `SELECT c.*, uc.role as user_role
+     FROM user_companies uc
+     JOIN companies c ON c.id = uc.company_id
+     WHERE uc.user_id = $1`,
+    [req.user!.userId]
+  );
+
+  res.json({
+    ...result.rows[0],
+    companies: companies.rows,
+  });
+});
+
+// Create API key
+router.post('/api-keys', authenticate, async (req: AuthenticatedRequest, res) => {
+  const { name, permissions } = req.body;
+  const { key, prefix } = generateApiKey();
+  const keyHash = hashToken(key);
+
+  await db.query(
+    `INSERT INTO api_keys (user_id, name, key_hash, key_prefix, permissions)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [
+      req.user!.userId,
+      name || 'API Key',
+      keyHash,
+      prefix,
+      JSON.stringify(permissions || ['*']),
+    ]
+  );
+
+  // Return key ONCE — never stored in plaintext
+  res.status(201).json({
+    key,
+    prefix,
+    note: 'Save this key — it will not be shown again.',
+  });
+});
+
+// List API keys
+router.get('/api-keys', authenticate, async (req: AuthenticatedRequest, res) => {
+  const result = await db.query(
+    `SELECT id, name, key_prefix, permissions, last_used, created_at
+     FROM api_keys WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [req.user!.userId]
+  );
+  res.json(result.rows);
+});
+
+// Revoke API key
+router.delete('/api-keys/:id', authenticate, async (req: AuthenticatedRequest, res) => {
+  await db.query(
+    'DELETE FROM api_keys WHERE id = $1 AND user_id = $2',
+    [req.params.id, req.user!.userId]
+  );
+  res.json({ deleted: true });
+});
+
+// Notifications
+router.get('/notifications', authenticate, async (req: AuthenticatedRequest, res) => {
+  const result = await db.query(
+    `SELECT * FROM notifications
+     WHERE user_id = $1
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    [req.user!.userId]
+  );
+  res.json(result.rows);
+});
+
+router.post('/notifications/mark-read', authenticate, async (req: AuthenticatedRequest, res) => {
+  const { ids } = req.body;
+  if (ids && ids.length > 0) {
+    await db.query(
+      'UPDATE notifications SET read = true WHERE id = ANY($1) AND user_id = $2',
+      [ids, req.user!.userId]
+    );
+  } else {
+    await db.query(
+      'UPDATE notifications SET read = true WHERE user_id = $1',
+      [req.user!.userId]
+    );
+  }
+  res.json({ ok: true });
+});
+
+export default router;
+________________________________________
+Templates System
+src/templates/exporter.ts
+TypeScript
+import { db } from '../db/client.js';
+import { sanitizeTemplate } from './sanitizer.js';
+import { logger } from '../utils/logger.js';
+
+export interface CompanyTemplate {
+  version: string;
+  name: string;
+  description: string;
+  exported_at: string;
+  company: {
+    name: string;
+    mission: string;
+  };
+  goals: Array<{
+    ref: string;         // temporary reference ID
+    parent_ref: string | null;
+    title: string;
+    description: string;
+  }>;
+  agents: Array<{
+    ref: string;
+    name: string;
+    role: string;
+    title: string;
+    reports_to_ref: string | null;
+    runtime: string;
+    model: string;
+    system_prompt: string;
+    config: any;
+    monthly_budget_usd: number | null;
+  }>;
+  tools: Array<{
+    ref: string;
+    name: string;
+    type: string;
+    description: string;
+    config: any;
+    schema: any;
+  }>;
+  agent_tools: Array<{
+    agent_ref: string;
+    tool_ref: string;
+    permissions: any;
+    rate_limit: number;
+  }>;
+  policies: Array<{
+    name: string;
+    description: string;
+    type: string;
+    rules: any;
+  }>;
+  integrations: Array<{
+    type: string;
+    name: string;
+    events: string[];
+    config_schema: any;  // schema only, no secrets
+  }>;
+}
+
+/**
+ * Export a company as a reusable template.
+ */
+export async function exportCompany(
+  companyId: string
+): Promise<CompanyTemplate> {
+  const company = await db.query(
+    'SELECT * FROM companies WHERE id = $1',
+    [companyId]
+  );
+  if (company.rows.length === 0) throw new Error('Company not found');
+
+  const c = company.rows[0];
+
+  // Goals
+  const goals = await db.query(
+    'SELECT * FROM goals WHERE company_id = $1 ORDER BY created_at ASC',
+    [companyId]
+  );
+
+  // Agents
+  const agents = await db.query(
+    'SELECT * FROM agents WHERE company_id = $1 AND status != $2 ORDER BY created_at ASC',
+    [companyId, 'terminated']
+  );
+
+  // Budgets
+  const budgets = await db.query(
+    `SELECT b.agent_id, b.limit_usd
+     FROM budgets b
+     JOIN agents a ON a.id = b.agent_id
+     WHERE a.company_id = $1
+       AND b.month = date_trunc('month', now())::date`,
+    [companyId]
+  );
+  const budgetMap = new Map(
+    budgets.rows.map((b) => [b.agent_id, parseFloat(b.limit_usd)])
+  );
+
+  // Tools
+  const tools = await db.query(
+    'SELECT * FROM tools WHERE company_id = $1 ORDER BY name ASC',
+    [companyId]
+  );
+
+  // Agent-tool assignments
+  const agentTools = await db.query(
+    `SELECT at.*, t.name as tool_name
+     FROM agent_tools at
+     JOIN tools t ON t.id = at.tool_id
+     JOIN agents a ON a.id = at.agent_id
+     WHERE a.company_id = $1`,
+    [companyId]
+  );
+
+  // Policies
+  const policies = await db.query(
+    'SELECT * FROM policies WHERE company_id = $1',
+    [companyId]
+  );
+
+  // Integrations (schema only)
+  const integrations = await db.query(
+    'SELECT type, name, events FROM integrations WHERE company_id = $1',
+    [companyId]
+  );
+
+  // Build ref maps (UUID → ref string)
+  const goalRefMap = new Map<string, string>();
+  goals.rows.forEach((g, i) => goalRefMap.set(g.id, `goal_${i}`));
+
+  const agentRefMap = new Map<string, string>();
+  agents.rows.forEach((a, i) => agentRefMap.set(a.id, `agent_${i}`));
+
+  const toolRefMap = new Map<string, string>();
+  tools.rows.forEach((t, i) => toolRefMap.set(t.id, `tool_${i}`));
+
+  const template: CompanyTemplate = {
+    version: '1.0.0',
+    name: c.name,
+    description: c.mission || '',
+    exported_at: new Date().toISOString(),
+    company: {
+      name: c.name,
+      mission: c.mission || '',
+    },
+    goals: goals.rows.map((g) => ({
+      ref: goalRefMap.get(g.id)!,
+      parent_ref: g.parent_id ? goalRefMap.get(g.parent_id) || null : null,
+      title: g.title,
+      description: g.description || '',
+    })),
+    agents: agents.rows.map((a) => ({
+      ref: agentRefMap.get(a.id)!,
+      name: a.name,
+      role: a.role,
+      title: a.title || '',
+      reports_to_ref: a.reports_to
+        ? agentRefMap.get(a.reports_to) || null
+        : null,
+      runtime: a.runtime,
+      model: a.model,
+      system_prompt: a.system_prompt || '',
+      config: a.config || {},
+      monthly_budget_usd: budgetMap.get(a.id) || null,
+    })),
+    tools: tools.rows.map((t) => ({
+      ref: toolRefMap.get(t.id)!,
+      name: t.name,
+      type: t.type,
+      description: t.description || '',
+      config: {}, // SCRUBBED — no secrets
+      schema: t.schema || {},
+    })),
+    agent_tools: agentTools.rows.map((at) => ({
+      agent_ref: agentRefMap.get(at.agent_id)!,
+      tool_ref: toolRefMap.get(at.tool_id)!,
+      permissions: at.permissions,
+      rate_limit: at.rate_limit,
+    })),
+    policies: policies.rows.map((p) => ({
+      name: p.name,
+      description: p.description || '',
+      type: p.type,
+      rules: p.rules,
+    })),
+    integrations: integrations.rows.map((i) => ({
+      type: i.type,
+      name: i.name,
+      events: i.events,
+      config_schema: {},
+    })),
+  };
+
+  // Sanitize
+  return sanitizeTemplate(template);
+}
+src/templates/sanitizer.ts
+TypeScript
+import type { CompanyTemplate } from './exporter.js';
+
+const SENSITIVE_KEYS = [
+  'api_key',
+  'apiKey',
+  'api_secret',
+  'secret',
+  'token',
+  'password',
+  'auth',
+  'authorization',
+  'bearer',
+  'credential',
+  'private_key',
+  'access_token',
+  'refresh_token',
+  'webhook_url',
+];
+
+/**
+ * Deep-scrub sensitive values from template data.
+ */
+export function sanitizeTemplate(
+  template: CompanyTemplate
+): CompanyTemplate {
+  return JSON.parse(JSON.stringify(template), (key, value) => {
+    if (typeof key === 'string' && typeof value === 'string') {
+      const lowerKey = key.toLowerCase();
+      if (SENSITIVE_KEYS.some((sk) => lowerKey.includes(sk))) {
+        return '<<REDACTED>>';
+      }
+    }
+    return value;
+  });
+}
+
+/**
+ * Validate a template before import.
+ */
+export function validateTemplate(
+  data: any
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!data.version) errors.push('Missing version');
+  if (!data.company?.name) errors.push('Missing company name');
+  if (!Array.isArray(data.agents)) errors.push('Missing agents array');
+  if (!Array.isArray(data.goals)) errors.push('Missing goals array');
+
+  // Check ref integrity
+  const agentRefs = new Set(data.agents?.map((a: any) => a.ref) || []);
+  const goalRefs = new Set(data.goals?.map((g: any) => g.ref) || []);
+  const toolRefs = new Set(data.tools?.map((t: any) => t.ref) || []);
+
+  for (const agent of data.agents || []) {
+    if (agent.reports_to_ref && !agentRefs.has(agent.reports_to_ref)) {
+      errors.push(
+        `Agent "${agent.name}" references unknown reports_to: ${agent.reports_to_ref}`
+      );
+    }
+  }
+
+  for (const goal of data.goals || []) {
+    if (goal.parent_ref && !goalRefs.has(goal.parent_ref)) {
+      errors.push(
+        `Goal "${goal.title}" references unknown parent: ${goal.parent_ref}`
+      );
+    }
+  }
+
+  for (const at of data.agent_tools || []) {
+    if (!agentRefs.has(at.agent_ref))
+      errors.push(`agent_tool references unknown agent: ${at.agent_ref}`);
+    if (!toolRefs.has(at.tool_ref))
+      errors.push(`agent_tool references unknown tool: ${at.tool_ref}`);
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+src/templates/importer.ts
+TypeScript
+import { db } from '../db/client.js';
+import { validateTemplate } from './sanitizer.js';
+import { logger } from '../utils/logger.js';
+import type { CompanyTemplate } from './exporter.js';
+
+/**
+ * Import a template into a new company.
+ * Handles ref→UUID mapping and collision detection.
+ */
+export async function importTemplate(
+  template: CompanyTemplate,
+  overrides?: {
+    companyName?: string;
+    mission?: string;
+  }
+): Promise<{ companyId: string; summary: any }> {
+  // Validate
+  const validation = validateTemplate(template);
+  if (!validation.valid) {
+    throw new Error(`Invalid template: ${validation.errors.join(', ')}`);
+  }
+
+  return db.transaction(async (client) => {
+    // 1. Create company
+    const companyName =
+      overrides?.companyName || template.company.name;
+
+    // Handle name collision
+    const existing = await client.query(
+      'SELECT id FROM companies WHERE name = $1',
+      [companyName]
+    );
+    const finalName =
+      existing.rows.length > 0
+        ? `${companyName} (${new Date().toISOString().slice(0, 10)})`
+        : companyName;
+
+    const company = await client.query(
+      `INSERT INTO companies (name, mission)
+       VALUES ($1, $2) RETURNING id`,
+      [finalName, overrides?.mission || template.company.mission]
+    );
+    const companyId = company.rows[0].id;
+
+    // 2. Create goals (respecting parent refs)
+    const goalIdMap = new Map<string, string>();
+
+    // Sort: parents first
+    const sortedGoals = [...template.goals].sort((a, b) => {
+      if (!a.parent_ref && b.parent_ref) return -1;
+      if (a.parent_ref && !b.parent_ref) return 1;
+      return 0;
+    });
+
+    for (const goal of sortedGoals) {
+      const parentId = goal.parent_ref
+        ? goalIdMap.get(goal.parent_ref) || null
+        : null;
+
+      const result = await client.query(
+        `INSERT INTO goals (company_id, parent_id, title, description)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [companyId, parentId, goal.title, goal.description]
+      );
+      goalIdMap.set(goal.ref, result.rows[0].id);
+    }
+
+    // 3. Create agents (respecting reports_to refs)
+    const agentIdMap = new Map<string, string>();
+
+    // Sort: managers first
+    const sortedAgents = [...template.agents].sort((a, b) => {
+      if (!a.reports_to_ref && b.reports_to_ref) return -1;
+      if (a.reports_to_ref && !b.reports_to_ref) return 1;
+      return 0;
+    });
+
+    for (const agent of sortedAgents) {
+      const reportsTo = agent.reports_to_ref
+        ? agentIdMap.get(agent.reports_to_ref) || null
+        : null;
+
+      const result = await client.query(
+        `INSERT INTO agents
+          (company_id, name, role, title, reports_to, runtime, model, system_prompt, config)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id`,
+        [
+          companyId,
+          agent.name,
+          agent.role,
+          agent.title,
+          reportsTo,
+          agent.runtime,
+          agent.model,
+          agent.system_prompt,
+          JSON.stringify(agent.config),
+        ]
+      );
+      const agentId = result.rows[0].id;
+      agentIdMap.set(agent.ref, agentId);
+
+      // Budget
+      if (agent.monthly_budget_usd) {
+        const month = new Date().toISOString().slice(0, 7) + '-01';
+        await client.query(
+          `INSERT INTO budgets (agent_id, month, limit_usd)
+           VALUES ($1, $2, $3)`,
+          [agentId, month, agent.monthly_budget_usd]
+        );
+      }
+    }
+
+    // 4. Create tools
+    const toolIdMap = new Map<string, string>();
+
+    for (const tool of template.tools) {
+      const result = await client.query(
+        `INSERT INTO tools (company_id, name, type, description, config, schema)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [
+          companyId,
+          tool.name,
+          tool.type,
+          tool.description,
+          JSON.stringify(tool.config),
+          JSON.stringify(tool.schema),
+        ]
+      );
+      toolIdMap.set(tool.ref, result.rows[0].id);
+    }
+
+    // 5. Create agent-tool assignments
+    for (const at of template.agent_tools) {
+      const agentId = agentIdMap.get(at.agent_ref);
+      const toolId = toolIdMap.get(at.tool_ref);
+      if (agentId && toolId) {
+        await client.query(
+          `INSERT INTO agent_tools (agent_id, tool_id, permissions, rate_limit)
+           VALUES ($1, $2, $3, $4)`,
+          [agentId, toolId, JSON.stringify(at.permissions), at.rate_limit]
+        );
+      }
+    }
+
+    // 6. Create policies
+    for (const policy of template.policies) {
+      await client.query(
+        `INSERT INTO policies (company_id, name, description, type, rules)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          companyId,
+          policy.name,
+          policy.description,
+          policy.type,
+          JSON.stringify(policy.rules),
+        ]
+      );
+    }
+
+    // Audit
+    await client.query(
+      `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
+       VALUES ($1, 'template.imported', 'company', $1, $2)`,
+      [
+        companyId,
+        JSON.stringify({
+          template_name: template.name,
+          template_version: template.version,
+          agents: template.agents.length,
+          goals: template.goals.length,
+          tools: template.tools.length,
+          policies: template.policies.length,
+        }),
+      ]
+    );
+
+    const summary = {
+      companyId,
+      companyName: finalName,
+      goals: goalIdMap.size,
+      agents: agentIdMap.size,
+      tools: toolIdMap.size,
+      policies: template.policies.length,
+      agentTools: template.agent_tools.length,
+    };
+
+    logger.info(summary, '📦 Template imported');
+
+    return { companyId, summary };
+  });
+}
+src/templates/presets/saas-startup.json
+JSON
+{
+  "version": "1.0.0",
+  "name": "AI SaaS Startup",
+  "description": "A full SaaS startup team with CEO, CTO, developer, designer, and marketer.",
+  "exported_at": "2025-01-01T00:00:00Z",
+  "company": {
+    "name": "AI SaaS Startup",
+    "mission": "Build and launch an AI-powered SaaS product to $1M ARR"
+  },
+  "goals": [
+    {
+      "ref": "goal_0",
+      "parent_ref": null,
+      "title": "Reach $1M ARR",
+      "description": "Build, launch, and grow our SaaS product to $1M in annual recurring revenue"
+    },
+    {
+      "ref": "goal_1",
+      "parent_ref": "goal_0",
+      "title": "Launch MVP",
+      "description": "Ship a working MVP with core features, auth, and billing"
+    },
+    {
+      "ref": "goal_2",
+      "parent_ref": "goal_0",
+      "title": "Acquire first 100 customers",
+      "description": "Get 100 paying customers through content marketing, Product Hunt, and outreach"
+    },
+    {
+      "ref": "goal_3",
+      "parent_ref": "goal_1",
+      "title": "Core product features",
+      "description": "Implement the main value proposition features"
+    },
+    {
+      "ref": "goal_4",
+      "parent_ref": "goal_1",
+      "title": "Infrastructure & auth",
+      "description": "Set up authentication, database, deployment pipeline"
+    }
+  ],
+  "agents": [
+    {
+      "ref": "agent_0",
+      "name": "Alice",
+      "role": "ceo",
+      "title": "Chief Executive Officer",
+      "reports_to_ref": null,
+      "runtime": "claude",
+      "model": "claude-sonnet-4-20250514",
+      "system_prompt": "You are Alice, the CEO of an AI SaaS startup. Your job is to:\n1. Set strategic direction aligned with the company mission\n2. Break high-level goals into actionable plans\n3. Delegate work to your leadership team (CTO, Head of Marketing)\n4. Make decisions on priorities, positioning, and resource allocation\n5. Review progress and adjust strategy\n\nBe decisive, strategic, and focused on outcomes. Think like a YC founder.",
+      "config": {},
+      "monthly_budget_usd": 15
+    },
+    {
+      "ref": "agent_1",
+      "name": "Bob",
+      "role": "cto",
+      "title": "Chief Technology Officer",
+      "reports_to_ref": "agent_0",
+      "runtime": "claude",
+      "model": "claude-sonnet-4-20250514",
+      "system_prompt": "You are Bob, the CTO. Your job is to:\n1. Make technical architecture decisions\n2. Break technical goals into specific engineering tasks\n3. Delegate implementation to developers\n4. Review technical work and ensure quality\n5. Manage the technical roadmap\n\nBe thorough, practical, and opinionated about technology choices. Prefer simple, proven solutions.",
+      "config": {},
+      "monthly_budget_usd": 20
+    },
+    {
+      "ref": "agent_2",
+      "name": "Charlie",
+      "role": "developer",
+      "title": "Full-Stack Developer",
+      "reports_to_ref": "agent_1",
+      "runtime": "claude",
+      "model": "claude-sonnet-4-20250514",
+      "system_prompt": "You are Charlie, a full-stack developer. Your job is to:\n1. Implement features and fix bugs\n2. Write clean, well-tested code\n3. Follow the technical decisions made by the CTO\n4. Report progress and blockers\n\nWhen completing a task, describe exactly what you built, what files you'd create/modify, and any technical decisions you made.",
+      "config": {},
+      "monthly_budget_usd": 30
+    },
+    {
+      "ref": "agent_3",
+      "name": "Diana",
+      "role": "designer",
+      "title": "Product Designer",
+      "reports_to_ref": "agent_1",
+      "runtime": "claude",
+      "model": "claude-sonnet-4-20250514",
+      "system_prompt": "You are Diana, the product designer. Your job is to:\n1. Design user interfaces and experiences\n2. Create wireframes and design specs\n3. Define the design system (colors, typography, components)\n4. Ensure usability and accessibility\n\nDescribe designs in detail — layout, colors, interactions, responsive behavior. Think mobile-first.",
+      "config": {},
+      "monthly_budget_usd": 15
+    },
+    {
+      "ref": "agent_4",
+      "name": "Eve",
+      "role": "marketer",
+      "title": "Head of Marketing",
+      "reports_to_ref": "agent_0",
+      "runtime": "claude",
+      "model": "claude-sonnet-4-20250514",
+      "system_prompt": "You are Eve, Head of Marketing. Your job is to:\n1. Develop marketing strategy and content plans\n2. Write copy — landing pages, blog posts, social media, emails\n3. Plan launch campaigns (Product Hunt, Hacker News, etc.)\n4. Define positioning and messaging\n5. Analyze competitors and identify differentiation\n\nBe creative, data-aware, and focused on growth. Write compelling copy.",
+      "config": {},
+      "monthly_budget_usd": 15
+    }
+  ],
+  "tools": [
+    {
+      "ref": "tool_0",
+      "name": "web_search",
+      "type": "builtin",
+      "description": "Search the web for current information, competitor research, market data.",
+      "config": {},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "max_results": { "type": "number", "default": 5 }
+        }
+      }
+    },
+    {
+      "ref": "tool_1",
+      "name": "file_write",
+      "type": "builtin",
+      "description": "Write files to the workspace — code, docs, configs, content.",
+      "config": {},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "content": { "type": "string" }
+        }
+      }
+    }
+  ],
+  "agent_tools": [
+    { "agent_ref": "agent_1", "tool_ref": "tool_0", "permissions": {"read": true, "write": true, "execute": true}, "rate_limit": 50 },
+    { "agent_ref": "agent_2", "tool_ref": "tool_1", "permissions": {"read": true, "write": true, "execute": true}, "rate_limit": 100 },
+    { "agent_ref": "agent_3", "tool_ref": "tool_1", "permissions": {"read": true, "write": true, "execute": true}, "rate_limit": 50 },
+    { "agent_ref": "agent_4", "tool_ref": "tool_0", "permissions": {"read": true, "write": true, "execute": true}, "rate_limit": 30 },
+    { "agent_ref": "agent_4", "tool_ref": "tool_1", "permissions": {"read": true, "write": true, "execute": true}, "rate_limit": 50 }
+  ],
+  "policies": [
+    {
+      "name": "Strategy changes need board approval",
+      "description": "Any strategic pivot or major direction change must be approved by the board",
+      "type": "approval_required",
+      "rules": { "actions": ["strategy_change", "deploy"], "roles": [] }
+    },
+    {
+      "name": "Budget warning at 75%",
+      "description": "Alert when any agent uses 75% of their monthly budget",
+      "type": "budget_threshold",
+      "rules": { "threshold_pct": 75 }
+    },
+    {
+      "name": "Max 4 levels of delegation",
+      "description": "Prevent infinite delegation chains",
+      "type": "delegation_limit",
+      "rules": { "max_depth": 4 }
+    }
+  ],
+  "integrations": []
+}
+src/routes/templates.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { exportCompany } from '../templates/exporter.js';
+import { importTemplate } from '../templates/importer.js';
+import { validateTemplate } from '../templates/sanitizer.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const router = Router();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Export company as template
+router.post('/companies/:companyId/export', async (req, res) => {
+  try {
+    const template = await exportCompany(req.params.companyId);
+    res.json(template);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Import template into new company
+router.post('/templates/import', async (req, res) => {
+  try {
+    const { template, companyName, mission } = req.body;
+
+    // Validate
+    const validation = validateTemplate(template);
+    if (!validation.valid) {
+      return res
+        .status(400)
+        .json({ error: 'Invalid template', details: validation.errors });
+    }
+
+    const result = await importTemplate(template, { companyName, mission });
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// List available preset templates
+router.get('/templates/presets', async (_req, res) => {
+  const presetsDir = path.join(__dirname, '../templates/presets');
+  try {
+    const files = await fs.readdir(presetsDir);
+    const presets = await Promise.all(
+      files
+        .filter((f) => f.endsWith('.json'))
+        .map(async (f) => {
+          const data = JSON.parse(
+            await fs.readFile(path.join(presetsDir, f), 'utf-8')
+          );
+          return {
+            filename: f,
+            name: data.name,
+            description: data.description,
+            agents: data.agents?.length || 0,
+            goals: data.goals?.length || 0,
+            tools: data.tools?.length || 0,
+            policies: data.policies?.length || 0,
+          };
+        })
+    );
+    res.json(presets);
+  } catch {
+    res.json([]);
+  }
+});
+
+// Get specific preset
+router.get('/templates/presets/:filename', async (req, res) => {
+  const filePath = path.join(
+    __dirname,
+    '../templates/presets',
+    req.params.filename
+  );
+  try {
+    const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    res.json(data);
+  } catch {
+    res.status(404).json({ error: 'Preset not found' });
+  }
+});
+
+// Import from preset
+router.post('/templates/presets/:filename/import', async (req, res) => {
+  const filePath = path.join(
+    __dirname,
+    '../templates/presets',
+    req.params.filename
+  );
+  try {
+    const template = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    const result = await importTemplate(template, {
+      companyName: req.body.companyName,
+      mission: req.body.mission,
+    });
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Save template to library
+router.post('/templates', async (req, res) => {
+  const { name, description, tags, data, is_public } = req.body;
+
+  const validation = validateTemplate(data);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Invalid template', details: validation.errors });
+  }
+
+  const result = await db.query(
+    `INSERT INTO templates (name, description, tags, data, is_public)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [name, description, tags || [], JSON.stringify(data), is_public || false]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// List saved templates
+router.get('/templates', async (req, res) => {
+  const result = await db.query(
+    `SELECT id, name, description, version, author, tags, is_public, downloads, created_at
+     FROM templates
+     ORDER BY downloads DESC, created_at DESC`
+  );
+  res.json(result.rows);
+});
+
+export default router;
+________________________________________
+Integrations System
+src/integrations/registry.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+import { sendSlack } from './slack.js';
+import { sendDiscord } from './discord.js';
+import { sendEmail } from './email.js';
+import { sendWebhook } from './webhooks.js';
+
+type IntegrationSender = (
+  config: any,
+  event: string,
+  payload: any
+) => Promise<void>;
+
+const senders: Record<string, IntegrationSender> = {
+  slack: sendSlack,
+  discord: sendDiscord,
+  email: sendEmail,
+  webhook: sendWebhook,
+};
+
+/**
+ * Dispatch an event to all matching integrations for a company.
+ */
+export async function dispatchEvent(
+  companyId: string,
+  event: string,
+  payload: any
+): Promise<void> {
+  const integrations = await db.query(
+    `SELECT * FROM integrations
+     WHERE company_id = $1
+       AND enabled = true
+       AND ($2 = ANY(events) OR events = '{}')`,
+    [companyId, event]
+  );
+
+  for (const integration of integrations.rows) {
+    const sender = senders[integration.type];
+    if (!sender) {
+      logger.warn({ type: integration.type }, 'Unknown integration type');
+      continue;
+    }
+
+    try {
+      await sender(integration.config, event, payload);
+
+      await db.query(
+        `UPDATE integrations SET last_triggered = now(), error_count = 0 WHERE id = $1`,
+        [integration.id]
+      );
+
+      await db.query(
+        `INSERT INTO integration_log (integration_id, event_type, payload, status)
+         VALUES ($1, $2, $3, 'sent')`,
+        [integration.id, event, JSON.stringify(payload)]
+      );
+    } catch (err: any) {
+      logger.error(
+        { err, integration: integration.name, event },
+        'Integration dispatch failed'
+      );
+
+      await db.query(
+        `UPDATE integrations SET error_count = error_count + 1 WHERE id = $1`,
+        [integration.id]
+      );
+
+      await db.query(
+        `INSERT INTO integration_log (integration_id, event_type, payload, status, error)
+         VALUES ($1, $2, $3, 'failed', $4)`,
+        [integration.id, event, JSON.stringify(payload), err.message]
+      );
+
+      // Auto-disable after 10 consecutive errors
+      if (integration.error_count + 1 >= 10) {
+        await db.query(
+          'UPDATE integrations SET enabled = false WHERE id = $1',
+          [integration.id]
+        );
+        logger.warn(
+          { integration: integration.name },
+          'Integration auto-disabled after 10 errors'
+        );
+      }
+    }
+  }
+}
+src/integrations/slack.ts
+TypeScript
+import { logger } from '../utils/logger.js';
+
+const EVENT_COLORS: Record<string, string> = {
+  'heartbeat.completed': '#36a64f',
+  'task.created': '#2196f3',
+  'task.completed': '#4caf50',
+  'agent.hired': '#9c27b0',
+  'agent.terminated': '#f44336',
+  'agent.auto_paused': '#ff9800',
+  'approval.requested': '#ff9800',
+  'approval.approved': '#4caf50',
+  'approval.rejected': '#f44336',
+  'budget.exceeded': '#f44336',
+};
+
+export async function sendSlack(
+  config: { webhook_url: string; channel?: string },
+  event: string,
+  payload: any
+): Promise<void> {
+  if (!config.webhook_url) throw new Error('Missing Slack webhook_url');
+
+  const color = EVENT_COLORS[event] || '#607d8b';
+
+  const message = {
+    channel: config.channel,
+    attachments: [
+      {
+        color,
+        title: `🏢 ${event}`,
+        text: formatPayload(event, payload),
+        fields: Object.entries(payload)
+          .filter(([_, v]) => typeof v !== 'object')
+          .slice(0, 5)
+          .map(([k, v]) => ({
+            title: k,
+            value: String(v),
+            short: true,
+          })),
+        footer: 'Autonomiczne Biuro',
+        ts: Math.floor(Date.now() / 1000),
+      },
+    ],
+  };
+
+  const res = await fetch(config.webhook_url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(message),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Slack API error: ${res.status} ${await res.text()}`);
+  }
+}
+
+function formatPayload(event: string, payload: any): string {
+  switch (event) {
+    case 'heartbeat.completed':
+      return `*${payload.agentName}* completed heartbeat on task. Cost: $${payload.cost?.toFixed(4) || '0'}`;
+    case 'task.completed':
+      return `Task *${payload.title}* completed by ${payload.agentName}`;
+    case 'approval.requested':
+      return `*${payload.agentName}* requests approval: ${payload.type}`;
+    case 'agent.auto_paused':
+      return `⚠️ *${payload.agentName}* auto-paused: ${payload.reason}`;
+    default:
+      return JSON.stringify(payload, null, 2).slice(0, 300);
+  }
+}
+src/integrations/discord.ts
+TypeScript
+export async function sendDiscord(
+  config: { webhook_url: string },
+  event: string,
+  payload: any
+): Promise<void> {
+  if (!config.webhook_url) throw new Error('Missing Discord webhook_url');
+
+  const message = {
+    embeds: [
+      {
+        title: `🏢 ${event}`,
+        description: JSON.stringify(payload, null, 2).slice(0, 2000),
+        color: 0x5865f2,
+        timestamp: new Date().toISOString(),
+        footer: { text: 'Autonomiczne Biuro' },
+      },
+    ],
+  };
+
+  const res = await fetch(config.webhook_url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(message),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Discord API error: ${res.status}`);
+  }
+}
+src/integrations/email.ts
+TypeScript
+import { logger } from '../utils/logger.js';
+
+export async function sendEmail(
+  config: {
+    smtp_host?: string;
+    smtp_port?: number;
+    from?: string;
+    to: string | string[];
+    api_key?: string;
+    service?: string;
+  },
+  event: string,
+  payload: any
+): Promise<void> {
+  // Generic email via HTTP API (Resend, SendGrid, Mailgun)
+  if (config.service === 'resend' && config.api_key) {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.api_key}`,
+      },
+      body: JSON.stringify({
+        from: config.from || 'biuro@notifications.local',
+        to: Array.isArray(config.to) ? config.to : [config.to],
+        subject: `[Biuro] ${event}`,
+        html: `
+          <h2>🏢 ${event}</h2>
+          <pre>${JSON.stringify(payload, null, 2)}</pre>
+          <hr>
+          <p><small>Autonomiczne Biuro</small></p>
+        `,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Email API error: ${res.status}`);
+    }
+    return;
+  }
+
+  // Fallback: log (implement SMTP if needed)
+  logger.info(
+    { event, to: config.to },
+    '📧 Email would be sent (no email service configured)'
+  );
+}
+src/integrations/webhooks.ts
+TypeScript
+export async function sendWebhook(
+  config: {
+    url: string;
+    secret?: string;
+    headers?: Record<string, string>;
+  },
+  event: string,
+  payload: any
+): Promise<void> {
+  if (!config.url) throw new Error('Missing webhook URL');
+
+  const body = JSON.stringify({
+    event,
+    payload,
+    timestamp: new Date().toISOString(),
+  });
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...config.headers,
+  };
+
+  // HMAC signature for webhook verification
+  if (config.secret) {
+    const crypto = await import('crypto');
+    const signature = crypto
+      .createHmac('sha256', config.secret)
+      .update(body)
+      .digest('hex');
+    headers['X-Biuro-Signature'] = `sha256=${signature}`;
+  }
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers,
+    body,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Webhook error: ${res.status} ${await res.text()}`);
+  }
+}
+src/routes/integrations.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const createIntegrationSchema = z.object({
+  type: z.enum(['slack', 'discord', 'email', 'webhook', 'telegram']),
+  name: z.string().min(1),
+  config: z.record(z.any()),
+  events: z.array(z.string()).default([]),
+});
+
+// Create integration
+router.post('/companies/:companyId/integrations', async (req, res) => {
+  const parsed = createIntegrationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const d = parsed.data;
+  const result = await db.query(
+    `INSERT INTO integrations (company_id, type, name, config, events)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      req.params.companyId,
+      d.type,
+      d.name,
+      JSON.stringify(d.config),
+      d.events,
+    ]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// List integrations
+router.get('/companies/:companyId/integrations', async (req, res) => {
+  const result = await db.query(
+    `SELECT i.*,
+       (SELECT COUNT(*) FROM integration_log il WHERE il.integration_id = i.id) as total_sends,
+       (SELECT COUNT(*) FROM integration_log il WHERE il.integration_id = i.id AND il.status = 'failed') as failed_sends
+     FROM integrations i
+     WHERE i.company_id = $1
+     ORDER BY i.created_at DESC`,
+    [req.params.companyId]
+  );
+
+  // Mask secrets in config
+  const masked = result.rows.map((r) => ({
+    ...r,
+    config: maskConfig(r.config),
+  }));
+
+  res.json(masked);
+});
+
+// Toggle integration
+router.patch('/integrations/:id', async (req, res) => {
+  const { enabled, events, config, name } = req.body;
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  if (enabled !== undefined) {
+    params.push(enabled);
+    sets.push(`enabled = $${params.length}`);
+  }
+  if (events) {
+    params.push(events);
+    sets.push(`events = $${params.length}`);
+  }
+  if (config) {
+    params.push(JSON.stringify(config));
+    sets.push(`config = $${params.length}`);
+  }
+  if (name) {
+    params.push(name);
+    sets.push(`name = $${params.length}`);
+  }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  params.push(req.params.id);
+  const result = await db.query(
+    `UPDATE integrations SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  );
+  res.json(result.rows[0]);
+});
+
+// Delete integration
+router.delete('/integrations/:id', async (req, res) => {
+  await db.query('DELETE FROM integrations WHERE id = $1', [req.params.id]);
+  res.json({ deleted: true });
+});
+
+// Test integration
+router.post('/integrations/:id/test', async (req, res) => {
+  const { dispatchEvent } = await import('../integrations/registry.js');
+
+  const integration = await db.query(
+    'SELECT * FROM integrations WHERE id = $1',
+    [req.params.id]
+  );
+  if (integration.rows.length === 0) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  try {
+    const i = integration.rows[0];
+    const { sendSlack } = await import('../integrations/slack.js');
+    const { sendDiscord } = await import('../integrations/discord.js');
+    const { sendWebhook } = await import('../integrations/webhooks.js');
+    const { sendEmail } = await import('../integrations/email.js');
+
+    const senders: Record<string, any> = {
+      slack: sendSlack,
+      discord: sendDiscord,
+      webhook: sendWebhook,
+      email: sendEmail,
+    };
+
+    const sender = senders[i.type];
+    if (!sender) throw new Error(`Unknown type: ${i.type}`);
+
+    await sender(i.config, 'test.ping', {
+      message: 'Test from Autonomiczne Biuro',
+      timestamp: new Date().toISOString(),
+    });
+
+    res.json({ status: 'sent' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Integration log
+router.get('/integrations/:id/log', async (req, res) => {
+  const result = await db.query(
+    `SELECT * FROM integration_log
+     WHERE integration_id = $1
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    [req.params.id]
+  );
+  res.json(result.rows);
+});
+
+function maskConfig(config: any): any {
+  if (!config || typeof config !== 'object') return config;
+  const masked = { ...config };
+  for (const key of Object.keys(masked)) {
+    if (
+      ['webhook_url', 'api_key', 'secret', 'token', 'password'].some((s) =>
+        key.toLowerCase().includes(s)
+      )
+    ) {
+      if (typeof masked[key] === 'string' && masked[key].length > 8) {
+        masked[key] = masked[key].slice(0, 4) + '****' + masked[key].slice(-4);
+      }
+    }
+  }
+  return masked;
+}
+
+export default router;
+________________________________________
+Reports System
+src/reports/generator.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+
+export interface ReportData {
+  period: { start: string; end: string };
+  company: { name: string; mission: string };
+  summary: {
+    totalCost: number;
+    tasksCreated: number;
+    tasksCompleted: number;
+    heartbeats: number;
+    toolCalls: number;
+    approvals: { pending: number; approved: number; rejected: number };
+  };
+  agents: Array<{
+    name: string;
+    role: string;
+    status: string;
+    heartbeats: number;
+    tasksCompleted: number;
+    cost: number;
+    budgetUsedPct: number;
+  }>;
+  topTasks: Array<{
+    title: string;
+    status: string;
+    assignedTo: string;
+    result: string | null;
+  }>;
+  issues: string[];
+}
+
+export async function generateReportData(
+  companyId: string,
+  periodDays: number = 1
+): Promise<ReportData> {
+  const interval = `${periodDays} days`;
+
+  const company = await db.query(
+    'SELECT * FROM companies WHERE id = $1',
+    [companyId]
+  );
+  const c = company.rows[0];
+
+  // Summary metrics
+  const [costs, tasksCreated, tasksCompleted, heartbeats, toolCalls, approvals] =
+    await Promise.all([
+      db.query(
+        `SELECT COALESCE(SUM(cost_usd), 0) as total
+         FROM audit_log WHERE company_id = $1 AND created_at > now() - interval '${interval}'`,
+        [companyId]
+      ),
+      db.query(
+        `SELECT COUNT(*) as count FROM tasks
+         WHERE company_id = $1 AND created_at > now() - interval '${interval}'`,
+        [companyId]
+      ),
+      db.query(
+        `SELECT COUNT(*) as count FROM tasks
+         WHERE company_id = $1 AND status = 'done'
+           AND updated_at > now() - interval '${interval}'`,
+        [companyId]
+      ),
+      db.query(
+        `SELECT COUNT(*) as count FROM heartbeats h
+         JOIN agents a ON a.id = h.agent_id
+         WHERE a.company_id = $1 AND h.created_at > now() - interval '${interval}'`,
+        [companyId]
+      ),
+      db.query(
+        `SELECT COUNT(*) as count FROM tool_calls
+         WHERE company_id = $1 AND created_at > now() - interval '${interval}'`,
+        [companyId]
+      ),
+      db.query(
+        `SELECT status, COUNT(*) as count FROM approvals
+         WHERE company_id = $1 AND created_at > now() - interval '${interval}'
+         GROUP BY status`,
+        [companyId]
+      ),
+    ]);
+
+  const approvalCounts = {
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+  };
+  for (const row of approvals.rows) {
+    approvalCounts[row.status as keyof typeof approvalCounts] =
+      parseInt(row.count);
+  }
+
+  // Per-agent metrics
+  const agents = await db.query(
+    `SELECT
+       a.name, a.role, a.status,
+       COALESCE(h.heartbeats, 0) as heartbeats,
+       COALESCE(tc.tasks_completed, 0) as tasks_completed,
+       COALESCE(al.cost, 0) as cost,
+       b.limit_usd as budget_limit,
+       b.spent_usd as budget_spent
+     FROM agents a
+     LEFT JOIN (
+       SELECT agent_id, COUNT(*) as heartbeats FROM heartbeats
+       WHERE created_at > now() - interval '${interval}'
+       GROUP BY agent_id
+     ) h ON h.agent_id = a.id
+     LEFT JOIN (
+       SELECT assigned_to, COUNT(*) as tasks_completed FROM tasks
+       WHERE status = 'done' AND updated_at > now() - interval '${interval}'
+       GROUP BY assigned_to
+     ) tc ON tc.assigned_to = a.id
+     LEFT JOIN (
+       SELECT agent_id, SUM(cost_usd) as cost FROM audit_log
+       WHERE created_at > now() - interval '${interval}' AND cost_usd > 0
+       GROUP BY agent_id
+     ) al ON al.agent_id = a.id
+     LEFT JOIN budgets b ON b.agent_id = a.id
+       AND b.month = date_trunc('month', now())::date
+     WHERE a.company_id = $1 AND a.status != 'terminated'
+     ORDER BY cost DESC`,
+    [companyId]
+  );
+
+  // Recent completed tasks
+  const topTasks = await db.query(
+    `SELECT t.title, t.status, a.name as assigned_to, t.result
+     FROM tasks t
+     LEFT JOIN agents a ON a.id = t.assigned_to
+     WHERE t.company_id = $1 AND t.status = 'done'
+       AND t.updated_at > now() - interval '${interval}'
+     ORDER BY t.updated_at DESC
+     LIMIT 10`,
+    [companyId]
+  );
+
+  // Detect issues
+  const issues: string[] = [];
+
+  // Paused agents
+  const paused = agents.rows.filter((a) => a.status === 'paused');
+  if (paused.length > 0) {
+    issues.push(
+      `⚠️ ${paused.length} agent(s) paused: ${paused.map((a) => a.name).join(', ')}`
+    );
+  }
+
+  // Budget warnings
+  for (const a of agents.rows) {
+    if (a.budget_limit && a.budget_spent) {
+      const pct =
+        (parseFloat(a.budget_spent) / parseFloat(a.budget_limit)) * 100;
+      if (pct > 90) {
+        issues.push(
+          `🔴 ${a.name} budget ${pct.toFixed(0)}% used ($${parseFloat(a.budget_spent).toFixed(2)} / $${parseFloat(a.budget_limit).toFixed(2)})`
+        );
+      }
+    }
+  }
+
+  // Blocked tasks
+  const blocked = await db.query(
+    `SELECT COUNT(*) as count FROM tasks
+     WHERE company_id = $1 AND status = 'blocked'`,
+    [companyId]
+  );
+  if (parseInt(blocked.rows[0].count) > 0) {
+    issues.push(
+      `🚫 ${blocked.rows[0].count} task(s) currently blocked`
+    );
+  }
+
+  // Pending approvals
+  if (approvalCounts.pending > 0) {
+    issues.push(
+      `🎫 ${approvalCounts.pending} approval(s) pending your decision`
+    );
+  }
+
+  return {
+    period: {
+      start: new Date(
+        Date.now() - periodDays * 24 * 60 * 60 * 1000
+      ).toISOString(),
+      end: new Date().toISOString(),
+    },
+    company: { name: c.name, mission: c.mission || '' },
+    summary: {
+      totalCost: parseFloat(costs.rows[0].total),
+      tasksCreated: parseInt(tasksCreated.rows[0].count),
+      tasksCompleted: parseInt(tasksCompleted.rows[0].count),
+      heartbeats: parseInt(heartbeats.rows[0].count),
+      toolCalls: parseInt(toolCalls.rows[0].count),
+      approvals: approvalCounts,
+    },
+    agents: agents.rows.map((a) => ({
+      name: a.name,
+      role: a.role,
+      status: a.status,
+      heartbeats: parseInt(a.heartbeats),
+      tasksCompleted: parseInt(a.tasks_completed),
+      cost: parseFloat(a.cost),
+      budgetUsedPct:
+        a.budget_limit && parseFloat(a.budget_limit) > 0
+          ? (parseFloat(a.budget_spent || 0) /
+              parseFloat(a.budget_limit)) *
+            100
+          : 0,
+    })),
+    topTasks: topTasks.rows.map((t) => ({
+      title: t.title,
+      status: t.status,
+      assignedTo: t.assigned_to || 'Unassigned',
+      result: t.result,
+    })),
+    issues,
+  };
+}
+src/reports/templates/daily-summary.ts
+TypeScript
+import type { ReportData } from '../generator.js';
+
+export function formatDailySummary(data: ReportData): string {
+  const { summary, agents, topTasks, issues } = data;
+
+  let md = `# 📊 Daily Summary — ${data.company.name}\n`;
+  md += `*${new Date(data.period.start).toLocaleDateString()} → ${new Date(data.period.end).toLocaleDateString()}*\n\n`;
+
+  // KPIs
+  md += `## Key Metrics\n`;
+  md += `| Metric | Value |\n|---|---|\n`;
+  md += `| 💰 Total Cost | $${summary.totalCost.toFixed(2)} |\n`;
+  md += `| 📋 Tasks Created | ${summary.tasksCreated} |\n`;
+  md += `| ✅ Tasks Completed | ${summary.tasksCompleted} |\n`;
+  md += `| 💓 Heartbeats | ${summary.heartbeats} |\n`;
+  md += `| 🔧 Tool Calls | ${summary.toolCalls} |\n`;
+  md += `| 🎫 Approvals (P/A/R) | ${summary.approvals.pending}/${summary.approvals.approved}/${summary.approvals.rejected} |\n\n`;
+
+  // Issues
+  if (issues.length > 0) {
+    md += `## ⚠️ Issues Requiring Attention\n`;
+    for (const issue of issues) {
+      md += `- ${issue}\n`;
+    }
+    md += `\n`;
+  }
+
+  // Agent performance
+  md += `## Agent Performance\n`;
+  md += `| Agent | Role | Status | Heartbeats | Tasks Done | Cost |\n`;
+  md += `|---|---|---|---|---|---|\n`;
+  for (const agent of agents) {
+    md += `| ${agent.name} | ${agent.role} | ${agent.status} | ${agent.heartbeats} | ${agent.tasksCompleted} | $${agent.cost.toFixed(2)} |\n`;
+  }
+  md += `\n`;
+
+  // Completed tasks
+  if (topTasks.length > 0) {
+    md += `## Recently Completed Tasks\n`;
+    for (const task of topTasks) {
+      md += `- **${task.title}** → ${task.assignedTo}\n`;
+      if (task.result) {
+        md += `  > ${task.result.slice(0, 200)}${task.result.length > 200 ? '...' : ''}\n`;
+      }
+    }
+    md += `\n`;
+  }
+
+  md += `---\n*Generated by Autonomiczne Biuro at ${new Date().toISOString()}*\n`;
+
+  return md;
+}
+src/reports/scheduler.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+import { generateReportData } from './generator.js';
+import { formatDailySummary } from './templates/daily-summary.js';
+import { dispatchEvent } from '../integrations/registry.js';
+
+/**
+ * Check and run any scheduled reports that are due.
+ * Called from the main heartbeat scheduler.
+ */
+export async function checkScheduledReports(): Promise<void> {
+  const due = await db.query(
+    `SELECT sr.*, c.name as company_name
+     FROM scheduled_reports sr
+     JOIN companies c ON c.id = sr.company_id
+     WHERE sr.enabled = true
+       AND (sr.next_run IS NULL OR sr.next_run <= now())
+     ORDER BY sr.next_run ASC
+     LIMIT 5`
+  );
+
+  for (const report of due.rows) {
+    try {
+      await runReport(report);
+    } catch (err) {
+      logger.error(
+        { err, reportId: report.id },
+        'Scheduled report failed'
+      );
+    }
+  }
+}
+
+async function runReport(report: any): Promise<void> {
+  logger.info(
+    { reportId: report.id, type: report.type },
+    '📊 Running scheduled report'
+  );
+
+  // Determine period
+  let periodDays = 1;
+  if (report.type === 'weekly_report') periodDays = 7;
+  if (report.type === 'cost_report') periodDays = 30;
+
+  // Generate data
+  const data = await generateReportData(report.company_id, periodDays);
+
+  // Format
+  let content: string;
+  switch (report.type) {
+    case 'daily_summary':
+      content = formatDailySummary(data);
+      break;
+    case 'weekly_report':
+      content = formatDailySummary(data); // reuse for now
+      break;
+    case 'cost_report':
+      content = formatCostReport(data);
+      break;
+    default:
+      content = JSON.stringify(data, null, 2);
+  }
+
+  // Save to history
+  await db.query(
+    `INSERT INTO report_history (report_id, content, format, metadata)
+     VALUES ($1, $2, $3, $4)`,
+    [
+      report.id,
+      content,
+      report.format,
+      JSON.stringify({ period: data.period, summary: data.summary }),
+    ]
+  );
+
+  // Dispatch to integrations
+  await dispatchEvent(report.company_id, 'report.generated', {
+    reportName: report.name,
+    type: report.type,
+    content,
+    summary: data.summary,
+  });
+
+  // Update next_run based on schedule (simplified cron)
+  const nextRun = calculateNextRun(report.schedule);
+
+  await db.query(
+    `UPDATE scheduled_reports SET last_run = now(), next_run = $2 WHERE id = $1`,
+    [report.id, nextRun]
+  );
+
+  logger.info(
+    { reportId: report.id, nextRun },
+    '📊 Report completed'
+  );
+}
+
+function formatCostReport(data: any): string {
+  let md = `# 💰 Cost Report — ${data.company.name}\n\n`;
+  md += `Total spend: **$${data.summary.totalCost.toFixed(2)}**\n\n`;
+  md += `| Agent | Cost | Budget Used |\n|---|---|---|\n`;
+  for (const a of data.agents) {
+    md += `| ${a.name} | $${a.cost.toFixed(2)} | ${a.budgetUsedPct.toFixed(0)}% |\n`;
+  }
+  return md;
+}
+
+function calculateNextRun(schedule: string): Date {
+  // Simplified: supports 'daily', 'weekly', 'hourly', or hour offset
+  const now = new Date();
+
+  if (schedule === 'hourly' || schedule === '0 * * * *') {
+    return new Date(now.getTime() + 60 * 60 * 1000);
+  }
+  if (schedule === 'daily' || schedule.startsWith('0 9')) {
+    const next = new Date(now);
+    next.setDate(next.getDate() + 1);
+    next.setHours(9, 0, 0, 0);
+    return next;
+  }
+  if (schedule === 'weekly' || schedule.startsWith('0 9 * * 1')) {
+    const next = new Date(now);
+    next.setDate(next.getDate() + (((1 + 7 - next.getDay()) % 7) || 7));
+    next.setHours(9, 0, 0, 0);
+    return next;
+  }
+
+  // Default: next day 9 AM
+  const next = new Date(now);
+  next.setDate(next.getDate() + 1);
+  next.setHours(9, 0, 0, 0);
+  return next;
+}
+src/routes/reports.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { generateReportData } from '../reports/generator.js';
+import { formatDailySummary } from '../reports/templates/daily-summary.js';
+import { z } from 'zod';
+
+const router = Router();
+
+// Generate report on-demand
+router.post('/companies/:companyId/reports/generate', async (req, res) => {
+  const { type = 'daily_summary', period_days = 1 } = req.body;
+
+  const data = await generateReportData(
+    req.params.companyId,
+    period_days
+  );
+
+  let content: string;
+  switch (type) {
+    case 'daily_summary':
+    case 'weekly_report':
+      content = formatDailySummary(data);
+      break;
+    default:
+      content = JSON.stringify(data, null, 2);
+  }
+
+  res.json({ data, formatted: content });
+});
+
+// Create scheduled report
+router.post('/companies/:companyId/reports/scheduled', async (req, res) => {
+  const { name, type, schedule, config, recipients, format } = req.body;
+
+  const result = await db.query(
+    `INSERT INTO scheduled_reports
+      (company_id, name, type, schedule, config, recipients, format)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [
+      req.params.companyId,
+      name,
+      type,
+      schedule,
+      JSON.stringify(config || {}),
+      JSON.stringify(recipients || []),
+      format || 'markdown',
+    ]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// List scheduled reports
+router.get('/companies/:companyId/reports/scheduled', async (req, res) => {
+  const result = await db.query(
+    `SELECT * FROM scheduled_reports
+     WHERE company_id = $1
+     ORDER BY created_at DESC`,
+    [req.params.companyId]
+  );
+  res.json(result.rows);
+});
+
+// Get report history
+router.get('/reports/:reportId/history', async (req, res) => {
+  const result = await db.query(
+    `SELECT * FROM report_history
+     WHERE report_id = $1
+     ORDER BY created_at DESC
+     LIMIT 20`,
+    [req.params.reportId]
+  );
+  res.json(result.rows);
+});
+
+// Toggle scheduled report
+router.patch('/reports/scheduled/:id', async (req, res) => {
+  const { enabled, schedule, name } = req.body;
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  if (enabled !== undefined) { params.push(enabled); sets.push(`enabled = $${params.length}`); }
+  if (schedule) { params.push(schedule); sets.push(`schedule = $${params.length}`); }
+  if (name) { params.push(name); sets.push(`name = $${params.length}`); }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  params.push(req.params.id);
+  const result = await db.query(
+    `UPDATE scheduled_reports SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  );
+  res.json(result.rows[0]);
+});
+
+export default router;
+________________________________________
+Updated src/routes/index.ts
+TypeScript
+import { Router } from 'express';
+import companies from './companies.js';
+import agents from './agents.js';
+import tasks from './tasks.js';
+import messages from './messages.js';
+import goals from './goals.js';
+import tools from './tools.js';
+import approvals from './approvals.js';
+import budgets from './budgets.js';
+import auth from './auth.js';
+import templates from './templates.js';
+import integrations from './integrations.js';
+import reports from './reports.js';
+
+const router = Router();
+
+// Auth (no auth middleware needed)
+router.use('/auth', auth);
+
+// All other routes
+router.use('/companies', companies);
+router.use('/', agents);
+router.use('/', tasks);
+router.use('/', messages);
+router.use('/', goals);
+router.use('/', tools);
+router.use('/', approvals);
+router.use('/', budgets);
+router.use('/', templates);
+router.use('/', integrations);
+router.use('/', reports);
+
+router.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    version: '0.4.0',
+    timestamp: new Date().toISOString(),
+    auth_enabled: process.env.AUTH_ENABLED === 'true',
+  });
+});
+
+export default router;
+________________________________________
+Wire Integrations into Heartbeat
+src/orchestrator/heartbeat.ts — dodaj na końcu agentHeartbeat:
+TypeScript
+import { dispatchEvent } from '../integrations/registry.js';
+import { checkScheduledReports } from '../reports/scheduler.js';
+
+// Na końcu udanego heartbeata:
+await dispatchEvent(agent.company_id, 'heartbeat.completed', {
+  agentId: agent.id,
+  agentName: agent.name,
+  taskId: task?.id,
+  taskTitle: task?.title,
+  actions: response.actions.map((a) => a.type),
+  cost: response.cost.usd,
+});
+
+// W processAction, po 'complete_task':
+await dispatchEvent(agent.company_id, 'task.completed', {
+  taskId: task.id,
+  title: task.title,
+  agentName: agent.name,
+  result: action.result,
+});
+src/orchestrator/scheduler.ts — dodaj report check:
+TypeScript
+import { checkScheduledReports } from '../reports/scheduler.js';
+
+// W runHeartbeatCycle, na końcu:
+try {
+  await checkScheduledReports();
+} catch (err) {
+  logger.error({ err }, 'Scheduled reports check failed');
+}
+________________________________________
+CLI Tool
+packages/cli/package.json
+JSON
+{
+  "name": "@biuro/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "biuro": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.1.0",
+    "inquirer": "^12.0.0",
+    "cli-table3": "^0.6.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
+packages/cli/src/utils/api.ts
+TypeScript
+const DEFAULT_HOST = 'http://localhost:3100';
+
+export function getApiUrl(): string {
+  return process.env.BIURO_API_URL || DEFAULT_HOST;
+}
+
+export async function api<T = any>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  const url = `${getApiUrl()}/api${path}`;
+  const token = process.env.BIURO_TOKEN || '';
+
+  const res = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+packages/cli/src/utils/ui.ts
+TypeScript
+import chalk from 'chalk';
+import Table from 'cli-table3';
+
+export function printTable(
+  headers: string[],
+  rows: string[][]
+): void {
+  const table = new Table({
+    head: headers.map((h) => chalk.cyan(h)),
+    style: { head: [], border: ['gray'] },
+  });
+  rows.forEach((row) => table.push(row));
+  console.log(table.toString());
+}
+
+export function status(s: string): string {
+  const colors: Record<string, (s: string) => string> = {
+    idle: chalk.gray,
+    working: chalk.green,
+    paused: chalk.yellow,
+    terminated: chalk.red,
+    backlog: chalk.gray,
+    assigned: chalk.blue,
+    in_progress: chalk.green,
+    done: chalk.greenBright,
+    blocked: chalk.red,
+    pending: chalk.yellow,
+    approved: chalk.green,
+    rejected: chalk.red,
+  };
+  const colorFn = colors[s] || chalk.white;
+  return colorFn(s);
+}
+
+export function cost(amount: number): string {
+  if (amount > 10) return chalk.red(`$${amount.toFixed(4)}`);
+  if (amount > 1) return chalk.yellow(`$${amount.toFixed(4)}`);
+  return chalk.green(`$${amount.toFixed(4)}`);
+}
+packages/cli/src/index.ts
+TypeScript
+#!/usr/bin/env node
+
+import { Command } from 'commander';
+import { companyCommands } from './commands/company.js';
+import { agentCommands } from './commands/agent.js';
+import { taskCommands } from './commands/task.js';
+import { templateCommands } from './commands/template.js';
+import { statusCommand } from './commands/status.js';
+import { logsCommand } from './commands/logs.js';
+
+const program = new Command();
+
+program
+  .name('biuro')
+  .description('🏢 Autonomiczne Biuro CLI — Manage your AI company')
+  .version('0.1.0');
+
+program.addCommand(companyCommands());
+program.addCommand(agentCommands());
+program.addCommand(taskCommands());
+program.addCommand(templateCommands());
+program.addCommand(statusCommand());
+program.addCommand(logsCommand());
+
+program.parse();
+packages/cli/src/commands/company.ts
+TypeScript
+import { Command } from 'commander';
+import chalk from 'chalk';
+import ora from 'ora';
+import { api } from '../utils/api.js';
+import { printTable, cost } from '../utils/ui.js';
+
+export function companyCommands(): Command {
+  const cmd = new Command('company').description('Manage companies');
+
+  cmd
+    .command('list')
+    .description('List all companies')
+    .action(async () => {
+      const companies = await api('/companies');
+      printTable(
+        ['Name', 'Mission', 'ID'],
+        companies.map((c: any) => [
+          chalk.bold(c.name),
+          (c.mission || '').slice(0, 50),
+          chalk.gray(c.id),
+        ])
+      );
+    });
+
+  cmd
+    .command('create')
+    .description('Create a new company')
+    .requiredOption('-n, --name <name>', 'Company name')
+    .option('-m, --mission <mission>', 'Company mission')
+    .action(async (opts) => {
+      const spinner = ora('Creating company...').start();
+      const company = await api('/companies', {
+        method: 'POST',
+        body: JSON.stringify({ name: opts.name, mission: opts.mission }),
+      });
+      spinner.succeed(`Company created: ${chalk.bold(company.name)}`);
+      console.log(`  ID: ${chalk.gray(company.id)}`);
+    });
+
+  cmd
+    .command('stats <companyId>')
+    .description('Show company statistics')
+    .action(async (companyId) => {
+      const stats = await api(`/companies/${companyId}/stats`);
+      console.log(chalk.bold('\n📊 Company Statistics\n'));
+      console.log(`  💰 Total Cost:         ${cost(stats.totalCostUsd)}`);
+      console.log(
+        `  💓 Heartbeats (1h):    ${stats.heartbeatsLastHour}`
+      );
+      console.log(`\n  Agents:`);
+      for (const a of stats.agents) {
+        console.log(`    ${a.status}: ${a.count}`);
+      }
+      console.log(`\n  Tasks:`);
+      for (const t of stats.tasks) {
+        console.log(`    ${t.status}: ${t.count}`);
+      }
+    });
+
+  return cmd;
+}
+packages/cli/src/commands/agent.ts
+TypeScript
+import { Command } from 'commander';
+import chalk from 'chalk';
+import ora from 'ora';
+import { api } from '../utils/api.js';
+import { printTable, status } from '../utils/ui.js';
+
+export function agentCommands(): Command {
+  const cmd = new Command('agent').description('Manage agents');
+
+  cmd
+    .command('list <companyId>')
+    .description('List agents')
+    .action(async (companyId) => {
+      const agents = await api(`/companies/${companyId}/agents`);
+      printTable(
+        ['Name', 'Role', 'Status', 'Runtime', 'Budget', 'ID'],
+        agents.map((a: any) => [
+          chalk.bold(a.name),
+          a.role,
+          status(a.status),
+          a.runtime,
+          a.budget_limit
+            ? `$${parseFloat(a.budget_spent || 0).toFixed(2)}/$${parseFloat(a.budget_limit).toFixed(2)}`
+            : '-',
+          chalk.gray(a.id.slice(0, 8)),
+        ])
+      );
+    });
+
+  cmd
+    .command('hire <companyId>')
+    .description('Hire a new agent')
+    .requiredOption('-n, --name <name>')
+    .requiredOption('-r, --role <role>')
+    .option('-t, --title <title>')
+    .option('--reports-to <agentId>')
+    .option('--runtime <runtime>', 'claude or openai', 'claude')
+    .option('--budget <usd>', 'Monthly budget')
+    .option('--prompt <prompt>', 'System prompt')
+    .action(async (companyId, opts) => {
+      const spinner = ora(`Hiring ${opts.name}...`).start();
+      const agent = await api(`/companies/${companyId}/agents`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: opts.name,
+          role: opts.role,
+          title: opts.title,
+          reports_to: opts.reportsTo,
+          runtime: opts.runtime,
+          system_prompt: opts.prompt,
+          monthly_budget_usd: opts.budget
+            ? parseFloat(opts.budget)
+            : undefined,
+        }),
+      });
+      spinner.succeed(
+        `Hired ${chalk.bold(agent.name)} as ${agent.role}`
+      );
+    });
+
+  cmd
+    .command('pause <agentId>')
+    .description('Pause an agent')
+    .action(async (agentId) => {
+      await api(`/agents/${agentId}/pause`, { method: 'POST' });
+      console.log(chalk.yellow('⏸ Agent paused'));
+    });
+
+  cmd
+    .command('resume <agentId>')
+    .description('Resume an agent')
+    .action(async (agentId) => {
+      await api(`/agents/${agentId}/resume`, { method: 'POST' });
+      console.log(chalk.green('▶ Agent resumed'));
+    });
+
+  cmd
+    .command('terminate <agentId>')
+    .description('Terminate an agent')
+    .action(async (agentId) => {
+      await api(`/agents/${agentId}/terminate`, { method: 'POST' });
+      console.log(chalk.red('🔴 Agent terminated'));
+    });
+
+  return cmd;
+}
+packages/cli/src/commands/task.ts
+TypeScript
+import { Command } from 'commander';
+import chalk from 'chalk';
+import ora from 'ora';
+import { api } from '../utils/api.js';
+import { printTable, status } from '../utils/ui.js';
+
+export function taskCommands(): Command {
+  const cmd = new Command('task').description('Manage tasks');
+
+  cmd
+    .command('list <companyId>')
+    .description('List tasks')
+    .option('-s, --status <status>', 'Filter by status')
+    .action(async (companyId, opts) => {
+      const params = opts.status ? `?status=${opts.status}` : '';
+      const tasks = await api(`/companies/${companyId}/tasks${params}`);
+      printTable(
+        ['Title', 'Status', 'Assigned', 'Priority', 'ID'],
+        tasks.map((t: any) => [
+          t.title.slice(0, 50),
+          status(t.status),
+          t.assigned_to_name || '-',
+          String(t.priority),
+          chalk.gray(t.id.slice(0, 8)),
+        ])
+      );
+    });
+
+  cmd
+    .command('create <companyId>')
+    .description('Create a task')
+    .requiredOption('-t, --title <title>')
+    .option('-d, --description <desc>')
+    .option('-a, --assign <agentId>')
+    .option('-g, --goal <goalId>')
+    .option('-p, --priority <n>', 'Priority', '0')
+    .action(async (companyId, opts) => {
+      const spinner = ora('Creating task...').start();
+      const task = await api(`/companies/${companyId}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: opts.title,
+          description: opts.description,
+          assigned_to: opts.assign,
+          goal_id: opts.goal,
+          priority: parseInt(opts.priority),
+        }),
+      });
+      spinner.succeed(`Task created: ${chalk.bold(task.title)}`);
+      console.log(`  ID: ${chalk.gray(task.id)}`);
+      console.log(`  Status: ${status(task.status)}`);
+    });
+
+  cmd
+    .command('show <taskId>')
+    .description('Show task details')
+    .action(async (taskId) => {
+      const task = await api(`/tasks/${taskId}`);
+      console.log(chalk.bold(`\n📋 ${task.title}\n`));
+      console.log(`  Status:   ${status(task.status)}`);
+      console.log(`  Priority: ${task.priority}`);
+      if (task.description) console.log(`  Desc:     ${task.description}`);
+      if (task.result) {
+        console.log(`\n  ${chalk.green('Result:')}`);
+        console.log(`  ${task.result}`);
+      }
+      if (task.messages?.length > 0) {
+        console.log(`\n  ${chalk.cyan('Messages:')} (${task.messages.length})`);
+        for (const msg of task.messages.slice(-5)) {
+          const from = msg.from_name || 'Board';
+          console.log(
+            `    [${chalk.gray(new Date(msg.created_at).toLocaleTimeString())}] ${chalk.blue(from)}: ${msg.content.slice(0, 100)}`
+          );
+        }
+      }
+    });
+
+  return cmd;
+}
+packages/cli/src/commands/template.ts
+TypeScript
+import { Command } from 'commander';
+import chalk from 'chalk';
+import ora from 'ora';
+import fs from 'fs/promises';
+import { api } from '../utils/api.js';
+import { printTable } from '../utils/ui.js';
+
+export function templateCommands(): Command {
+  const cmd = new Command('template').description('Company templates');
+
+  cmd
+    .command('list-presets')
+    .description('List available preset templates')
+    .action(async () => {
+      const presets = await api('/templates/presets');
+      printTable(
+        ['Name', 'Agents', 'Goals', 'Tools', 'Policies', 'File'],
+        presets.map((p: any) => [
+          chalk.bold(p.name),
+          String(p.agents),
+          String(p.goals),
+          String(p.tools),
+          String(p.policies),
+          chalk.gray(p.filename),
+        ])
+      );
+    });
+
+  cmd
+    .command('import-preset <filename>')
+    .description('Import a preset template')
+    .option('-n, --name <name>', 'Override company name')
+    .option('-m, --mission <mission>', 'Override mission')
+    .action(async (filename, opts) => {
+      const spinner = ora(`Importing ${filename}...`).start();
+      const result = await api(`/templates/presets/${filename}/import`, {
+        method: 'POST',
+        body: JSON.stringify({
+          companyName: opts.name,
+          mission: opts.mission,
+        }),
+      });
+      spinner.succeed(`Company imported: ${chalk.bold(result.summary.companyName)}`);
+      console.log(`  ID:       ${chalk.gray(result.companyId)}`);
+      console.log(`  Agents:   ${result.summary.agents}`);
+      console.log(`  Goals:    ${result.summary.goals}`);
+      console.log(`  Tools:    ${result.summary.tools}`);
+      console.log(`  Policies: ${result.summary.policies}`);
+    });
+
+  cmd
+    .command('export <companyId>')
+    .description('Export company as template')
+    .option('-o, --output <file>', 'Output file')
+    .action(async (companyId, opts) => {
+      const spinner = ora('Exporting...').start();
+      const template = await api(`/companies/${companyId}/export`, {
+        method: 'POST',
+      });
+      const output = opts.output || `${template.name.toLowerCase().replace(/\s+/g, '-')}.json`;
+      await fs.writeFile(output, JSON.stringify(template, null, 2));
+      spinner.succeed(`Exported to ${chalk.bold(output)}`);
+    });
+
+  cmd
+    .command('import <file>')
+    .description('Import a template from file')
+    .option('-n, --name <name>', 'Override company name')
+    .action(async (file, opts) => {
+      const spinner = ora(`Importing ${file}...`).start();
+      const template = JSON.parse(await fs.readFile(file, 'utf-8'));
+      const result = await api('/templates/import', {
+        method: 'POST',
+        body: JSON.stringify({
+          template,
+          companyName: opts.name,
+        }),
+      });
+      spinner.succeed(`Imported: ${chalk.bold(result.summary.companyName)}`);
+    });
+
+  return cmd;
+}
+packages/cli/src/commands/status.ts
+TypeScript
+import { Command } from 'commander';
+import chalk from 'chalk';
+import { api } from '../utils/api.js';
+import { status, cost } from '../utils/ui.js';
+
+export function statusCommand(): Command {
+  return new Command('status')
+    .description('Quick overview of all companies')
+    .action(async () => {
+      const companies = await api('/companies');
+
+      console.log(chalk.bold('\n🏢 Autonomiczne Biuro Status\n'));
+
+      for (const company of companies) {
+        const stats = await api(`/companies/${company.id}/stats`);
+        const agents = await api(`/companies/${company.id}/agents`);
+
+        console.log(
+          `${chalk.bold.blue(company.name)} ${chalk.gray(`(${company.id.slice(0, 8)})`)}`
+        );
+        if (company.mission) {
+          console.log(`  ${chalk.gray(company.mission)}`);
+        }
+        console.log(`  💰 Cost: ${cost(stats.totalCostUsd)}`);
+        console.log(`  💓 Heartbeats (1h): ${stats.heartbeatsLastHour}`);
+
+        // Agents summary
+        const working = agents.filter(
+          (a: any) => a.status === 'working'
+        ).length;
+        const idle = agents.filter(
+          (a: any) => a.status === 'idle'
+        ).length;
+        const paused = agents.filter(
+          (a: any) => a.status === 'paused'
+        ).length;
+
+        console.log(
+          `  👥 Agents: ${chalk.green(`${working} working`)} | ${chalk.gray(`${idle} idle`)} | ${chalk.yellow(`${paused} paused`)}`
+        );
+
+        // Task summary
+        for (const ts of stats.tasks) {
+          process.stdout.write(`  ${status(ts.status)}: ${ts.count}  `);
+        }
+        console.log('\n');
+      }
+    });
+}
+packages/cli/src/commands/logs.ts
+TypeScript
+import { Command } from 'commander';
+import chalk from 'chalk';
+import { api } from '../utils/api.js';
+
+export function logsCommand(): Command {
+  return new Command('logs')
+    .description('Stream audit log')
+    .argument('<companyId>')
+    .option('-n, --limit <n>', 'Number of entries', '20')
+    .option('-f, --follow', 'Follow mode (poll every 5s)')
+    .action(async (companyId, opts) => {
+      const ACTION_ICONS: Record<string, string> = {
+        'heartbeat.completed': '💓',
+        'task.created': '📋',
+        'task.completed': '✅',
+        'agent.hired': '🤝',
+        'agent.terminated': '🔴',
+        'agent.auto_paused': '⚠️',
+        'tool.success': '🔧',
+        'approval.requested': '🎫',
+        'approval.approved': '✅',
+        'approval.rejected': '❌',
+      };
+
+      const printLogs = async () => {
+        const logs = await api(
+          `/companies/${companyId}/audit-log?limit=${opts.limit}`
+        );
+        for (const log of logs.reverse()) {
+          const icon = ACTION_ICONS[log.action] || '📝';
+          const time = new Date(log.created_at).toLocaleTimeString();
+          const agent = log.agent_name
+            ? chalk.blue(log.agent_name)
+            : chalk.gray('system');
+          const costStr =
+            log.cost_usd && parseFloat(log.cost_usd) > 0
+              ? chalk.yellow(` $${parseFloat(log.cost_usd).toFixed(4)}`)
+              : '';
+
+          console.log(
+            `${chalk.gray(time)} ${icon} ${chalk.white(log.action)} ${agent}${costStr}`
+          );
+        }
+      };
+
+      await printLogs();
+
+      if (opts.follow) {
+        console.log(chalk.gray('\n--- Following (Ctrl+C to stop) ---\n'));
+        setInterval(printLogs, 5000);
+      }
+    });
+}
+________________________________________
+Dashboard — New Pages
+src/pages/TemplatePage.tsx
+React
+import React, { useState } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { Button } from '../components/Form';
+import { EmptyState } from '../components/EmptyState';
+
+export function TemplatePage({
+  companyId,
+  onCompanyCreated,
+}: {
+  companyId: string;
+  onCompanyCreated: () => void;
+}) {
+  const { data: presets } = useApi(() =>
+    fetch('/api/templates/presets').then((r) => r.json())
+  );
+  const [importing, setImporting] = useState<string | null>(null);
+
+  const handleImportPreset = async (filename: string) => {
+    setImporting(filename);
+    try {
+      await fetch(`/api/templates/presets/${filename}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      onCompanyCreated();
+    } finally {
+      setImporting(null);
+    }
+  };
+
+  const handleExport = async () => {
+    const template = await fetch(`/api/companies/${companyId}/export`, {
+      method: 'POST',
+    }).then((r) => r.json());
+
+    // Download as JSON
+    const blob = new Blob([JSON.stringify(template, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${template.name.toLowerCase().replace(/\s+/g, '-')}-template.json`;
+    a.click();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Templates</h2>
+        <Button onClick={handleExport} variant="secondary">
+          📦 Export This Company
+        </Button>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold mb-3">Preset Templates</h3>
+        <p className="text-gray-500 text-sm mb-4">
+          Import a pre-built company with agents, goals, tools, and policies.
+          One click and you're running.
+        </p>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {presets?.map((preset: any) => (
+            <div
+              key={preset.filename}
+              className="bg-gray-900 rounded-lg border border-gray-800 p-4 hover:border-gray-700 transition-colors"
+            >
+              <h4 className="font-semibold mb-1">{preset.name}</h4>
+              <p className="text-sm text-gray-500 mb-3">
+                {preset.description}
+              </p>
+              <div className="flex items-center gap-3 text-xs text-gray-600 mb-3">
+                <span>👥 {preset.agents} agents</span>
+                <span>🎯 {preset.goals} goals</span>
+                <span>🔧 {preset.tools} tools</span>
+                <span>🛡️ {preset.policies} policies</span>
+              </div>
+              <Button
+                onClick={() => handleImportPreset(preset.filename)}
+                loading={importing === preset.filename}
+                className="w-full"
+              >
+                🚀 Import & Launch
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold mb-3">Import from File</h3>
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 text-center">
+          <input
+            type="file"
+            accept=".json"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const text = await file.text();
+              const template = JSON.parse(text);
+              await fetch('/api/templates/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ template }),
+              });
+              onCompanyCreated();
+            }}
+            className="text-sm text-gray-400"
+          />
+          <p className="text-xs text-gray-600 mt-2">
+            Upload a .json template file
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+src/pages/IntegrationsPage.tsx
+React
+import React, { useState } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { Button } from '../components/Form';
+import { Modal } from '../components/Modal';
+import { Input, Select, Textarea } from '../components/Form';
+import { StatusBadge } from '../components/StatusBadge';
+import { EmptyState } from '../components/EmptyState';
+
+export function IntegrationsPage({ companyId }: { companyId: string }) {
+  const { data: integrations, refetch } = useApi(
+    () =>
+      fetch(`/api/companies/${companyId}/integrations`).then((r) => r.json()),
+    [companyId]
+  );
+  const [showCreate, setShowCreate] = useState(false);
+  const [testing, setTesting] = useState<string | null>(null);
+
+  const handleTest = async (id: string) => {
+    setTesting(id);
+    try {
+      await fetch(`/api/integrations/${id}/test`, { method: 'POST' });
+      alert('Test sent!');
+    } catch (err: any) {
+      alert(`Failed: ${err.message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const toggleIntegration = async (id: string, enabled: boolean) => {
+    await fetch(`/api/integrations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !enabled }),
+    });
+    refetch();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Integrations</h2>
+        <Button onClick={() => setShowCreate(true)}>+ Add Integration</Button>
+      </div>
+
+      {integrations?.length === 0 ? (
+        <EmptyState
+          icon="🔗"
+          title="No integrations"
+          description="Connect Slack, Discord, email, or webhooks to get notified about events."
+          action={
+            <Button onClick={() => setShowCreate(true)}>
+              Add First Integration
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {integrations?.map((i: any) => (
+            <div
+              key={i.id}
+              className={`bg-gray-900 rounded-lg border p-4 ${
+                i.enabled ? 'border-gray-800' : 'border-gray-800/50 opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">
+                      {
+                        {
+                          slack: '💬',
+                          discord: '🎮',
+                          email: '📧',
+                          webhook: '🔗',
+                          telegram: '✈️',
+                        }[i.type] || '🔗'
+                      }
+                    </span>
+                    <h3 className="font-medium">{i.name}</h3>
+                    <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-400">
+                      {i.type}
+                    </span>
+                    <span className="text-xs text-gray-600">
+                      {i.total_sends} sent · {i.failed_sends} failed
+                    </span>
+                  </div>
+                  {i.events?.length > 0 && (
+                    <div className="flex gap-1 mt-2">
+                      {i.events.map((e: string) => (
+                        <span
+                          key={e}
+                          className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-500"
+                        >
+                          {e}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => handleTest(i.id)}
+                    loading={testing === i.id}
+                  >
+                    Test
+                  </Button>
+                  <button
+                    onClick={() => toggleIntegration(i.id, i.enabled)}
+                    className={`text-xs px-3 py-1 rounded ${
+                      i.enabled
+                        ? 'bg-green-900/50 text-green-400'
+                        : 'bg-gray-800 text-gray-500'
+                    }`}
+                  >
+                    {i.enabled ? 'Active' : 'Off'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <CreateIntegrationModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={refetch}
+        companyId={companyId}
+      />
+    </div>
+  );
+}
+
+function CreateIntegrationModal({
+  open,
+  onClose,
+  onCreated,
+  companyId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  companyId: string;
+}) {
+  const [type, setType] = useState('slack');
+  const [name, setName] = useState('');
+  const [configJson, setConfigJson] = useState('{"webhook_url": ""}');
+  const [events, setEvents] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const configTemplates: Record<string, string> = {
+    slack: '{"webhook_url": "https://hooks.slack.com/services/..."}',
+    discord: '{"webhook_url": "https://discord.com/api/webhooks/..."}',
+    email: '{"service": "resend", "api_key": "re_...", "to": "you@example.com"}',
+    webhook:
+      '{"url": "https://your-endpoint.com/webhook", "secret": "your-hmac-secret"}',
+  };
+
+  const handleTypeChange = (t: string) => {
+    setType(t);
+    setConfigJson(configTemplates[t] || '{}');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await fetch(`/api/companies/${companyId}/integrations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          name,
+          config: JSON.parse(configJson),
+          events: events
+            ? events.split(',').map((e) => e.trim())
+            : [],
+        }),
+      });
+      onCreated();
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Add Integration" wide>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Type"
+            value={type}
+            onChange={(e) => handleTypeChange(e.target.value)}
+            options={[
+              { value: 'slack', label: '💬 Slack' },
+              { value: 'discord', label: '🎮 Discord' },
+              { value: 'email', label: '📧 Email' },
+              { value: 'webhook', label: '🔗 Webhook' },
+            ]}
+          />
+          <Input
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My Slack notifications"
+            required
+          />
+        </div>
+        <Textarea
+          label="Config (JSON)"
+          value={configJson}
+          onChange={(e) => setConfigJson(e.target.value)}
+          rows={4}
+          className="font-mono text-xs"
+        />
+        <Input
+          label="Events (comma-separated, leave empty for all)"
+          value={events}
+          onChange={(e) => setEvents(e.target.value)}
+          placeholder="heartbeat.completed, task.completed, approval.requested"
+        />
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            🔗 Connect
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+src/pages/ReportsPage.tsx
+React
+import React, { useState } from 'react';
+import { useApi } from '../hooks/useApi';
+import { Button } from '../components/Form';
+import { EmptyState } from '../components/EmptyState';
+
+export function ReportsPage({ companyId }: { companyId: string }) {
+  const [report, setReport] = useState<any>(null);
+  const [generating, setGenerating] = useState(false);
+
+  const { data: scheduled, refetch } = useApi(
+    () =>
+      fetch(`/api/companies/${companyId}/reports/scheduled`).then((r) =>
+        r.json()
+      ),
+    [companyId]
+  );
+
+  const handleGenerate = async (type: string, periodDays: number) => {
+    setGenerating(true);
+    try {
+      const res = await fetch(
+        `/api/companies/${companyId}/reports/generate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, period_days: periodDays }),
+        }
+      );
+      const data = await res.json();
+      setReport(data);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Reports</h2>
+
+      {/* Quick generate */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <button
+          onClick={() => handleGenerate('daily_summary', 1)}
+          className="bg-gray-900 rounded-lg border border-gray-800 p-4 hover:border-blue-600 transition-colors text-left"
+        >
+          <p className="text-2xl mb-2">📊</p>
+          <h3 className="font-semibold">Daily Summary</h3>
+          <p className="text-sm text-gray-500">Last 24 hours</p>
+        </button>
+        <button
+          onClick={() => handleGenerate('weekly_report', 7)}
+          className="bg-gray-900 rounded-lg border border-gray-800 p-4 hover:border-blue-600 transition-colors text-left"
+        >
+          <p className="text-2xl mb-2">📈</p>
+          <h3 className="font-semibold">Weekly Report</h3>
+          <p className="text-sm text-gray-500">Last 7 days</p>
+        </button>
+        <button
+          onClick={() => handleGenerate('cost_report', 30)}
+          className="bg-gray-900 rounded-lg border border-gray-800 p-4 hover:border-blue-600 transition-colors text-left"
+        >
+          <p className="text-2xl mb-2">💰</p>
+          <h3 className="font-semibold">Cost Report</h3>
+          <p className="text-sm text-gray-500">Last 30 days</p>
+        </button>
+      </div>
+
+      {/* Generated report */}
+      {generating && (
+        <div className="text-center py-8 text-gray-500 animate-pulse">
+          Generating report...
+        </div>
+      )}
+
+      {report && (
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold">Generated Report</h3>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const blob = new Blob([report.formatted], {
+                  type: 'text/markdown',
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'report.md';
+                a.click();
+              }}
+            >
+              Download .md
+            </Button>
+          </div>
+          <div className="prose prose-invert prose-sm max-w-none">
+            <pre className="whitespace-pre-wrap text-sm text-gray-300 bg-gray-800 rounded-lg p-4 overflow-x-auto">
+              {report.formatted}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Scheduled reports */}
+      <div>
+        <h3 className="text-lg font-semibold mb-3">Scheduled Reports</h3>
+        {scheduled?.length === 0 ? (
+          <EmptyState
+            icon="⏰"
+            title="No scheduled reports"
+            description="Set up automatic daily or weekly reports delivered to Slack, Discord, or email."
+          />
+        ) : (
+          <div className="space-y-2">
+            {scheduled?.map((sr: any) => (
+              <div
+                key={sr.id}
+                className="bg-gray-900 rounded-lg border border-gray-800 p-3 flex items-center justify-between"
+              >
+                <div>
+                  <span className="font-medium">{sr.name}</span>
+                  <span className="text-xs text-gray-500 ml-2">
+                    {sr.type} · {sr.schedule}
+                  </span>
+                  {sr.last_run && (
+                    <span className="text-xs text-gray-600 ml-2">
+                      Last: {new Date(sr.last_run).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded ${
+                    sr.enabled
+                      ? 'bg-green-900/50 text-green-400'
+                      : 'bg-gray-800 text-gray-500'
+                  }`}
+                >
+                  {sr.enabled ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+________________________________________
+Updated App.tsx — all Faza 4 routes
+Add imports and routes:
+React
+import { TemplatePage } from './pages/TemplatePage';
+import { IntegrationsPage } from './pages/IntegrationsPage';
+import { ReportsPage } from './pages/ReportsPage';
+
+// In Routes:
+<Route path="/templates" element={
+  <TemplatePage companyId={companyId} onCompanyCreated={loadCompanies} />
+} />
+<Route path="/integrations" element={
+  <IntegrationsPage companyId={companyId} />
+} />
+<Route path="/reports" element={
+  <ReportsPage companyId={companyId} />
+} />
+Add to Sidebar:
+React
+import { Package, Link2, FileBarChart } from 'lucide-react';
+
+// Add to links array:
+{ to: '/templates', icon: Package, label: 'Templates' },
+{ to: '/integrations', icon: Link2, label: 'Integrations' },
+{ to: '/reports', icon: FileBarChart, label: 'Reports' },
+________________________________________
+Co masz po Fazie 4
+text
+✅ Faza 1 + 2 + 3 (wszystko z wcześniej)
+  +
+✅ AUTH SYSTEM:
+    ├── User registration & login
+    ├── Session tokens (72h)
+    ├── API keys (biuro_xxx)
+    ├── RBAC — owner/admin/member/viewer
+    ├── Per-company role assignment
+    ├── Auth middleware (skippable w dev mode)
+    └── Notifications table
+✅ TEMPLATES:
+    ├── Export company → JSON template
+    ├── Secret scrubbing (no API keys leak)
+    ├── Ref-based IDs (portable, no UUID collision)
+    ├── Import template → new company (atomic transaction)
+    ├── Preset templates:
+    │   ├── AI SaaS Startup (5 agents, goals, tools, policies)
+    │   ├── Content Agency (placeholder)
+    │   └── Dev Shop (placeholder)
+    ├── Template validation (ref integrity check)
+    ├── Template library (save/browse)
+    └── One-click import in UI
+✅ INTEGRATIONS:
+    ├── Slack webhooks
+    ├── Discord webhooks
+    ├── Email (Resend API)
+    ├── Custom webhooks (HMAC signed)
+    ├── Per-company, per-event filtering
+    ├── Auto-disable after 10 errors
+    ├── Test button
+    ├── Integration log (history)
+    └── Full CRUD UI
+✅ REPORTS:
+    ├── Report data generator:
+    │   ├── KPIs (cost, tasks, heartbeats, approvals)
+    │   ├── Per-agent performance
+    │   ├── Completed tasks
+    │   └── Issue detection (paused, budget, blocked, pending)
+    ├── Markdown report templates
+    ├── On-demand report generation (Daily/Weekly/Cost)
+    ├── Scheduled reports (cron-like)
+    ├── Report history
+    ├── Download as .md
+    └── Dispatch to integrations (Slack, email, etc.)
+✅ CLI TOOL:
+    ├── biuro company list|create|stats
+    ├── biuro agent list|hire|pause|resume|terminate
+    ├── biuro task list|create|show
+    ├── biuro template list-presets|import-preset|export|import
+    ├── biuro status (overview all companies)
+    ├── biuro logs <companyId> --follow
+    ├── Colored output (chalk)
+    ├── Progress spinners (ora)
+    └── Tables (cli-table3)
+✅ EVENT DISPATCH:
+    ├── heartbeat.completed → integrations
+    ├── task.completed → integrations
+    ├── approval.requested → integrations
+    ├── agent.auto_paused → integrations
+    ├── report.generated → integrations
+    └── Extensible for any event
+________________________________________
+Kompletna mapa systemu — Faza 1-4
+text
+🏢 AUTONOMICZNE BIURO
+│
+├── 📦 Server (Node.js + Express + PostgreSQL)
+│   ├── 🔐 Auth (users, sessions, API keys, RBAC)
+│   ├── 🏗️ Companies (multi-company, data isolation)
+│   ├── 🎯 Goals (hierarchiczne drzewo celów)
+│   ├── 👥 Agents (org chart, roles, reporting lines)
+│   ├── 📋 Tasks (atomic checkout, delegation, subtasks)
+│   ├── 💬 Messages (threaded conversations, tool results)
+│   ├── 🔧 Tools (registry, permissions, rate limits, execution)
+│   ├── 💰 Budgets (per-agent, monthly, hard limits)
+│   ├── 🛡️ Governance (policies, approval gates, rollback)
+│   ├── 🛑 Safety (loop detection, auto-pause, flood protect)
+│   ├── 💓 Orchestrator (heartbeats, context, scheduling)
+│   ├── 🤖 Runtimes (Claude, OpenAI, HTTP, Bash, extensible)
+│   ├── 📦 Templates (export, import, presets, sanitization)
+│   ├── 🔗 Integrations (Slack, Discord, email, webhooks)
+│   ├── 📊 Reports (daily, weekly, cost, scheduled, formatted)
+│   ├── 📝 Audit Log (every action, every decision, immutable)
+│   └── 🔌 WebSocket (live events to dashboard)
+│
+├── 💻 Dashboard (React + Vite + Tailwind)
+│   ├── 📊 Dashboard (KPIs, agent status, live feed)
+│   ├── 👥 Agents (list, detail, hire form, budget bars)
+│   ├── 📋 Tasks (list, detail, create, message thread)
+│   ├── 🎯 Goals (interactive tree)
+│   ├── 🏗️ Org Chart (hierarchia wizualna)
+│   ├── 🔧 Tools (registry, enable/disable, call history)
+│   ├── 🛡️ Policies (CRUD, presets, toggle)
+│   ├── 🎫 Approvals (approve/reject, payload preview)
+│   ├── 💰 Budgets (per-agent bars, company total)
+│   ├── 📝 Audit Log (pełna historia)
+│   ├── 📦 Templates (import presets, export, upload)
+│   ├── 🔗 Integrations (setup, test, logs)
+│   ├── 📊 Reports (generate, schedule, download)
+│   └── 📱 Mobile responsive
+│
+├── ⌨️ CLI (commander + chalk)
+│   ├── biuro company ...
+│   ├── biuro agent ...
+│   ├── biuro task ...
+│   ├── biuro template ...
+│   ├── biuro status
+│   └── biuro logs --follow
+│
+└── 🐳 Docker
+    ├── PostgreSQL
+    ├── Server
+    ├── Dashboard (nginx)
+    └── docker compose up
+

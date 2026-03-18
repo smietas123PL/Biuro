@@ -1,0 +1,2023 @@
+Faza 1 — Działający prototyp
+Budujemy minimum, które działa end-to-end: tworzysz firmę, dodajesz agenta, wrzucasz task, agent go robi.
+________________________________________
+Struktura plików (Faza 1)
+text
+autonomiczne-biuro/
+├── package.json
+├── pnpm-workspace.yaml
+├── .env
+├── packages/
+│   ├── server/
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   ├── src/
+│   │   │   ├── index.ts
+│   │   │   ├── env.ts
+│   │   │   ├── db/
+│   │   │   │   ├── client.ts
+│   │   │   │   ├── schema.sql
+│   │   │   │   └── migrate.ts
+│   │   │   ├── routes/
+│   │   │   │   ├── companies.ts
+│   │   │   │   ├── agents.ts
+│   │   │   │   ├── tasks.ts
+│   │   │   │   ├── messages.ts
+│   │   │   │   └── index.ts
+│   │   │   ├── orchestrator/
+│   │   │   │   ├── heartbeat.ts
+│   │   │   │   ├── context.ts
+│   │   │   │   ├── checkout.ts
+│   │   │   │   └── scheduler.ts
+│   │   │   ├── runtimes/
+│   │   │   │   ├── types.ts
+│   │   │   │   ├── claude.ts
+│   │   │   │   ├── openai.ts
+│   │   │   │   └── registry.ts
+│   │   │   └── utils/
+│   │   │       ├── logger.ts
+│   │   │       └── ids.ts
+│   │   └── ...
+│   └── dashboard/
+│       └── (później)
+________________________________________
+Konfiguracja projektu
+pnpm-workspace.yaml
+YAML
+packages:
+  - 'packages/*'
+.env
+env
+DATABASE_URL=postgresql://localhost:5432/autonomiczne_biuro
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+PORT=3100
+HEARTBEAT_INTERVAL_MS=30000
+LOG_LEVEL=debug
+packages/server/package.json
+JSON
+{
+  "name": "@biuro/server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "migrate": "tsx src/db/migrate.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "dotenv": "^16.4.0",
+    "zod": "^3.23.0",
+    "uuid": "^10.0.0",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "@anthropic-ai/sdk": "^0.32.0",
+    "openai": "^4.70.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "@types/express": "^5.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/uuid": "^10.0.0"
+  }
+}
+packages/server/tsconfig.json
+JSON
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
+________________________________________
+Baza danych
+src/db/schema.sql
+SQL
+-- ================================================
+-- AUTONOMICZNE BIURO — Schema v1
+-- ================================================
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ============ FIRMY ============
+
+CREATE TABLE companies (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  mission     TEXT,
+  config      JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- ============ CELE ============
+
+CREATE TABLE goals (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  parent_id   UUID REFERENCES goals(id) ON DELETE SET NULL,
+  title       TEXT NOT NULL,
+  description TEXT,
+  status      TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'achieved', 'abandoned')),
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_goals_company ON goals(company_id);
+CREATE INDEX idx_goals_parent ON goals(parent_id);
+
+-- ============ AGENCI ============
+
+CREATE TABLE agents (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id    UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  role          TEXT NOT NULL,
+  title         TEXT,
+  reports_to    UUID REFERENCES agents(id) ON DELETE SET NULL,
+  runtime       TEXT NOT NULL DEFAULT 'claude',
+  model         TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+  system_prompt TEXT,
+  config        JSONB DEFAULT '{}',
+  status        TEXT NOT NULL DEFAULT 'idle'
+    CHECK (status IN ('idle', 'working', 'paused', 'terminated')),
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_agents_company ON agents(company_id);
+CREATE INDEX idx_agents_status ON agents(status);
+CREATE INDEX idx_agents_reports_to ON agents(reports_to);
+
+-- ============ BUDŻETY ============
+
+CREATE TABLE budgets (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id    UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  month       DATE NOT NULL,
+  limit_usd   NUMERIC(10,2) NOT NULL DEFAULT 50.00,
+  spent_usd   NUMERIC(10,4) NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(agent_id, month)
+);
+
+CREATE INDEX idx_budgets_agent_month ON budgets(agent_id, month);
+
+-- ============ TASKI ============
+
+CREATE TABLE tasks (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id    UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  goal_id       UUID REFERENCES goals(id) ON DELETE SET NULL,
+  parent_id     UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  title         TEXT NOT NULL,
+  description   TEXT,
+  assigned_to   UUID REFERENCES agents(id) ON DELETE SET NULL,
+  created_by    TEXT,  -- agent UUID lub 'board'
+  status        TEXT NOT NULL DEFAULT 'backlog'
+    CHECK (status IN (
+      'backlog', 'assigned', 'in_progress',
+      'review', 'done', 'blocked', 'cancelled'
+    )),
+  priority      INT NOT NULL DEFAULT 0,
+  locked_by     UUID REFERENCES agents(id) ON DELETE SET NULL,
+  locked_at     TIMESTAMPTZ,
+  result        TEXT,
+  metadata      JSONB DEFAULT '{}',
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_tasks_company ON tasks(company_id);
+CREATE INDEX idx_tasks_assigned ON tasks(assigned_to);
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_goal ON tasks(goal_id);
+
+-- ============ WIADOMOŚCI ============
+
+CREATE TABLE messages (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  task_id     UUID REFERENCES tasks(id) ON DELETE CASCADE,
+  from_agent  UUID REFERENCES agents(id) ON DELETE SET NULL,
+  to_agent    UUID REFERENCES agents(id) ON DELETE SET NULL,
+  content     TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'message'
+    CHECK (type IN (
+      'message', 'delegation', 'status_update',
+      'approval_request', 'tool_call', 'tool_result',
+      'heartbeat_log'
+    )),
+  metadata    JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_messages_task ON messages(task_id);
+CREATE INDEX idx_messages_from ON messages(from_agent);
+CREATE INDEX idx_messages_created ON messages(created_at);
+
+-- ============ AUDIT LOG ============
+
+CREATE TABLE audit_log (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  agent_id    UUID REFERENCES agents(id) ON DELETE SET NULL,
+  action      TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id   UUID,
+  details     JSONB DEFAULT '{}',
+  cost_usd    NUMERIC(10,6),
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_audit_company ON audit_log(company_id);
+CREATE INDEX idx_audit_agent ON audit_log(agent_id);
+CREATE INDEX idx_audit_action ON audit_log(action);
+CREATE INDEX idx_audit_created ON audit_log(created_at);
+
+-- ============ HEARTBEATS ============
+
+CREATE TABLE heartbeats (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id    UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  task_id     UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  status      TEXT NOT NULL, -- 'idle' | 'worked' | 'budget_exceeded' | 'error'
+  duration_ms INT,
+  cost_usd    NUMERIC(10,6),
+  details     JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_heartbeats_agent ON heartbeats(agent_id);
+CREATE INDEX idx_heartbeats_created ON heartbeats(created_at);
+
+-- ============ SESJE AGENTÓW ============
+
+CREATE TABLE agent_sessions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id    UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  task_id     UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  state       JSONB DEFAULT '{}',  -- persystentny stan konwersacji
+  updated_at  TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(agent_id, task_id)
+);
+
+-- ============ UPDATED_AT TRIGGER ============
+
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_companies_updated BEFORE UPDATE ON companies
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_agents_updated BEFORE UPDATE ON agents
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_tasks_updated BEFORE UPDATE ON tasks
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_goals_updated BEFORE UPDATE ON goals
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+src/db/client.ts
+TypeScript
+import pg from 'pg';
+import { env } from '../env.js';
+import { logger } from '../utils/logger.js';
+
+const pool = new pg.Pool({
+  connectionString: env.DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30000,
+});
+
+pool.on('error', (err) => {
+  logger.error({ err }, 'Unexpected database pool error');
+});
+
+export const db = {
+  query: <T extends pg.QueryResultRow = any>(
+    text: string,
+    params?: any[]
+  ) => pool.query<T>(text, params),
+
+  getClient: () => pool.connect(),
+
+  // Transakcja z auto-rollback
+  transaction: async <T>(
+    fn: (client: pg.PoolClient) => Promise<T>
+  ): Promise<T> => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  close: () => pool.end(),
+};
+src/db/migrate.ts
+TypeScript
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { db } from './client.js';
+import { logger } from '../utils/logger.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+async function migrate() {
+  const schema = fs.readFileSync(
+    path.join(__dirname, 'schema.sql'),
+    'utf-8'
+  );
+
+  try {
+    await db.query(schema);
+    logger.info('Database migration completed successfully');
+  } catch (err: any) {
+    // Jeśli tabele już istnieją, to OK
+    if (err.code === '42P07') {
+      logger.info('Tables already exist, skipping migration');
+    } else {
+      logger.error({ err }, 'Migration failed');
+      throw err;
+    }
+  } finally {
+    await db.close();
+  }
+}
+
+migrate();
+________________________________________
+Utils
+src/env.ts
+TypeScript
+import dotenv from 'dotenv';
+import { z } from 'zod';
+
+dotenv.config();
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  PORT: z.coerce.number().default(3100),
+  HEARTBEAT_INTERVAL_MS: z.coerce.number().default(30000),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+});
+
+export const env = envSchema.parse(process.env);
+src/utils/logger.ts
+TypeScript
+import pino from 'pino';
+import { env } from '../env.js';
+
+export const logger = pino({
+  level: env.LOG_LEVEL,
+  transport:
+    process.env.NODE_ENV !== 'production'
+      ? { target: 'pino-pretty', options: { colorize: true } }
+      : undefined,
+});
+src/utils/ids.ts
+TypeScript
+import { v4 as uuidv4 } from 'uuid';
+
+export const newId = () => uuidv4();
+________________________________________
+Runtimes
+src/runtimes/types.ts
+TypeScript
+export interface AgentAction {
+  type:
+    | 'complete_task'
+    | 'delegate'
+    | 'message'
+    | 'request_approval'
+    | 'blocked'
+    | 'continue'; // agent chce kontynuować w następnym heartbeatcie
+  result?: string;
+  to?: string;       // agent_id
+  content?: string;
+  description?: string;
+  reason?: string;
+  payload?: any;
+}
+
+export interface AgentResponse {
+  actions: AgentAction[];
+  rawResponse: string;
+  cost: {
+    input_tokens: number;
+    output_tokens: number;
+    usd: number;
+  };
+  sessionState?: any; // do persystencji
+}
+
+export interface AgentContext {
+  systemPrompt: string;
+  taskDescription: string;
+  conversationHistory: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
+  availableActions: string[];
+  sessionState?: any;
+}
+
+export interface AgentRuntime {
+  name: string;
+  execute(context: AgentContext): Promise<AgentResponse>;
+}
+src/runtimes/claude.ts
+TypeScript
+import Anthropic from '@anthropic-ai/sdk';
+import { env } from '../env.js';
+import { logger } from '../utils/logger.js';
+import type { AgentRuntime, AgentContext, AgentResponse, AgentAction } from './types.js';
+
+const COST_PER_MTK_INPUT = 3.0;   // Claude Sonnet — $3/MTk input
+const COST_PER_MTK_OUTPUT = 15.0;  // $15/MTk output
+
+export class ClaudeRuntime implements AgentRuntime {
+  name = 'claude';
+  private client: Anthropic;
+
+  constructor() {
+    if (!env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY is required for Claude runtime');
+    }
+    this.client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  }
+
+  async execute(context: AgentContext): Promise<AgentResponse> {
+    const actionSchema = `
+Respond with a JSON object containing your actions. Format:
+{
+  "thinking": "your reasoning about what to do",
+  "actions": [
+    {
+      "type": "complete_task",
+      "result": "description of what you accomplished"
+    }
+  ]
+}
+
+Available action types:
+- complete_task: { "type": "complete_task", "result": "..." }
+- delegate: { "type": "delegate", "to": "agent_role", "description": "..." }
+- message: { "type": "message", "to": "agent_role", "content": "..." }
+- blocked: { "type": "blocked", "reason": "..." }
+- continue: { "type": "continue", "result": "progress so far..." }
+
+You may include multiple actions. Always include at least one.
+Respond ONLY with valid JSON.`;
+
+    const messages: Anthropic.MessageParam[] = [
+      ...context.conversationHistory.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+      {
+        role: 'user' as const,
+        content: `${context.taskDescription}\n\n${actionSchema}`,
+      },
+    ];
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      system: context.systemPrompt,
+      messages,
+    });
+
+    const rawText =
+      response.content[0].type === 'text' ? response.content[0].text : '';
+
+    // Parse response
+    let actions: AgentAction[] = [];
+    try {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        actions = parsed.actions || [];
+      }
+    } catch (err) {
+      logger.warn({ rawText }, 'Failed to parse agent JSON, treating as complete');
+      actions = [{ type: 'complete_task', result: rawText }];
+    }
+
+    const inputTokens = response.usage.input_tokens;
+    const outputTokens = response.usage.output_tokens;
+    const costUsd =
+      (inputTokens / 1_000_000) * COST_PER_MTK_INPUT +
+      (outputTokens / 1_000_000) * COST_PER_MTK_OUTPUT;
+
+    return {
+      actions,
+      rawResponse: rawText,
+      cost: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        usd: costUsd,
+      },
+    };
+  }
+}
+src/runtimes/openai.ts
+TypeScript
+import OpenAI from 'openai';
+import { env } from '../env.js';
+import { logger } from '../utils/logger.js';
+import type { AgentRuntime, AgentContext, AgentResponse, AgentAction } from './types.js';
+
+const COST_PER_MTK_INPUT = 2.5;   // GPT-4o
+const COST_PER_MTK_OUTPUT = 10.0;
+
+export class OpenAIRuntime implements AgentRuntime {
+  name = 'openai';
+  private client: OpenAI;
+
+  constructor() {
+    if (!env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is required for OpenAI runtime');
+    }
+    this.client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  }
+
+  async execute(context: AgentContext): Promise<AgentResponse> {
+    const actionSchema = `
+Respond with a JSON object containing your actions. Format:
+{
+  "thinking": "your reasoning",
+  "actions": [
+    { "type": "complete_task", "result": "..." }
+  ]
+}
+
+Available action types:
+- complete_task: { "type": "complete_task", "result": "..." }
+- delegate: { "type": "delegate", "to": "agent_role", "description": "..." }
+- message: { "type": "message", "to": "agent_role", "content": "..." }
+- blocked: { "type": "blocked", "reason": "..." }
+- continue: { "type": "continue", "result": "progress so far..." }
+
+Respond ONLY with valid JSON.`;
+
+    const messages: OpenAI.ChatCompletionMessageParam[] = [
+      { role: 'system', content: context.systemPrompt },
+      ...context.conversationHistory.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+      {
+        role: 'user',
+        content: `${context.taskDescription}\n\n${actionSchema}`,
+      },
+    ];
+
+    const response = await this.client.chat.completions.create({
+      model: 'gpt-4o',
+      max_tokens: 4096,
+      messages,
+      response_format: { type: 'json_object' },
+    });
+
+    const rawText = response.choices[0]?.message?.content || '';
+
+    let actions: AgentAction[] = [];
+    try {
+      const parsed = JSON.parse(rawText);
+      actions = parsed.actions || [];
+    } catch {
+      logger.warn({ rawText }, 'Failed to parse agent JSON');
+      actions = [{ type: 'complete_task', result: rawText }];
+    }
+
+    const usage = response.usage;
+    const inputTokens = usage?.prompt_tokens || 0;
+    const outputTokens = usage?.completion_tokens || 0;
+    const costUsd =
+      (inputTokens / 1_000_000) * COST_PER_MTK_INPUT +
+      (outputTokens / 1_000_000) * COST_PER_MTK_OUTPUT;
+
+    return {
+      actions,
+      rawResponse: rawText,
+      cost: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        usd: costUsd,
+      },
+    };
+  }
+}
+src/runtimes/registry.ts
+TypeScript
+import type { AgentRuntime } from './types.js';
+import { ClaudeRuntime } from './claude.js';
+import { OpenAIRuntime } from './openai.js';
+import { env } from '../env.js';
+import { logger } from '../utils/logger.js';
+
+const runtimes: Map<string, AgentRuntime> = new Map();
+
+export function initRuntimes() {
+  if (env.ANTHROPIC_API_KEY) {
+    runtimes.set('claude', new ClaudeRuntime());
+    logger.info('Registered Claude runtime');
+  }
+
+  if (env.OPENAI_API_KEY) {
+    runtimes.set('openai', new OpenAIRuntime());
+    logger.info('Registered OpenAI runtime');
+  }
+
+  if (runtimes.size === 0) {
+    logger.warn('No API keys configured — no runtimes available');
+  }
+}
+
+export function getRuntime(name: string): AgentRuntime {
+  const runtime = runtimes.get(name);
+  if (!runtime) {
+    throw new Error(
+      `Runtime "${name}" not available. Configured: ${[...runtimes.keys()].join(', ')}`
+    );
+  }
+  return runtime;
+}
+
+export function listRuntimes(): string[] {
+  return [...runtimes.keys()];
+}
+________________________________________
+Orchestrator
+src/orchestrator/checkout.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+
+interface TaskRow {
+  id: string;
+  title: string;
+  description: string;
+  goal_id: string;
+  status: string;
+  priority: number;
+}
+
+/**
+ * Atomically checkout the next available task for an agent.
+ * Uses FOR UPDATE SKIP LOCKED to prevent double-checkout.
+ */
+export async function checkoutNextTask(
+  agentId: string,
+  companyId: string
+): Promise<TaskRow | null> {
+  const result = await db.query<TaskRow>(
+    `
+    UPDATE tasks
+    SET
+      locked_by = $1,
+      locked_at = now(),
+      status = 'in_progress'
+    WHERE id = (
+      SELECT id FROM tasks
+      WHERE company_id = $2
+        AND assigned_to = $1
+        AND status = 'assigned'
+        AND locked_by IS NULL
+      ORDER BY priority DESC, created_at ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING *
+    `,
+    [agentId, companyId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  logger.debug(
+    { agentId, taskId: result.rows[0].id },
+    'Task checked out'
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * Get the currently active (in_progress + locked) task for an agent.
+ */
+export async function getActiveTask(
+  agentId: string
+): Promise<TaskRow | null> {
+  const result = await db.query<TaskRow>(
+    `
+    SELECT * FROM tasks
+    WHERE assigned_to = $1
+      AND status = 'in_progress'
+      AND locked_by = $1
+    ORDER BY priority DESC
+    LIMIT 1
+    `,
+    [agentId]
+  );
+
+  return result.rows[0] || null;
+}
+
+/**
+ * Release a task lock (on completion or error).
+ */
+export async function releaseTask(
+  taskId: string,
+  status: string,
+  result?: string
+) {
+  await db.query(
+    `
+    UPDATE tasks
+    SET
+      locked_by = NULL,
+      locked_at = NULL,
+      status = $2,
+      result = COALESCE($3, result)
+    WHERE id = $1
+    `,
+    [taskId, status, result]
+  );
+}
+src/orchestrator/context.ts
+TypeScript
+import { db } from '../db/client.js';
+
+interface GoalRow {
+  id: string;
+  title: string;
+  description: string;
+  parent_id: string | null;
+}
+
+interface AgentRow {
+  id: string;
+  name: string;
+  role: string;
+  title: string;
+  reports_to: string | null;
+  system_prompt: string | null;
+}
+
+interface MessageRow {
+  from_agent: string | null;
+  from_name?: string;
+  content: string;
+  type: string;
+  created_at: Date;
+}
+
+/**
+ * Walk up the goal tree to build full ancestry.
+ */
+async function getGoalAncestry(goalId: string | null): Promise<GoalRow[]> {
+  if (!goalId) return [];
+
+  const chain: GoalRow[] = [];
+  let currentId: string | null = goalId;
+
+  while (currentId) {
+    const result = await db.query<GoalRow>(
+      'SELECT * FROM goals WHERE id = $1',
+      [currentId]
+    );
+    if (result.rows.length === 0) break;
+    chain.unshift(result.rows[0]); // parent first
+    currentId = result.rows[0].parent_id;
+  }
+
+  return chain;
+}
+
+/**
+ * Get conversation history for a task.
+ */
+async function getTaskMessages(taskId: string): Promise<MessageRow[]> {
+  const result = await db.query<MessageRow>(
+    `
+    SELECT
+      m.*,
+      a.name as from_name
+    FROM messages m
+    LEFT JOIN agents a ON a.id = m.from_agent
+    WHERE m.task_id = $1
+    ORDER BY m.created_at ASC
+    LIMIT 50
+    `,
+    [taskId]
+  );
+  return result.rows;
+}
+
+/**
+ * Build full context for an agent executing a task.
+ */
+export async function buildContext(
+  agent: AgentRow,
+  task: any,
+  companyMission: string
+) {
+  // Goal ancestry
+  const goalChain = await getGoalAncestry(task.goal_id);
+
+  // Boss
+  let boss: AgentRow | null = null;
+  if (agent.reports_to) {
+    const r = await db.query<AgentRow>(
+      'SELECT * FROM agents WHERE id = $1',
+      [agent.reports_to]
+    );
+    boss = r.rows[0] || null;
+  }
+
+  // Direct reports
+  const reportsResult = await db.query<AgentRow>(
+    'SELECT * FROM agents WHERE reports_to = $1 AND status != $2',
+    [agent.id, 'terminated']
+  );
+  const reports = reportsResult.rows;
+
+  // Conversation history
+  const messages = await getTaskMessages(task.id);
+
+  // Session state
+  const sessionResult = await db.query(
+    'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2',
+    [agent.id, task.id]
+  );
+  const sessionState = sessionResult.rows[0]?.state || null;
+
+  // Build system prompt
+  const systemPrompt = `
+${agent.system_prompt || `You are ${agent.name}, a skilled ${agent.role}.`}
+
+COMPANY MISSION: ${companyMission}
+
+YOUR IDENTITY:
+- Name: ${agent.name}
+- Role: ${agent.role}
+- Title: ${agent.title || agent.role}
+- Reports to: ${boss ? `${boss.name} (${boss.role})` : 'Board (human oversight)'}
+- Direct reports: ${reports.length > 0 ? reports.map((r) => `${r.name} (${r.role})`).join(', ') : 'none'}
+
+${
+  goalChain.length > 0
+    ? `GOAL HIERARCHY (why this task exists):
+${goalChain.map((g, i) => '  '.repeat(i) + '→ ' + g.title + (g.description ? `: ${g.description}` : '')).join('\n')}`
+    : ''
+}
+
+RULES:
+1. Always respond with valid JSON containing your actions.
+2. Focus on your assigned task. Don't exceed your role.
+3. If you need something from another agent, use the "message" action.
+4. If you can't proceed, use "blocked" with a clear reason.
+5. If work is partially done, use "continue" to save progress.
+6. When the task is fully complete, use "complete_task" with a thorough result.
+`.trim();
+
+  // Build conversation history for the LLM
+  const conversationHistory = messages.map((m) => ({
+    role: (m.from_agent === agent.id ? 'assistant' : 'user') as
+      | 'user'
+      | 'assistant',
+    content: `[${m.from_name || 'Board'}] (${m.type}): ${m.content}`,
+  }));
+
+  const taskDescription = `
+CURRENT TASK:
+Title: ${task.title}
+Description: ${task.description || 'No additional description.'}
+Status: ${task.status}
+Priority: ${task.priority}
+
+${sessionState ? `PREVIOUS SESSION STATE:\n${JSON.stringify(sessionState, null, 2)}` : 'This is a fresh task — no previous work.'}
+
+What will you do?
+`.trim();
+
+  return {
+    systemPrompt,
+    taskDescription,
+    conversationHistory,
+    availableActions: [
+      'complete_task',
+      'delegate',
+      'message',
+      'blocked',
+      'continue',
+    ],
+    sessionState,
+  };
+}
+src/orchestrator/heartbeat.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+import { getRuntime } from '../runtimes/registry.js';
+import { buildContext } from './context.js';
+import { checkoutNextTask, getActiveTask, releaseTask } from './checkout.js';
+import type { AgentAction } from '../runtimes/types.js';
+
+interface AgentRow {
+  id: string;
+  company_id: string;
+  name: string;
+  role: string;
+  title: string;
+  reports_to: string | null;
+  runtime: string;
+  model: string;
+  system_prompt: string | null;
+  status: string;
+}
+
+/**
+ * Run a single heartbeat for one agent.
+ */
+export async function agentHeartbeat(agent: AgentRow): Promise<void> {
+  const startTime = Date.now();
+  logger.info({ agent: agent.name, agentId: agent.id }, '💓 Heartbeat start');
+
+  try {
+    // 1. Check budget
+    const currentMonth = new Date().toISOString().slice(0, 7) + '-01';
+    const budgetResult = await db.query(
+      'SELECT * FROM budgets WHERE agent_id = $1 AND month = $2',
+      [agent.id, currentMonth]
+    );
+    const budget = budgetResult.rows[0];
+
+    if (budget && parseFloat(budget.spent_usd) >= parseFloat(budget.limit_usd)) {
+      logger.warn({ agent: agent.name }, '💰 Budget exceeded, skipping');
+      await logHeartbeat(agent.id, null, 'budget_exceeded', Date.now() - startTime, 0);
+      return;
+    }
+
+    // 2. Find work
+    let task = await getActiveTask(agent.id);
+    if (!task) {
+      task = await checkoutNextTask(agent.id, agent.company_id);
+    }
+    if (!task) {
+      logger.debug({ agent: agent.name }, '😴 No tasks, idle');
+      await logHeartbeat(agent.id, null, 'idle', Date.now() - startTime, 0);
+      return;
+    }
+
+    // 3. Update agent status
+    await db.query(
+      "UPDATE agents SET status = 'working' WHERE id = $1",
+      [agent.id]
+    );
+
+    // 4. Get company mission
+    const companyResult = await db.query(
+      'SELECT mission FROM companies WHERE id = $1',
+      [agent.company_id]
+    );
+    const mission = companyResult.rows[0]?.mission || 'No mission defined.';
+
+    // 5. Build context
+    const context = await buildContext(agent, task, mission);
+
+    // 6. Execute
+    const runtime = getRuntime(agent.runtime);
+    const response = await runtime.execute(context);
+
+    logger.info(
+      {
+        agent: agent.name,
+        task: task.title,
+        actions: response.actions.map((a) => a.type),
+        cost: response.cost.usd.toFixed(4),
+      },
+      '🤖 Agent responded'
+    );
+
+    // 7. Record cost
+    if (budget) {
+      await db.query(
+        'UPDATE budgets SET spent_usd = spent_usd + $1 WHERE id = $2',
+        [response.cost.usd, budget.id]
+      );
+    }
+
+    // 8. Log the raw response as a message
+    await db.query(
+      `INSERT INTO messages (company_id, task_id, from_agent, content, type, metadata)
+       VALUES ($1, $2, $3, $4, 'heartbeat_log', $5)`,
+      [
+        agent.company_id,
+        task.id,
+        agent.id,
+        response.rawResponse,
+        JSON.stringify({ cost: response.cost }),
+      ]
+    );
+
+    // 9. Process actions
+    for (const action of response.actions) {
+      await processAction(agent, task, action);
+    }
+
+    // 10. Update agent status back to idle
+    await db.query(
+      "UPDATE agents SET status = 'idle' WHERE id = $1",
+      [agent.id]
+    );
+
+    // 11. Log heartbeat
+    await logHeartbeat(
+      agent.id,
+      task.id,
+      'worked',
+      Date.now() - startTime,
+      response.cost.usd
+    );
+
+    // 12. Audit
+    await db.query(
+      `INSERT INTO audit_log (company_id, agent_id, action, entity_type, entity_id, details, cost_usd)
+       VALUES ($1, $2, 'heartbeat.completed', 'task', $3, $4, $5)`,
+      [
+        agent.company_id,
+        agent.id,
+        task.id,
+        JSON.stringify({
+          actions: response.actions.map((a) => a.type),
+          tokens: response.cost,
+        }),
+        response.cost.usd,
+      ]
+    );
+  } catch (err) {
+    logger.error({ err, agent: agent.name }, '❌ Heartbeat failed');
+    await db.query(
+      "UPDATE agents SET status = 'idle' WHERE id = $1",
+      [agent.id]
+    );
+    await logHeartbeat(agent.id, null, 'error', Date.now() - startTime, 0, err);
+  }
+}
+
+/**
+ * Process a single action from an agent's response.
+ */
+async function processAction(
+  agent: AgentRow,
+  task: any,
+  action: AgentAction
+): Promise<void> {
+  switch (action.type) {
+    case 'complete_task':
+      await releaseTask(task.id, 'done', action.result);
+      logger.info({ agent: agent.name, task: task.title }, '✅ Task completed');
+      break;
+
+    case 'delegate': {
+      // Find target agent by role
+      const targetResult = await db.query(
+        `SELECT id FROM agents
+         WHERE company_id = $1
+           AND role = $2
+           AND status != 'terminated'
+         LIMIT 1`,
+        [agent.company_id, action.to]
+      );
+      const targetId = targetResult.rows[0]?.id;
+
+      if (targetId) {
+        await db.query(
+          `INSERT INTO tasks
+            (company_id, goal_id, parent_id, title, description, assigned_to, created_by, status, priority)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'assigned', $8)`,
+          [
+            agent.company_id,
+            task.goal_id,
+            task.id,
+            action.description || `Subtask from ${agent.name}`,
+            action.description,
+            targetId,
+            agent.id,
+            task.priority,
+          ]
+        );
+        logger.info(
+          { from: agent.name, to: action.to },
+          '📋 Task delegated'
+        );
+      } else {
+        logger.warn(
+          { role: action.to },
+          '⚠️ Delegation target role not found'
+        );
+      }
+      break;
+    }
+
+    case 'message': {
+      const recipientResult = await db.query(
+        `SELECT id FROM agents
+         WHERE company_id = $1
+           AND role = $2
+           AND status != 'terminated'
+         LIMIT 1`,
+        [agent.company_id, action.to]
+      );
+      const recipientId = recipientResult.rows[0]?.id || null;
+
+      await db.query(
+        `INSERT INTO messages (company_id, task_id, from_agent, to_agent, content, type)
+         VALUES ($1, $2, $3, $4, $5, 'message')`,
+        [agent.company_id, task.id, agent.id, recipientId, action.content]
+      );
+      logger.info(
+        { from: agent.name, to: action.to },
+        '💬 Message sent'
+      );
+      break;
+    }
+
+    case 'blocked':
+      await releaseTask(task.id, 'blocked', action.reason);
+      logger.warn(
+        { agent: agent.name, reason: action.reason },
+        '🚫 Task blocked'
+      );
+      break;
+
+    case 'continue':
+      // Save session state — agent will continue next heartbeat
+      await db.query(
+        `INSERT INTO agent_sessions (agent_id, task_id, state)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (agent_id, task_id)
+         DO UPDATE SET state = $3, updated_at = now()`,
+        [agent.id, task.id, JSON.stringify({ progress: action.result })]
+      );
+      logger.info(
+        { agent: agent.name, task: task.title },
+        '⏳ Agent will continue next heartbeat'
+      );
+      break;
+  }
+}
+
+/**
+ * Log a heartbeat record.
+ */
+async function logHeartbeat(
+  agentId: string,
+  taskId: string | null,
+  status: string,
+  durationMs: number,
+  costUsd: number,
+  error?: any
+) {
+  await db.query(
+    `INSERT INTO heartbeats (agent_id, task_id, status, duration_ms, cost_usd, details)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      agentId,
+      taskId,
+      status,
+      durationMs,
+      costUsd,
+      error ? JSON.stringify({ error: String(error) }) : '{}',
+    ]
+  );
+}
+src/orchestrator/scheduler.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+import { agentHeartbeat } from './heartbeat.js';
+import { env } from '../env.js';
+
+interface AgentRow {
+  id: string;
+  company_id: string;
+  name: string;
+  role: string;
+  title: string;
+  reports_to: string | null;
+  runtime: string;
+  model: string;
+  system_prompt: string | null;
+  status: string;
+}
+
+let intervalHandle: NodeJS.Timeout | null = null;
+
+/**
+ * Start the heartbeat scheduler.
+ * Every HEARTBEAT_INTERVAL_MS, find all active agents and run their heartbeats.
+ */
+export function startScheduler() {
+  logger.info(
+    { intervalMs: env.HEARTBEAT_INTERVAL_MS },
+    '⏰ Starting heartbeat scheduler'
+  );
+
+  // Immediate first run
+  runHeartbeatCycle();
+
+  intervalHandle = setInterval(
+    runHeartbeatCycle,
+    env.HEARTBEAT_INTERVAL_MS
+  );
+}
+
+export function stopScheduler() {
+  if (intervalHandle) {
+    clearInterval(intervalHandle);
+    intervalHandle = null;
+    logger.info('⏰ Scheduler stopped');
+  }
+}
+
+async function runHeartbeatCycle() {
+  try {
+    // Get all active (non-paused, non-terminated) agents
+    const result = await db.query<AgentRow>(
+      `SELECT * FROM agents
+       WHERE status NOT IN ('paused', 'terminated')
+       ORDER BY created_at ASC`
+    );
+
+    const agents = result.rows;
+
+    if (agents.length === 0) {
+      return; // No agents, quiet cycle
+    }
+
+    logger.debug(
+      { count: agents.length },
+      '💓 Heartbeat cycle — processing agents'
+    );
+
+    // Run heartbeats sequentially to avoid overwhelming APIs
+    // (można zrobic Promise.allSettled dla paralelizmu)
+    for (const agent of agents) {
+      try {
+        await agentHeartbeat(agent);
+      } catch (err) {
+        logger.error(
+          { err, agent: agent.name },
+          'Heartbeat failed for agent'
+        );
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, 'Heartbeat cycle failed');
+  }
+}
+________________________________________
+Routes
+src/routes/companies.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const createCompanySchema = z.object({
+  name: z.string().min(1),
+  mission: z.string().optional(),
+});
+
+// Create company
+router.post('/', async (req, res) => {
+  const parsed = createCompanySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const { name, mission } = parsed.data;
+  const result = await db.query(
+    'INSERT INTO companies (name, mission) VALUES ($1, $2) RETURNING *',
+    [name, mission || null]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// List companies
+router.get('/', async (_req, res) => {
+  const result = await db.query(
+    'SELECT * FROM companies ORDER BY created_at DESC'
+  );
+  res.json(result.rows);
+});
+
+// Get company
+router.get('/:id', async (req, res) => {
+  const result = await db.query(
+    'SELECT * FROM companies WHERE id = $1',
+    [req.params.id]
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+  res.json(result.rows[0]);
+});
+
+// Get company stats
+router.get('/:id/stats', async (req, res) => {
+  const companyId = req.params.id;
+
+  const [agents, tasks, costs, recentHeartbeats] = await Promise.all([
+    db.query(
+      `SELECT status, COUNT(*) as count FROM agents
+       WHERE company_id = $1 GROUP BY status`,
+      [companyId]
+    ),
+    db.query(
+      `SELECT status, COUNT(*) as count FROM tasks
+       WHERE company_id = $1 GROUP BY status`,
+      [companyId]
+    ),
+    db.query(
+      `SELECT COALESCE(SUM(cost_usd), 0) as total_cost
+       FROM audit_log WHERE company_id = $1`,
+      [companyId]
+    ),
+    db.query(
+      `SELECT COUNT(*) as count FROM heartbeats h
+       JOIN agents a ON a.id = h.agent_id
+       WHERE a.company_id = $1 AND h.created_at > now() - interval '1 hour'`,
+      [companyId]
+    ),
+  ]);
+
+  res.json({
+    agents: agents.rows,
+    tasks: tasks.rows,
+    totalCostUsd: parseFloat(costs.rows[0].total_cost),
+    heartbeatsLastHour: parseInt(recentHeartbeats.rows[0].count),
+  });
+});
+
+export default router;
+src/routes/agents.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const createAgentSchema = z.object({
+  name: z.string().min(1),
+  role: z.string().min(1),
+  title: z.string().optional(),
+  reports_to: z.string().uuid().optional(),
+  runtime: z.string().default('claude'),
+  model: z.string().default('claude-sonnet-4-20250514'),
+  system_prompt: z.string().optional(),
+  config: z.record(z.any()).optional(),
+  monthly_budget_usd: z.number().positive().optional(),
+});
+
+// Create agent
+router.post('/companies/:companyId/agents', async (req, res) => {
+  const parsed = createAgentSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const { companyId } = req.params;
+  const data = parsed.data;
+
+  const result = await db.query(
+    `INSERT INTO agents
+      (company_id, name, role, title, reports_to, runtime, model, system_prompt, config)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING *`,
+    [
+      companyId,
+      data.name,
+      data.role,
+      data.title || null,
+      data.reports_to || null,
+      data.runtime,
+      data.model,
+      data.system_prompt || null,
+      JSON.stringify(data.config || {}),
+    ]
+  );
+
+  const agent = result.rows[0];
+
+  // Create budget for current month if specified
+  if (data.monthly_budget_usd) {
+    const month = new Date().toISOString().slice(0, 7) + '-01';
+    await db.query(
+      'INSERT INTO budgets (agent_id, month, limit_usd) VALUES ($1, $2, $3)',
+      [agent.id, month, data.monthly_budget_usd]
+    );
+  }
+
+  // Audit
+  await db.query(
+    `INSERT INTO audit_log (company_id, agent_id, action, entity_type, entity_id, details)
+     VALUES ($1, $2, 'agent.hired', 'agent', $2, $3)`,
+    [companyId, agent.id, JSON.stringify({ role: data.role, runtime: data.runtime })]
+  );
+
+  res.status(201).json(agent);
+});
+
+// List agents for company
+router.get('/companies/:companyId/agents', async (req, res) => {
+  const result = await db.query(
+    `SELECT a.*,
+       b.limit_usd as budget_limit,
+       b.spent_usd as budget_spent
+     FROM agents a
+     LEFT JOIN budgets b ON b.agent_id = a.id
+       AND b.month = date_trunc('month', now())::date
+     WHERE a.company_id = $1
+     ORDER BY a.created_at ASC`,
+    [req.params.companyId]
+  );
+  res.json(result.rows);
+});
+
+// Get single agent
+router.get('/agents/:id', async (req, res) => {
+  const result = await db.query('SELECT * FROM agents WHERE id = $1', [
+    req.params.id,
+  ]);
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+  res.json(result.rows[0]);
+});
+
+// Pause agent
+router.post('/agents/:id/pause', async (req, res) => {
+  await db.query(
+    "UPDATE agents SET status = 'paused' WHERE id = $1",
+    [req.params.id]
+  );
+  res.json({ status: 'paused' });
+});
+
+// Resume agent
+router.post('/agents/:id/resume', async (req, res) => {
+  await db.query(
+    "UPDATE agents SET status = 'idle' WHERE id = $1",
+    [req.params.id]
+  );
+  res.json({ status: 'idle' });
+});
+
+// Terminate agent
+router.post('/agents/:id/terminate', async (req, res) => {
+  await db.query(
+    "UPDATE agents SET status = 'terminated' WHERE id = $1",
+    [req.params.id]
+  );
+
+  const agent = await db.query('SELECT * FROM agents WHERE id = $1', [req.params.id]);
+  await db.query(
+    `INSERT INTO audit_log (company_id, agent_id, action, entity_type, entity_id)
+     VALUES ($1, $2, 'agent.terminated', 'agent', $2)`,
+    [agent.rows[0].company_id, req.params.id]
+  );
+
+  res.json({ status: 'terminated' });
+});
+
+// Org chart
+router.get('/companies/:companyId/org-chart', async (req, res) => {
+  const result = await db.query(
+    `SELECT id, name, role, title, reports_to, status
+     FROM agents
+     WHERE company_id = $1 AND status != 'terminated'
+     ORDER BY created_at ASC`,
+    [req.params.companyId]
+  );
+
+  // Build tree structure
+  const agents = result.rows;
+  const map = new Map(agents.map((a) => [a.id, { ...a, reports: [] as any[] }]));
+
+  const roots: any[] = [];
+  for (const agent of map.values()) {
+    if (agent.reports_to && map.has(agent.reports_to)) {
+      map.get(agent.reports_to)!.reports.push(agent);
+    } else {
+      roots.push(agent);
+    }
+  }
+
+  res.json(roots);
+});
+
+export default router;
+src/routes/tasks.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const createTaskSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  assigned_to: z.string().uuid().optional(),
+  goal_id: z.string().uuid().optional(),
+  parent_id: z.string().uuid().optional(),
+  priority: z.number().int().default(0),
+});
+
+// Create task
+router.post('/companies/:companyId/tasks', async (req, res) => {
+  const parsed = createTaskSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const { companyId } = req.params;
+  const data = parsed.data;
+  const status = data.assigned_to ? 'assigned' : 'backlog';
+
+  const result = await db.query(
+    `INSERT INTO tasks
+      (company_id, title, description, assigned_to, goal_id, parent_id, priority, status, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'board')
+     RETURNING *`,
+    [
+      companyId,
+      data.title,
+      data.description || null,
+      data.assigned_to || null,
+      data.goal_id || null,
+      data.parent_id || null,
+      data.priority,
+      status,
+    ]
+  );
+
+  // Audit
+  await db.query(
+    `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
+     VALUES ($1, 'task.created', 'task', $2, $3)`,
+    [companyId, result.rows[0].id, JSON.stringify({ title: data.title })]
+  );
+
+  res.status(201).json(result.rows[0]);
+});
+
+// List tasks for company
+router.get('/companies/:companyId/tasks', async (req, res) => {
+  const { status, assigned_to } = req.query;
+
+  let query = `
+    SELECT t.*,
+      a.name as assigned_to_name,
+      g.title as goal_title
+    FROM tasks t
+    LEFT JOIN agents a ON a.id = t.assigned_to
+    LEFT JOIN goals g ON g.id = t.goal_id
+    WHERE t.company_id = $1
+  `;
+  const params: any[] = [req.params.companyId];
+
+  if (status) {
+    params.push(status);
+    query += ` AND t.status = $${params.length}`;
+  }
+  if (assigned_to) {
+    params.push(assigned_to);
+    query += ` AND t.assigned_to = $${params.length}`;
+  }
+
+  query += ' ORDER BY t.priority DESC, t.created_at ASC';
+
+  const result = await db.query(query, params);
+  res.json(result.rows);
+});
+
+// Get single task with messages
+router.get('/tasks/:id', async (req, res) => {
+  const task = await db.query('SELECT * FROM tasks WHERE id = $1', [
+    req.params.id,
+  ]);
+  if (task.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+
+  const messages = await db.query(
+    `SELECT m.*, a.name as from_name
+     FROM messages m
+     LEFT JOIN agents a ON a.id = m.from_agent
+     WHERE m.task_id = $1
+     ORDER BY m.created_at ASC`,
+    [req.params.id]
+  );
+
+  const subtasks = await db.query(
+    'SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at ASC',
+    [req.params.id]
+  );
+
+  res.json({
+    ...task.rows[0],
+    messages: messages.rows,
+    subtasks: subtasks.rows,
+  });
+});
+
+// Update task
+router.patch('/tasks/:id', async (req, res) => {
+  const { status, assigned_to, priority, description } = req.body;
+
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  if (status) {
+    params.push(status);
+    sets.push(`status = $${params.length}`);
+  }
+  if (assigned_to) {
+    params.push(assigned_to);
+    sets.push(`assigned_to = $${params.length}`);
+  }
+  if (priority !== undefined) {
+    params.push(priority);
+    sets.push(`priority = $${params.length}`);
+  }
+  if (description) {
+    params.push(description);
+    sets.push(`description = $${params.length}`);
+  }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  params.push(req.params.id);
+  const result = await db.query(
+    `UPDATE tasks SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  );
+
+  res.json(result.rows[0]);
+});
+
+export default router;
+src/routes/messages.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const createMessageSchema = z.object({
+  content: z.string().min(1),
+  to_agent: z.string().uuid().optional(),
+  type: z.string().default('message'),
+});
+
+// Send message to task thread (as board/human)
+router.post('/tasks/:taskId/messages', async (req, res) => {
+  const parsed = createMessageSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const task = await db.query('SELECT company_id FROM tasks WHERE id = $1', [
+    req.params.taskId,
+  ]);
+  if (task.rows.length === 0) return res.status(404).json({ error: 'Task not found' });
+
+  const result = await db.query(
+    `INSERT INTO messages (company_id, task_id, from_agent, to_agent, content, type)
+     VALUES ($1, $2, NULL, $3, $4, $5)
+     RETURNING *`,
+    [
+      task.rows[0].company_id,
+      req.params.taskId,
+      parsed.data.to_agent || null,
+      parsed.data.content,
+      parsed.data.type,
+    ]
+  );
+
+  res.status(201).json(result.rows[0]);
+});
+
+// Get messages for task
+router.get('/tasks/:taskId/messages', async (req, res) => {
+  const result = await db.query(
+    `SELECT m.*, a.name as from_name
+     FROM messages m
+     LEFT JOIN agents a ON a.id = m.from_agent
+     WHERE m.task_id = $1
+     ORDER BY m.created_at ASC`,
+    [req.params.taskId]
+  );
+  res.json(result.rows);
+});
+
+// Get audit log
+router.get('/companies/:companyId/audit-log', async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 50;
+  const result = await db.query(
+    `SELECT al.*, a.name as agent_name
+     FROM audit_log al
+     LEFT JOIN agents a ON a.id = al.agent_id
+     WHERE al.company_id = $1
+     ORDER BY al.created_at DESC
+     LIMIT $2`,
+    [req.params.companyId, limit]
+  );
+  res.json(result.rows);
+});
+
+// Get heartbeats for agent
+router.get('/agents/:agentId/heartbeats', async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 20;
+  const result = await db.query(
+    `SELECT * FROM heartbeats
+     WHERE agent_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [req.params.agentId, limit]
+  );
+  res.json(result.rows);
+});
+
+export default router;
+src/routes/index.ts
+TypeScript
+import { Router } from 'express';
+import companies from './companies.js';
+import agents from './agents.js';
+import tasks from './tasks.js';
+import messages from './messages.js';
+
+const router = Router();
+
+router.use('/companies', companies);
+router.use('/', agents);   // /companies/:id/agents + /agents/:id
+router.use('/', tasks);    // /companies/:id/tasks + /tasks/:id
+router.use('/', messages);  // /tasks/:id/messages + audit log
+
+// Health check
+router.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+export default router;
+________________________________________
+Entry Point
+src/index.ts
+TypeScript
+import express from 'express';
+import { env } from './env.js';
+import { logger } from './utils/logger.js';
+import { db } from './db/client.js';
+import routes from './routes/index.js';
+import { initRuntimes } from './runtimes/registry.js';
+import { startScheduler, stopScheduler } from './orchestrator/scheduler.js';
+
+const app = express();
+
+app.use(express.json());
+
+// Request logging
+app.use((req, _res, next) => {
+  logger.debug({ method: req.method, url: req.url }, 'Request');
+  next();
+});
+
+// API routes
+app.use('/api', routes);
+
+// Error handler
+app.use(
+  (
+    err: Error,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    logger.error({ err }, 'Unhandled error');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+);
+
+// Startup
+async function start() {
+  // Verify DB connection
+  try {
+    await db.query('SELECT 1');
+    logger.info('✅ Database connected');
+  } catch (err) {
+    logger.fatal({ err }, '❌ Database connection failed');
+    process.exit(1);
+  }
+
+  // Init runtimes
+  initRuntimes();
+
+  // Start HTTP server
+  app.listen(env.PORT, () => {
+    logger.info({ port: env.PORT }, '🚀 Autonomiczne Biuro is running');
+  });
+
+  // Start heartbeat scheduler
+  startScheduler();
+}
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  logger.info('Shutting down...');
+  stopScheduler();
+  await db.close();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('Shutting down...');
+  stopScheduler();
+  await db.close();
+  process.exit(0);
+});
+
+start();
+________________________________________
+Testowy scenariusz — cały flow
+Po uruchomieniu (pnpm dev) testujesz z curl:
+Bash
+# ================================
+# 1. Utwórz firmę
+# ================================
+
+curl -s -X POST http://localhost:3100/api/companies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "AI Notes Inc.",
+    "mission": "Build the #1 AI note-taking app and reach $1M MRR"
+  }' | jq .
+
+# Zapisz company ID:
+COMPANY_ID="<uuid z odpowiedzi>"
+
+
+# ================================
+# 2. Zatrudnij CEO
+# ================================
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice",
+    "role": "ceo",
+    "title": "Chief Executive Officer",
+    "runtime": "claude",
+    "system_prompt": "You are Alice, the CEO. You set strategic direction, break goals into actionable tasks, and delegate to your team. Think big picture. Be decisive.",
+    "monthly_budget_usd": 10.00
+  }' | jq .
+
+CEO_ID="<uuid>"
+
+
+# ================================
+# 3. Zatrudnij CTO (raportuje do CEO)
+# ================================
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Bob",
+    "role": "cto",
+    "title": "Chief Technology Officer",
+    "reports_to": "'$CEO_ID'",
+    "runtime": "claude",
+    "system_prompt": "You are Bob, the CTO. You make technical architecture decisions, break technical goals into engineering tasks, and delegate to developers. Be thorough and practical.",
+    "monthly_budget_usd": 20.00
+  }' | jq .
+
+CTO_ID="<uuid>"
+
+
+# ================================
+# 4. Zatrudnij developera (raportuje do CTO)
+# ================================
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Charlie",
+    "role": "developer",
+    "title": "Senior Developer",
+    "reports_to": "'$CTO_ID'",
+    "runtime": "claude",
+    "system_prompt": "You are Charlie, a senior developer. You write code, implement features, and complete engineering tasks. Be precise and thorough. When you complete a task, describe exactly what you built.",
+    "monthly_budget_usd": 30.00
+  }' | jq .
+
+DEV_ID="<uuid>"
+
+
+# ================================
+# 5. Utwórz cel
+# ================================
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/goals \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Launch MVP",
+    "description": "Ship a working MVP with basic note-taking, AI summarization, and user auth"
+  }'
+# (potrzebujesz dodac endpoint goals w routes — ćwiczenie!)
+
+GOAL_ID="<uuid>"
+
+
+# ================================
+# 6. Utwórz task i przypisz do CEO
+# ================================
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Create product roadmap for MVP launch",
+    "description": "Define the key features, milestones, and timeline for our MVP. Consider: note editor, AI summarization, user authentication, and basic sharing. Break this into subtasks and delegate to the CTO.",
+    "assigned_to": "'$CEO_ID'",
+    "goal_id": "'$GOAL_ID'",
+    "priority": 10
+  }' | jq .
+
+
+# ================================
+# 7. Obserwuj!
+# ================================
+
+# Heartbeat scheduler automatycznie:
+# 1. Alice (CEO) dostaje task → tworzy roadmap → deleguje do Boba (CTO)
+# 2. Bob (CTO) dostaje subtask → rozbija na engineering tasks → deleguje do Charliego
+# 3. Charlie (developer) dostaje coding task → "implementuje" → oznacza done
+
+# Sprawdź statusy:
+curl -s http://localhost:3100/api/companies/$COMPANY_ID/tasks | jq .
+
+# Sprawdź audit log:
+curl -s http://localhost:3100/api/companies/$COMPANY_ID/audit-log | jq .
+
+# Sprawdź org chart:
+curl -s http://localhost:3100/api/companies/$COMPANY_ID/org-chart | jq .
+
+# Sprawdź heartbeats agenta:
+curl -s http://localhost:3100/api/agents/$CEO_ID/heartbeats | jq .
+
+# Sprawdź statystyki firmy:
+curl -s http://localhost:3100/api/companies/$COMPANY_ID/stats | jq .
+________________________________________
+Co masz po Fazie 1
+text
+✅ Tworzenie firm z misją
+✅ Zatrudnianie agentów z hierarchią (org chart)
+✅ System tasków z priorytetami
+✅ Atomic checkout (żaden task nie jest robiony podwójnie)
+✅ Automatyczne heartbeaty — agenci pracują sami
+✅ Budowanie kontekstu z goal ancestry
+✅ Delegacja — agent tworzy subtaski dla podwładnych
+✅ Komunikacja agent↔agent
+✅ Budżety z twardym limitem
+✅ Cost tracking
+✅ Persystencja sesji (agent kontynuuje po restarcie)
+✅ Audit log
+✅ Heartbeat logging
+✅ Multi-runtime (Claude + OpenAI)
+✅ REST API
+

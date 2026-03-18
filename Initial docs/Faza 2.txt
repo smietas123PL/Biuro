@@ -1,0 +1,3566 @@
+Faza 2 — Tools, Governance, Safety, WebSocket, Dashboard
+________________________________________
+Nowe pliki w tej fazie
+text
+packages/server/src/
+├── routes/
+│   ├── goals.ts              ← NEW
+│   ├── tools.ts              ← NEW
+│   ├── approvals.ts          ← NEW
+│   └── index.ts              ← UPDATED
+├── orchestrator/
+│   ├── heartbeat.ts          ← UPDATED (tool execution + approval gates)
+│   ├── safety.ts             ← NEW
+│   └── context.ts            ← UPDATED (tools in context)
+├── tools/
+│   ├── registry.ts           ← NEW
+│   ├── executor.ts           ← NEW
+│   ├── permissions.ts        ← NEW
+│   └── builtin/
+│       ├── web-search.ts     ← NEW
+│       ├── file-write.ts     ← NEW
+│       ├── http-request.ts   ← NEW
+│       └── shell.ts          ← NEW
+├── governance/
+│   ├── approvals.ts          ← NEW
+│   ├── policies.ts           ← NEW
+│   └── rollback.ts           ← NEW
+├── ws/
+│   └── hub.ts                ← NEW
+└── index.ts                  ← UPDATED (websocket)
+
+packages/dashboard/            ← NEW
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── index.html
+├── src/
+│   ├── main.tsx
+│   ├── App.tsx
+│   ├── api/
+│   │   └── client.ts
+│   ├── hooks/
+│   │   ├── useWebSocket.ts
+│   │   └── useApi.ts
+│   ├── components/
+│   │   ├── Layout.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── OrgChart.tsx
+│   │   ├── TaskCard.tsx
+│   │   ├── AgentCard.tsx
+│   │   ├── CostBadge.tsx
+│   │   ├── StatusBadge.tsx
+│   │   ├── ApprovalCard.tsx
+│   │   ├── MessageThread.tsx
+│   │   └── LiveFeed.tsx
+│   ├── pages/
+│   │   ├── DashboardPage.tsx
+│   │   ├── AgentsPage.tsx
+│   │   ├── AgentDetailPage.tsx
+│   │   ├── TasksPage.tsx
+│   │   ├── TaskDetailPage.tsx
+│   │   ├── OrgChartPage.tsx
+│   │   ├── GoalsPage.tsx
+│   │   ├── ToolsPage.tsx
+│   │   ├── ApprovalsPage.tsx
+│   │   ├── BudgetsPage.tsx
+│   │   └── AuditLogPage.tsx
+│   └── styles/
+│       └── globals.css
+________________________________________
+Baza danych — nowe tabele
+src/db/schema-v2.sql
+SQL
+-- ================================================
+-- FAZA 2 — Tools, Governance, Policies
+-- ================================================
+
+-- ============ NARZĘDZIA ============
+
+CREATE TABLE tools (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL CHECK (type IN ('http', 'function', 'mcp', 'bash', 'builtin')),
+  description TEXT,
+  config      JSONB DEFAULT '{}',
+  schema      JSONB DEFAULT '{}',     -- JSON Schema parametrów wejściowych
+  enabled     BOOLEAN DEFAULT true,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(company_id, name)
+);
+
+CREATE INDEX idx_tools_company ON tools(company_id);
+
+-- ============ UPRAWNIENIA DO NARZĘDZI ============
+
+CREATE TABLE agent_tools (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id    UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  tool_id     UUID NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+  permissions JSONB DEFAULT '{"read": true, "write": true, "execute": true}',
+  rate_limit  INT DEFAULT 100,        -- max calls per hour
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(agent_id, tool_id)
+);
+
+-- ============ LOGI WYWOŁAŃ NARZĘDZI ============
+
+CREATE TABLE tool_calls (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  agent_id    UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  tool_id     UUID NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+  task_id     UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  params      JSONB DEFAULT '{}',
+  result      JSONB DEFAULT '{}',
+  status      TEXT NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'error', 'denied')),
+  duration_ms INT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_tool_calls_agent ON tool_calls(agent_id);
+CREATE INDEX idx_tool_calls_tool ON tool_calls(tool_id);
+CREATE INDEX idx_tool_calls_created ON tool_calls(created_at);
+
+-- ============ POLITYKI GOVERNANCE ============
+
+CREATE TABLE policies (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT,
+  type        TEXT NOT NULL CHECK (type IN (
+    'approval_required',     -- wymaga zatwierdzenia
+    'budget_threshold',      -- próg budżetowy
+    'tool_restriction',      -- ograniczenie narzędzi
+    'delegation_limit',      -- max głębokość delegacji
+    'rate_limit',            -- max akcji / czas
+    'auto_pause',            -- auto-pause po warunkach
+    'custom'
+  )),
+  rules       JSONB NOT NULL,
+  enabled     BOOLEAN DEFAULT true,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_policies_company ON policies(company_id);
+
+-- ============ KONFIGURACJA Z WERSJONOWANIEM ============
+
+CREATE TABLE config_revisions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,          -- 'agent', 'policy', 'tool'
+  entity_id   UUID NOT NULL,
+  revision    INT NOT NULL,
+  data        JSONB NOT NULL,         -- pełny snapshot konfiguracji
+  changed_by  TEXT NOT NULL,          -- 'board' lub agent_id
+  change_note TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_config_revisions_entity ON config_revisions(entity_type, entity_id);
+
+-- ============ ROZSZERZENIE APPROVALS ============
+
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS
+  expires_at TIMESTAMPTZ;
+
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS
+  policy_id UUID REFERENCES policies(id) ON DELETE SET NULL;
+
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS
+  task_id UUID REFERENCES tasks(id) ON DELETE SET NULL;
+
+-- ============ TRIGGERY ============
+
+CREATE TRIGGER trg_tools_updated BEFORE UPDATE ON tools
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER trg_policies_updated BEFORE UPDATE ON policies
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+________________________________________
+Tools System
+src/tools/registry.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+
+export interface ToolDefinition {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  config: any;
+  schema: any;
+  enabled: boolean;
+}
+
+export interface AgentToolPermission {
+  tool: ToolDefinition;
+  permissions: {
+    read: boolean;
+    write: boolean;
+    execute: boolean;
+  };
+  rateLimit: number;
+}
+
+/**
+ * Get all tools available to an agent, with permissions.
+ */
+export async function getAgentTools(
+  agentId: string
+): Promise<AgentToolPermission[]> {
+  const result = await db.query(
+    `
+    SELECT
+      t.*,
+      at.permissions,
+      at.rate_limit
+    FROM agent_tools at
+    JOIN tools t ON t.id = at.tool_id
+    WHERE at.agent_id = $1
+      AND t.enabled = true
+    ORDER BY t.name ASC
+    `,
+    [agentId]
+  );
+
+  return result.rows.map((row) => ({
+    tool: {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      description: row.description,
+      config: row.config,
+      schema: row.schema,
+      enabled: row.enabled,
+    },
+    permissions: row.permissions,
+    rateLimit: row.rate_limit,
+  }));
+}
+
+/**
+ * Check if agent can use a specific tool.
+ */
+export async function canUseTool(
+  agentId: string,
+  toolName: string,
+  companyId: string
+): Promise<{ allowed: boolean; tool?: ToolDefinition; reason?: string }> {
+  // Find tool
+  const toolResult = await db.query(
+    'SELECT * FROM tools WHERE company_id = $1 AND name = $2',
+    [companyId, toolName]
+  );
+
+  if (toolResult.rows.length === 0) {
+    return { allowed: false, reason: `Tool "${toolName}" does not exist` };
+  }
+
+  const tool = toolResult.rows[0];
+
+  if (!tool.enabled) {
+    return { allowed: false, reason: `Tool "${toolName}" is disabled` };
+  }
+
+  // Check permission
+  const permResult = await db.query(
+    'SELECT * FROM agent_tools WHERE agent_id = $1 AND tool_id = $2',
+    [agentId, tool.id]
+  );
+
+  if (permResult.rows.length === 0) {
+    return {
+      allowed: false,
+      reason: `Agent does not have access to "${toolName}"`,
+    };
+  }
+
+  const perm = permResult.rows[0];
+
+  if (!perm.permissions.execute) {
+    return {
+      allowed: false,
+      reason: `Agent lacks execute permission for "${toolName}"`,
+    };
+  }
+
+  // Check rate limit
+  const callCount = await db.query(
+    `SELECT COUNT(*) as count FROM tool_calls
+     WHERE agent_id = $1 AND tool_id = $2
+       AND created_at > now() - interval '1 hour'`,
+    [agentId, tool.id]
+  );
+
+  if (parseInt(callCount.rows[0].count) >= perm.rate_limit) {
+    return {
+      allowed: false,
+      reason: `Rate limit exceeded for "${toolName}" (${perm.rate_limit}/hour)`,
+    };
+  }
+
+  return { allowed: true, tool };
+}
+src/tools/executor.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+import { canUseTool, type ToolDefinition } from './registry.js';
+import { builtinTools } from './builtin/index.js';
+
+export interface ToolCallResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+  durationMs: number;
+}
+
+/**
+ * Execute a tool call with full permission checking and logging.
+ */
+export async function executeTool(
+  agentId: string,
+  companyId: string,
+  taskId: string | null,
+  toolName: string,
+  params: any
+): Promise<ToolCallResult> {
+  const startTime = Date.now();
+
+  // 1. Permission check
+  const { allowed, tool, reason } = await canUseTool(
+    agentId,
+    toolName,
+    companyId
+  );
+
+  if (!allowed || !tool) {
+    const result: ToolCallResult = {
+      success: false,
+      error: reason || 'Permission denied',
+      durationMs: Date.now() - startTime,
+    };
+
+    await logToolCall(companyId, agentId, null, taskId, params, result, 'denied');
+    return result;
+  }
+
+  // 2. Execute based on type
+  try {
+    let data: any;
+
+    switch (tool.type) {
+      case 'builtin':
+        data = await executeBuiltin(tool, params);
+        break;
+      case 'http':
+        data = await executeHttp(tool, params);
+        break;
+      case 'bash':
+        data = await executeBash(tool, params);
+        break;
+      case 'function':
+        data = await executeFunction(tool, params);
+        break;
+      default:
+        throw new Error(`Unknown tool type: ${tool.type}`);
+    }
+
+    const result: ToolCallResult = {
+      success: true,
+      data,
+      durationMs: Date.now() - startTime,
+    };
+
+    await logToolCall(companyId, agentId, tool.id, taskId, params, result, 'success');
+
+    logger.info(
+      { agentId, tool: toolName, durationMs: result.durationMs },
+      '🔧 Tool executed'
+    );
+
+    return result;
+
+  } catch (err: any) {
+    const result: ToolCallResult = {
+      success: false,
+      error: err.message,
+      durationMs: Date.now() - startTime,
+    };
+
+    await logToolCall(companyId, agentId, tool.id, taskId, params, result, 'error');
+
+    logger.error({ err, tool: toolName }, '🔧 Tool execution failed');
+    return result;
+  }
+}
+
+// ---- Executors per type ----
+
+async function executeBuiltin(tool: ToolDefinition, params: any): Promise<any> {
+  const handler = builtinTools[tool.name];
+  if (!handler) throw new Error(`Builtin tool "${tool.name}" not registered`);
+  return handler(params, tool.config);
+}
+
+async function executeHttp(tool: ToolDefinition, params: any): Promise<any> {
+  const { endpoint, method = 'POST', headers = {} } = tool.config;
+
+  const url = endpoint.replace(
+    /\{(\w+)\}/g,
+    (_: string, key: string) => params[key] || ''
+  );
+
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: method !== 'GET' ? JSON.stringify(params) : undefined,
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+  return { text: await res.text() };
+}
+
+async function executeBash(tool: ToolDefinition, params: any): Promise<any> {
+  // SAFETY: Only execute whitelisted commands
+  const { spawn } = await import('child_process');
+
+  const allowedCommands = tool.config.allowed_commands || [];
+  const command = params.command;
+
+  if (!command) throw new Error('No command provided');
+
+  const baseCmd = command.split(' ')[0];
+  if (allowedCommands.length > 0 && !allowedCommands.includes(baseCmd)) {
+    throw new Error(
+      `Command "${baseCmd}" not in whitelist: ${allowedCommands.join(', ')}`
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = tool.config.timeout_ms || 30000;
+    let output = '';
+    let errorOutput = '';
+
+    const proc = spawn('sh', ['-c', command], {
+      timeout,
+      cwd: tool.config.working_dir || '/tmp',
+      env: { ...process.env, ...tool.config.env },
+    });
+
+    proc.stdout.on('data', (data: Buffer) => {
+      output += data.toString();
+    });
+
+    proc.stderr.on('data', (data: Buffer) => {
+      errorOutput += data.toString();
+    });
+
+    proc.on('close', (code: number) => {
+      if (code === 0) {
+        resolve({ stdout: output.trim(), stderr: errorOutput.trim(), exitCode: code });
+      } else {
+        reject(new Error(`Exit code ${code}: ${errorOutput || output}`));
+      }
+    });
+
+    proc.on('error', reject);
+  });
+}
+
+async function executeFunction(tool: ToolDefinition, params: any): Promise<any> {
+  // Custom function execution — extensible
+  throw new Error(
+    `Function tools require custom registration. Tool: ${tool.name}`
+  );
+}
+
+// ---- Logging ----
+
+async function logToolCall(
+  companyId: string,
+  agentId: string,
+  toolId: string | null,
+  taskId: string | null,
+  params: any,
+  result: ToolCallResult,
+  status: string
+) {
+  if (toolId) {
+    await db.query(
+      `INSERT INTO tool_calls
+        (company_id, agent_id, tool_id, task_id, params, result, status, duration_ms)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        companyId,
+        agentId,
+        toolId,
+        taskId,
+        JSON.stringify(params),
+        JSON.stringify(result.data || { error: result.error }),
+        status,
+        result.durationMs,
+      ]
+    );
+  }
+
+  await db.query(
+    `INSERT INTO audit_log
+      (company_id, agent_id, action, entity_type, entity_id, details)
+     VALUES ($1, $2, $3, 'tool', $4, $5)`,
+    [
+      companyId,
+      agentId,
+      `tool.${status}`,
+      toolId,
+      JSON.stringify({
+        tool: toolId,
+        params,
+        result: result.success ? 'ok' : result.error,
+        duration_ms: result.durationMs,
+      }),
+    ]
+  );
+}
+src/tools/builtin/index.ts
+TypeScript
+import { webSearch } from './web-search.js';
+import { fileWrite, fileRead } from './file-ops.js';
+import { httpRequest } from './http-request.js';
+
+export type BuiltinToolHandler = (
+  params: any,
+  config: any
+) => Promise<any>;
+
+export const builtinTools: Record<string, BuiltinToolHandler> = {
+  web_search: webSearch,
+  file_write: fileWrite,
+  file_read: fileRead,
+  http_request: httpRequest,
+};
+src/tools/builtin/web-search.ts
+TypeScript
+export async function webSearch(
+  params: { query: string; max_results?: number },
+  config: { api_key?: string; engine?: string }
+): Promise<any> {
+  // Placeholder — podłącz dowolne search API
+  // (SerpAPI, Tavily, Brave Search, etc.)
+
+  if (!config.api_key) {
+    return {
+      results: [],
+      note: 'No search API key configured. Add api_key to tool config.',
+    };
+  }
+
+  // Example with a generic search API
+  const res = await fetch(
+    `https://api.search.example.com/search?q=${encodeURIComponent(params.query)}&limit=${params.max_results || 5}`,
+    {
+      headers: { Authorization: `Bearer ${config.api_key}` },
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`Search API error: ${res.status}`);
+  }
+
+  return res.json();
+}
+src/tools/builtin/file-ops.ts
+TypeScript
+import fs from 'fs/promises';
+import path from 'path';
+
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || '/tmp/biuro-workspace';
+
+function sanitizePath(filePath: string): string {
+  // Prevent directory traversal
+  const resolved = path.resolve(WORKSPACE_ROOT, filePath);
+  if (!resolved.startsWith(WORKSPACE_ROOT)) {
+    throw new Error('Path traversal detected');
+  }
+  return resolved;
+}
+
+export async function fileWrite(
+  params: { path: string; content: string },
+  _config: any
+): Promise<any> {
+  const fullPath = sanitizePath(params.path);
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, params.content, 'utf-8');
+  return { written: fullPath, bytes: Buffer.byteLength(params.content) };
+}
+
+export async function fileRead(
+  params: { path: string },
+  _config: any
+): Promise<any> {
+  const fullPath = sanitizePath(params.path);
+  const content = await fs.readFile(fullPath, 'utf-8');
+  return { path: fullPath, content };
+}
+src/tools/builtin/http-request.ts
+TypeScript
+export async function httpRequest(
+  params: {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: any;
+  },
+  config: { allowed_domains?: string[] }
+): Promise<any> {
+  // Domain whitelist
+  if (config.allowed_domains && config.allowed_domains.length > 0) {
+    const url = new URL(params.url);
+    if (!config.allowed_domains.includes(url.hostname)) {
+      throw new Error(
+        `Domain "${url.hostname}" not in whitelist: ${config.allowed_domains.join(', ')}`
+      );
+    }
+  }
+
+  const res = await fetch(params.url, {
+    method: params.method || 'GET',
+    headers: params.headers || {},
+    body: params.body ? JSON.stringify(params.body) : undefined,
+  });
+
+  const contentType = res.headers.get('content-type') || '';
+  const data = contentType.includes('json')
+    ? await res.json()
+    : await res.text();
+
+  return {
+    status: res.status,
+    headers: Object.fromEntries(res.headers.entries()),
+    data,
+  };
+}
+________________________________________
+Governance System
+src/governance/policies.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+
+export interface Policy {
+  id: string;
+  company_id: string;
+  name: string;
+  type: string;
+  rules: any;
+  enabled: boolean;
+}
+
+/**
+ * Check all policies before an agent action.
+ * Returns { allowed: true } or { allowed: false, reason, requiresApproval, policyId }
+ */
+export async function checkPolicies(
+  companyId: string,
+  agentId: string,
+  action: string,
+  context: any
+): Promise<{
+  allowed: boolean;
+  reason?: string;
+  requiresApproval?: boolean;
+  policyId?: string;
+}> {
+  const result = await db.query<Policy>(
+    'SELECT * FROM policies WHERE company_id = $1 AND enabled = true',
+    [companyId]
+  );
+
+  for (const policy of result.rows) {
+    const check = await evaluatePolicy(policy, agentId, action, context);
+    if (!check.allowed) {
+      logger.info(
+        { policy: policy.name, agent: agentId, action },
+        '🛡️ Policy triggered'
+      );
+      return {
+        allowed: false,
+        reason: check.reason,
+        requiresApproval: check.requiresApproval,
+        policyId: policy.id,
+      };
+    }
+  }
+
+  return { allowed: true };
+}
+
+async function evaluatePolicy(
+  policy: Policy,
+  agentId: string,
+  action: string,
+  context: any
+): Promise<{
+  allowed: boolean;
+  reason?: string;
+  requiresApproval?: boolean;
+}> {
+  switch (policy.type) {
+    case 'approval_required':
+      return evaluateApprovalPolicy(policy, agentId, action);
+
+    case 'budget_threshold':
+      return evaluateBudgetPolicy(policy, agentId, context);
+
+    case 'delegation_limit':
+      return evaluateDelegationPolicy(policy, context);
+
+    case 'rate_limit':
+      return evaluateRatePolicy(policy, agentId, action);
+
+    case 'tool_restriction':
+      return evaluateToolPolicy(policy, agentId, action, context);
+
+    default:
+      return { allowed: true };
+  }
+}
+
+// ---- Policy evaluators ----
+
+async function evaluateApprovalPolicy(
+  policy: Policy,
+  agentId: string,
+  action: string
+): Promise<{ allowed: boolean; reason?: string; requiresApproval?: boolean }> {
+  const { actions = [], roles = [] } = policy.rules;
+
+  // Check if this action type requires approval
+  if (actions.length > 0 && !actions.includes(action)) {
+    return { allowed: true };
+  }
+
+  // Check if this agent's role requires approval
+  if (roles.length > 0) {
+    const agent = await db.query(
+      'SELECT role FROM agents WHERE id = $1',
+      [agentId]
+    );
+    if (agent.rows.length > 0 && !roles.includes(agent.rows[0].role)) {
+      return { allowed: true };
+    }
+  }
+
+  // Check if there's already an approved approval for this
+  const existing = await db.query(
+    `SELECT * FROM approvals
+     WHERE requested_by = $1
+       AND type = $2
+       AND status = 'approved'
+       AND created_at > now() - interval '24 hours'
+     LIMIT 1`,
+    [agentId, action]
+  );
+
+  if (existing.rows.length > 0) {
+    return { allowed: true }; // Already approved
+  }
+
+  return {
+    allowed: false,
+    reason: `Policy "${policy.name}" requires approval for action "${action}"`,
+    requiresApproval: true,
+  };
+}
+
+async function evaluateBudgetPolicy(
+  policy: Policy,
+  agentId: string,
+  context: any
+): Promise<{ allowed: boolean; reason?: string; requiresApproval?: boolean }> {
+  const { threshold_pct = 80 } = policy.rules;
+
+  const budget = await db.query(
+    `SELECT * FROM budgets
+     WHERE agent_id = $1
+       AND month = date_trunc('month', now())::date`,
+    [agentId]
+  );
+
+  if (budget.rows.length === 0) return { allowed: true };
+
+  const b = budget.rows[0];
+  const usedPct = (parseFloat(b.spent_usd) / parseFloat(b.limit_usd)) * 100;
+
+  if (usedPct >= threshold_pct) {
+    return {
+      allowed: false,
+      reason: `Budget ${usedPct.toFixed(1)}% used (threshold: ${threshold_pct}%)`,
+      requiresApproval: true,
+    };
+  }
+
+  return { allowed: true };
+}
+
+async function evaluateDelegationPolicy(
+  policy: Policy,
+  context: any
+): Promise<{ allowed: boolean; reason?: string }> {
+  const { max_depth = 5 } = policy.rules;
+
+  if (context.delegationDepth && context.delegationDepth >= max_depth) {
+    return {
+      allowed: false,
+      reason: `Delegation depth ${context.delegationDepth} exceeds max ${max_depth}`,
+    };
+  }
+
+  return { allowed: true };
+}
+
+async function evaluateRatePolicy(
+  policy: Policy,
+  agentId: string,
+  action: string
+): Promise<{ allowed: boolean; reason?: string }> {
+  const { max_per_hour = 60, actions = [] } = policy.rules;
+
+  if (actions.length > 0 && !actions.includes(action)) {
+    return { allowed: true };
+  }
+
+  const count = await db.query(
+    `SELECT COUNT(*) as count FROM audit_log
+     WHERE agent_id = $1
+       AND action = $2
+       AND created_at > now() - interval '1 hour'`,
+    [agentId, action]
+  );
+
+  if (parseInt(count.rows[0].count) >= max_per_hour) {
+    return {
+      allowed: false,
+      reason: `Rate limit: ${max_per_hour}/hour exceeded for "${action}"`,
+    };
+  }
+
+  return { allowed: true };
+}
+
+async function evaluateToolPolicy(
+  policy: Policy,
+  agentId: string,
+  action: string,
+  context: any
+): Promise<{ allowed: boolean; reason?: string }> {
+  if (action !== 'use_tool') return { allowed: true };
+
+  const { blocked_tools = [], roles = [] } = policy.rules;
+
+  // Check role
+  if (roles.length > 0) {
+    const agent = await db.query('SELECT role FROM agents WHERE id = $1', [agentId]);
+    if (!roles.includes(agent.rows[0]?.role)) {
+      return { allowed: true };
+    }
+  }
+
+  // Check tool name
+  if (blocked_tools.includes(context.toolName)) {
+    return {
+      allowed: false,
+      reason: `Tool "${context.toolName}" is blocked by policy "${policy.name}"`,
+    };
+  }
+
+  return { allowed: true };
+}
+src/governance/approvals.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+import { broadcast } from '../ws/hub.js';
+
+/**
+ * Create an approval request (triggered by policy).
+ */
+export async function createApprovalRequest(
+  companyId: string,
+  agentId: string,
+  type: string,
+  payload: any,
+  policyId?: string,
+  taskId?: string
+): Promise<string> {
+  const result = await db.query(
+    `INSERT INTO approvals
+      (company_id, requested_by, type, payload, policy_id, task_id, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, now() + interval '24 hours')
+     RETURNING id`,
+    [
+      companyId,
+      agentId,
+      type,
+      JSON.stringify(payload),
+      policyId || null,
+      taskId || null,
+    ]
+  );
+
+  const approvalId = result.rows[0].id;
+
+  // Notify via WebSocket
+  broadcast(companyId, {
+    type: 'approval.requested',
+    data: {
+      id: approvalId,
+      agentId,
+      approvalType: type,
+      payload,
+    },
+  });
+
+  // Audit
+  await db.query(
+    `INSERT INTO audit_log
+      (company_id, agent_id, action, entity_type, entity_id, details)
+     VALUES ($1, $2, 'approval.requested', 'approval', $3, $4)`,
+    [companyId, agentId, approvalId, JSON.stringify({ type, payload })]
+  );
+
+  logger.info(
+    { approvalId, type, agentId },
+    '🎫 Approval requested'
+  );
+
+  return approvalId;
+}
+
+/**
+ * Approve or reject a pending approval.
+ */
+export async function decideApproval(
+  approvalId: string,
+  decision: 'approved' | 'rejected',
+  decidedBy: string = 'board',
+  note?: string
+): Promise<void> {
+  const result = await db.query(
+    `UPDATE approvals
+     SET status = $2, decided_by = $3, decided_at = now()
+     WHERE id = $1 AND status = 'pending'
+     RETURNING *`,
+    [approvalId, decision, decidedBy]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error('Approval not found or already decided');
+  }
+
+  const approval = result.rows[0];
+
+  // Broadcast
+  broadcast(approval.company_id, {
+    type: `approval.${decision}`,
+    data: { id: approvalId, decidedBy },
+  });
+
+  // Audit
+  await db.query(
+    `INSERT INTO audit_log
+      (company_id, agent_id, action, entity_type, entity_id, details)
+     VALUES ($1, $2, $3, 'approval', $4, $5)`,
+    [
+      approval.company_id,
+      approval.requested_by,
+      `approval.${decision}`,
+      approvalId,
+      JSON.stringify({ decidedBy, note }),
+    ]
+  );
+
+  // If approved and there's a blocked task, unblock it
+  if (decision === 'approved' && approval.task_id) {
+    await db.query(
+      "UPDATE tasks SET status = 'assigned' WHERE id = $1 AND status = 'blocked'",
+      [approval.task_id]
+    );
+  }
+
+  logger.info({ approvalId, decision }, `🎫 Approval ${decision}`);
+}
+
+/**
+ * Check if an action has a pending or approved approval.
+ */
+export async function getApprovalStatus(
+  agentId: string,
+  type: string
+): Promise<'none' | 'pending' | 'approved' | 'rejected'> {
+  const result = await db.query(
+    `SELECT status FROM approvals
+     WHERE requested_by = $1
+       AND type = $2
+       AND created_at > now() - interval '24 hours'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [agentId, type]
+  );
+
+  if (result.rows.length === 0) return 'none';
+  return result.rows[0].status;
+}
+src/governance/rollback.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+
+/**
+ * Save a config revision before changing an entity.
+ */
+export async function saveRevision(
+  companyId: string,
+  entityType: string,
+  entityId: string,
+  data: any,
+  changedBy: string,
+  note?: string
+): Promise<number> {
+  // Get next revision number
+  const maxRev = await db.query(
+    `SELECT COALESCE(MAX(revision), 0) as max_rev
+     FROM config_revisions
+     WHERE entity_type = $1 AND entity_id = $2`,
+    [entityType, entityId]
+  );
+
+  const nextRevision = parseInt(maxRev.rows[0].max_rev) + 1;
+
+  await db.query(
+    `INSERT INTO config_revisions
+      (company_id, entity_type, entity_id, revision, data, changed_by, change_note)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      companyId,
+      entityType,
+      entityId,
+      nextRevision,
+      JSON.stringify(data),
+      changedBy,
+      note || null,
+    ]
+  );
+
+  logger.info(
+    { entityType, entityId, revision: nextRevision },
+    '📦 Config revision saved'
+  );
+
+  return nextRevision;
+}
+
+/**
+ * Get revision history for an entity.
+ */
+export async function getRevisions(
+  entityType: string,
+  entityId: string
+): Promise<any[]> {
+  const result = await db.query(
+    `SELECT * FROM config_revisions
+     WHERE entity_type = $1 AND entity_id = $2
+     ORDER BY revision DESC`,
+    [entityType, entityId]
+  );
+  return result.rows;
+}
+
+/**
+ * Rollback an entity to a specific revision.
+ */
+export async function rollbackTo(
+  entityType: string,
+  entityId: string,
+  revision: number
+): Promise<any> {
+  const revResult = await db.query(
+    `SELECT * FROM config_revisions
+     WHERE entity_type = $1 AND entity_id = $2 AND revision = $3`,
+    [entityType, entityId, revision]
+  );
+
+  if (revResult.rows.length === 0) {
+    throw new Error(`Revision ${revision} not found`);
+  }
+
+  const revData = revResult.rows[0].data;
+
+  // Apply based on entity type
+  switch (entityType) {
+    case 'agent':
+      await db.query(
+        `UPDATE agents
+         SET name = $2, role = $3, title = $4, system_prompt = $5,
+             config = $6, runtime = $7, model = $8
+         WHERE id = $1`,
+        [
+          entityId,
+          revData.name,
+          revData.role,
+          revData.title,
+          revData.system_prompt,
+          JSON.stringify(revData.config),
+          revData.runtime,
+          revData.model,
+        ]
+      );
+      break;
+
+    case 'policy':
+      await db.query(
+        `UPDATE policies
+         SET name = $2, description = $3, type = $4, rules = $5, enabled = $6
+         WHERE id = $1`,
+        [
+          entityId,
+          revData.name,
+          revData.description,
+          revData.type,
+          JSON.stringify(revData.rules),
+          revData.enabled,
+        ]
+      );
+      break;
+
+    case 'tool':
+      await db.query(
+        `UPDATE tools
+         SET name = $2, description = $3, type = $4, config = $5,
+             schema = $6, enabled = $7
+         WHERE id = $1`,
+        [
+          entityId,
+          revData.name,
+          revData.description,
+          revData.type,
+          JSON.stringify(revData.config),
+          JSON.stringify(revData.schema),
+          revData.enabled,
+        ]
+      );
+      break;
+  }
+
+  // Save new revision noting the rollback
+  await saveRevision(
+    revResult.rows[0].company_id,
+    entityType,
+    entityId,
+    revData,
+    'board',
+    `Rollback to revision ${revision}`
+  );
+
+  logger.info(
+    { entityType, entityId, revision },
+    '⏪ Rolled back to revision'
+  );
+
+  return revData;
+}
+________________________________________
+Safety System
+src/orchestrator/safety.ts
+TypeScript
+import { db } from '../db/client.js';
+import { logger } from '../utils/logger.js';
+import { broadcast } from '../ws/hub.js';
+
+export interface SafetyLimits {
+  maxHeartbeatsPerHour: number;
+  maxToolCallsPerTask: number;
+  maxDelegationDepth: number;
+  maxMessagesPerMinute: number;
+  maxConsecutiveErrors: number;
+  maxTaskDurationHours: number;
+}
+
+const DEFAULT_LIMITS: SafetyLimits = {
+  maxHeartbeatsPerHour: 60,
+  maxToolCallsPerTask: 100,
+  maxDelegationDepth: 5,
+  maxMessagesPerMinute: 20,
+  maxConsecutiveErrors: 5,
+  maxTaskDurationHours: 24,
+};
+
+/**
+ * Run all safety checks before an agent heartbeat.
+ * Returns false if the agent should NOT proceed.
+ */
+export async function checkSafety(
+  agentId: string,
+  companyId: string,
+  taskId: string | null,
+  customLimits?: Partial<SafetyLimits>
+): Promise<{ safe: boolean; reason?: string }> {
+  const limits = { ...DEFAULT_LIMITS, ...customLimits };
+
+  // 1. Heartbeat frequency
+  const heartbeatCount = await db.query(
+    `SELECT COUNT(*) as count FROM heartbeats
+     WHERE agent_id = $1 AND created_at > now() - interval '1 hour'`,
+    [agentId]
+  );
+
+  if (parseInt(heartbeatCount.rows[0].count) >= limits.maxHeartbeatsPerHour) {
+    await autoPause(agentId, companyId, 'Too many heartbeats per hour — possible loop');
+    return { safe: false, reason: 'heartbeat_rate_exceeded' };
+  }
+
+  // 2. Tool calls on current task
+  if (taskId) {
+    const toolCallCount = await db.query(
+      `SELECT COUNT(*) as count FROM tool_calls
+       WHERE task_id = $1`,
+      [taskId]
+    );
+
+    if (parseInt(toolCallCount.rows[0].count) >= limits.maxToolCallsPerTask) {
+      await blockTask(taskId, 'Too many tool calls — possible loop');
+      return { safe: false, reason: 'tool_call_limit' };
+    }
+  }
+
+  // 3. Delegation depth
+  if (taskId) {
+    const depth = await getDelegationDepth(taskId);
+    if (depth >= limits.maxDelegationDepth) {
+      await blockTask(taskId, `Delegation depth ${depth} exceeds max ${limits.maxDelegationDepth}`);
+      return { safe: false, reason: 'delegation_depth_exceeded' };
+    }
+  }
+
+  // 4. Message flood
+  const msgCount = await db.query(
+    `SELECT COUNT(*) as count FROM messages
+     WHERE from_agent = $1 AND created_at > now() - interval '1 minute'`,
+    [agentId]
+  );
+
+  if (parseInt(msgCount.rows[0].count) >= limits.maxMessagesPerMinute) {
+    await autoPause(agentId, companyId, 'Message flood detected');
+    return { safe: false, reason: 'message_flood' };
+  }
+
+  // 5. Consecutive errors
+  const recentHeartbeats = await db.query(
+    `SELECT status FROM heartbeats
+     WHERE agent_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [agentId, limits.maxConsecutiveErrors]
+  );
+
+  const consecutiveErrors = recentHeartbeats.rows
+    .map((r) => r.status)
+    .filter((s) => s === 'error').length;
+
+  if (consecutiveErrors >= limits.maxConsecutiveErrors) {
+    await autoPause(
+      agentId,
+      companyId,
+      `${consecutiveErrors} consecutive errors`
+    );
+    return { safe: false, reason: 'consecutive_errors' };
+  }
+
+  // 6. Task stuck too long
+  if (taskId) {
+    const taskAge = await db.query(
+      `SELECT EXTRACT(EPOCH FROM (now() - locked_at)) / 3600 as hours
+       FROM tasks WHERE id = $1 AND locked_at IS NOT NULL`,
+      [taskId]
+    );
+
+    if (
+      taskAge.rows.length > 0 &&
+      parseFloat(taskAge.rows[0].hours) >= limits.maxTaskDurationHours
+    ) {
+      await blockTask(
+        taskId,
+        `Task has been in progress for ${parseFloat(taskAge.rows[0].hours).toFixed(1)} hours`
+      );
+      return { safe: false, reason: 'task_timeout' };
+    }
+  }
+
+  // 7. Circular delegation detection
+  if (taskId) {
+    const isCircular = await detectCircularDelegation(taskId, agentId);
+    if (isCircular) {
+      await blockTask(taskId, 'Circular delegation detected');
+      await autoPause(agentId, companyId, 'Circular delegation detected');
+      return { safe: false, reason: 'circular_delegation' };
+    }
+  }
+
+  return { safe: true };
+}
+
+/**
+ * Calculate delegation depth by walking up parent_id chain.
+ */
+async function getDelegationDepth(taskId: string): Promise<number> {
+  let depth = 0;
+  let currentId: string | null = taskId;
+
+  while (currentId) {
+    const result = await db.query(
+      'SELECT parent_id FROM tasks WHERE id = $1',
+      [currentId]
+    );
+    if (result.rows.length === 0 || !result.rows[0].parent_id) break;
+    currentId = result.rows[0].parent_id;
+    depth++;
+    if (depth > 20) break; // Safety cap
+  }
+
+  return depth;
+}
+
+/**
+ * Detect circular delegation: agent A → B → C → A
+ */
+async function detectCircularDelegation(
+  taskId: string,
+  agentId: string
+): Promise<boolean> {
+  const visited = new Set<string>();
+  let currentId: string | null = taskId;
+
+  while (currentId) {
+    if (visited.has(currentId)) return true;
+    visited.add(currentId);
+
+    const result = await db.query(
+      'SELECT parent_id, assigned_to FROM tasks WHERE id = $1',
+      [currentId]
+    );
+
+    if (result.rows.length === 0) break;
+
+    // Check if a parent task is assigned back to the same agent
+    if (result.rows[0].parent_id) {
+      const parentTask = await db.query(
+        'SELECT assigned_to FROM tasks WHERE id = $1',
+        [result.rows[0].parent_id]
+      );
+      if (parentTask.rows[0]?.assigned_to === agentId && visited.size > 1) {
+        return true;
+      }
+    }
+
+    currentId = result.rows[0].parent_id;
+    if (visited.size > 20) break;
+  }
+
+  return false;
+}
+
+/**
+ * Auto-pause an agent and notify.
+ */
+async function autoPause(
+  agentId: string,
+  companyId: string,
+  reason: string
+): Promise<void> {
+  await db.query(
+    "UPDATE agents SET status = 'paused' WHERE id = $1",
+    [agentId]
+  );
+
+  await db.query(
+    `INSERT INTO audit_log
+      (company_id, agent_id, action, entity_type, entity_id, details)
+     VALUES ($1, $2, 'agent.auto_paused', 'agent', $2, $3)`,
+    [companyId, agentId, JSON.stringify({ reason })]
+  );
+
+  broadcast(companyId, {
+    type: 'agent.auto_paused',
+    data: { agentId, reason },
+  });
+
+  logger.warn({ agentId, reason }, '⚠️ Agent auto-paused');
+}
+
+/**
+ * Block a task and notify.
+ */
+async function blockTask(taskId: string, reason: string): Promise<void> {
+  await db.query(
+    `UPDATE tasks
+     SET status = 'blocked', locked_by = NULL, locked_at = NULL,
+         metadata = jsonb_set(COALESCE(metadata, '{}'), '{block_reason}', $2::jsonb)
+     WHERE id = $1`,
+    [taskId, JSON.stringify(reason)]
+  );
+
+  logger.warn({ taskId, reason }, '🚫 Task blocked by safety system');
+}
+________________________________________
+Updated Heartbeat (with tools + governance + safety)
+src/orchestrator/heartbeat.ts — kluczowe zmiany
+TypeScript
+// Dodaj importy na górze:
+import { checkSafety } from './safety.js';
+import { checkPolicies } from '../governance/policies.js';
+import { createApprovalRequest } from '../governance/approvals.js';
+import { executeTool } from '../tools/executor.js';
+import { broadcast } from '../ws/hub.js';
+
+// W funkcji agentHeartbeat, po sprawdzeniu budżetu:
+
+    // 1b. Safety check
+    const safety = await checkSafety(agent.id, agent.company_id, task?.id);
+    if (!safety.safe) {
+      logger.warn(
+        { agent: agent.name, reason: safety.reason },
+        '🛑 Safety check failed'
+      );
+      await logHeartbeat(agent.id, null, `safety_${safety.reason}`, Date.now() - startTime, 0);
+      return;
+    }
+
+// W processAction, zaktualizuj case 'use_tool':
+    case 'use_tool': {
+      // Policy check
+      const policyCheck = await checkPolicies(
+        agent.company_id,
+        agent.id,
+        'use_tool',
+        { toolName: action.tool }
+      );
+
+      if (!policyCheck.allowed) {
+        if (policyCheck.requiresApproval) {
+          await createApprovalRequest(
+            agent.company_id,
+            agent.id,
+            'tool_use',
+            { tool: action.tool, params: action.params, reason: policyCheck.reason },
+            policyCheck.policyId,
+            task.id
+          );
+          await releaseTask(task.id, 'blocked', `Awaiting approval: ${policyCheck.reason}`);
+        }
+        logger.warn({ reason: policyCheck.reason }, '🛡️ Tool use blocked by policy');
+        break;
+      }
+
+      // Execute tool
+      const toolResult = await executeTool(
+        agent.id,
+        agent.company_id,
+        task.id,
+        action.tool,
+        action.params
+      );
+
+      // Store result as message for context
+      await db.query(
+        `INSERT INTO messages
+          (company_id, task_id, from_agent, content, type, metadata)
+         VALUES ($1, $2, $3, $4, 'tool_result', $5)`,
+        [
+          agent.company_id,
+          task.id,
+          agent.id,
+          `Tool "${action.tool}": ${toolResult.success ? 'success' : toolResult.error}`,
+          JSON.stringify(toolResult),
+        ]
+      );
+      break;
+    }
+
+// Dodaj case 'request_approval':
+    case 'request_approval': {
+      await createApprovalRequest(
+        agent.company_id,
+        agent.id,
+        action.payload?.type || 'general',
+        action.payload,
+        undefined,
+        task.id
+      );
+      break;
+    }
+
+// Broadcast po każdym heartbeatcie:
+    broadcast(agent.company_id, {
+      type: 'heartbeat.completed',
+      data: {
+        agentId: agent.id,
+        agentName: agent.name,
+        taskId: task?.id,
+        actions: response.actions.map(a => a.type),
+        cost: response.cost.usd,
+      },
+    });
+Dodaj też use_tool do AgentAction w runtimes/types.ts:
+TypeScript
+export interface AgentAction {
+  type:
+    | 'complete_task'
+    | 'delegate'
+    | 'message'
+    | 'request_approval'
+    | 'blocked'
+    | 'continue'
+    | 'use_tool';       // ← NEW
+  result?: string;
+  to?: string;
+  content?: string;
+  description?: string;
+  reason?: string;
+  payload?: any;
+  tool?: string;         // ← NEW
+  params?: any;          // ← NEW
+}
+________________________________________
+WebSocket Hub
+src/ws/hub.ts
+TypeScript
+import { WebSocketServer, WebSocket } from 'ws';
+import type { Server } from 'http';
+import { logger } from '../utils/logger.js';
+
+interface Client {
+  ws: WebSocket;
+  companyId: string;
+  connectedAt: Date;
+}
+
+const clients: Set<Client> = new Set();
+
+let wss: WebSocketServer;
+
+/**
+ * Initialize WebSocket server on the existing HTTP server.
+ */
+export function initWebSocket(server: Server): void {
+  wss = new WebSocketServer({ server, path: '/ws' });
+
+  wss.on('connection', (ws, req) => {
+    // Extract company ID from query params: /ws?company=<uuid>
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const companyId = url.searchParams.get('company') || '';
+
+    if (!companyId) {
+      ws.close(4001, 'Missing company parameter');
+      return;
+    }
+
+    const client: Client = {
+      ws,
+      companyId,
+      connectedAt: new Date(),
+    };
+
+    clients.add(client);
+    logger.info(
+      { companyId, totalClients: clients.size },
+      '🔌 WebSocket client connected'
+    );
+
+    // Send welcome
+    ws.send(
+      JSON.stringify({
+        type: 'connected',
+        data: { companyId, timestamp: new Date().toISOString() },
+      })
+    );
+
+    ws.on('close', () => {
+      clients.delete(client);
+      logger.debug(
+        { companyId, totalClients: clients.size },
+        '🔌 WebSocket client disconnected'
+      );
+    });
+
+    ws.on('error', (err) => {
+      logger.error({ err }, 'WebSocket client error');
+      clients.delete(client);
+    });
+
+    // Handle incoming messages (future: commands from dashboard)
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        handleClientMessage(client, msg);
+      } catch {
+        // ignore malformed
+      }
+    });
+  });
+
+  logger.info('🔌 WebSocket server initialized on /ws');
+}
+
+/**
+ * Broadcast a message to all clients watching a specific company.
+ */
+export function broadcast(companyId: string, message: any): void {
+  const payload = JSON.stringify({
+    ...message,
+    timestamp: new Date().toISOString(),
+  });
+
+  let sent = 0;
+  for (const client of clients) {
+    if (client.companyId === companyId && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(payload);
+      sent++;
+    }
+  }
+
+  if (sent > 0) {
+    logger.debug({ companyId, sent, type: message.type }, '📡 Broadcast');
+  }
+}
+
+/**
+ * Broadcast to ALL companies (system events).
+ */
+export function broadcastAll(message: any): void {
+  const payload = JSON.stringify({
+    ...message,
+    timestamp: new Date().toISOString(),
+  });
+
+  for (const client of clients) {
+    if (client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(payload);
+    }
+  }
+}
+
+/**
+ * Handle messages from dashboard clients.
+ */
+function handleClientMessage(client: Client, msg: any): void {
+  switch (msg.type) {
+    case 'ping':
+      client.ws.send(JSON.stringify({ type: 'pong' }));
+      break;
+
+    case 'subscribe':
+      // Client can switch company
+      if (msg.companyId) {
+        client.companyId = msg.companyId;
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
+/**
+ * Get connection stats.
+ */
+export function getWsStats() {
+  const byCompany: Record<string, number> = {};
+  for (const client of clients) {
+    byCompany[client.companyId] = (byCompany[client.companyId] || 0) + 1;
+  }
+  return {
+    totalConnections: clients.size,
+    byCompany,
+  };
+}
+________________________________________
+Updated Entry Point
+src/index.ts
+TypeScript
+import express from 'express';
+import { createServer } from 'http';
+import { env } from './env.js';
+import { logger } from './utils/logger.js';
+import { db } from './db/client.js';
+import routes from './routes/index.js';
+import { initRuntimes } from './runtimes/registry.js';
+import { startScheduler, stopScheduler } from './orchestrator/scheduler.js';
+import { initWebSocket, getWsStats } from './ws/hub.js';
+
+const app = express();
+const server = createServer(app);
+
+// CORS for dashboard
+app.use((_req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (_req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+app.use(express.json());
+
+// Request logging
+app.use((req, _res, next) => {
+  if (req.url !== '/api/health') {
+    logger.debug({ method: req.method, url: req.url }, 'Request');
+  }
+  next();
+});
+
+// API routes
+app.use('/api', routes);
+
+// WebSocket stats endpoint
+app.get('/api/ws/stats', (_req, res) => {
+  res.json(getWsStats());
+});
+
+// Error handler
+app.use(
+  (
+    err: Error,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    logger.error({ err }, 'Unhandled error');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+);
+
+async function start() {
+  try {
+    await db.query('SELECT 1');
+    logger.info('✅ Database connected');
+  } catch (err) {
+    logger.fatal({ err }, '❌ Database connection failed');
+    process.exit(1);
+  }
+
+  initRuntimes();
+
+  // Init WebSocket on the same HTTP server
+  initWebSocket(server);
+
+  // Use server.listen instead of app.listen
+  server.listen(env.PORT, () => {
+    logger.info({ port: env.PORT }, '🚀 Autonomiczne Biuro is running');
+    logger.info({ port: env.PORT }, '🔌 WebSocket available at ws://localhost:' + env.PORT + '/ws');
+  });
+
+  startScheduler();
+}
+
+process.on('SIGINT', async () => {
+  logger.info('Shutting down...');
+  stopScheduler();
+  await db.close();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('Shutting down...');
+  stopScheduler();
+  await db.close();
+  process.exit(0);
+});
+
+start();
+________________________________________
+Nowe Routes
+src/routes/goals.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const createGoalSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  parent_id: z.string().uuid().optional(),
+});
+
+// Create goal
+router.post('/companies/:companyId/goals', async (req, res) => {
+  const parsed = createGoalSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const result = await db.query(
+    `INSERT INTO goals (company_id, title, description, parent_id)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      req.params.companyId,
+      parsed.data.title,
+      parsed.data.description || null,
+      parsed.data.parent_id || null,
+    ]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// List goals as tree
+router.get('/companies/:companyId/goals', async (req, res) => {
+  const result = await db.query(
+    `SELECT * FROM goals
+     WHERE company_id = $1
+     ORDER BY created_at ASC`,
+    [req.params.companyId]
+  );
+
+  // Build tree
+  const goals = result.rows;
+  const map = new Map(goals.map((g) => [g.id, { ...g, children: [] as any[] }]));
+  const roots: any[] = [];
+
+  for (const goal of map.values()) {
+    if (goal.parent_id && map.has(goal.parent_id)) {
+      map.get(goal.parent_id)!.children.push(goal);
+    } else {
+      roots.push(goal);
+    }
+  }
+
+  res.json(roots);
+});
+
+// Update goal
+router.patch('/goals/:id', async (req, res) => {
+  const { title, description, status } = req.body;
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  if (title) { params.push(title); sets.push(`title = $${params.length}`); }
+  if (description) { params.push(description); sets.push(`description = $${params.length}`); }
+  if (status) { params.push(status); sets.push(`status = $${params.length}`); }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  params.push(req.params.id);
+  const result = await db.query(
+    `UPDATE goals SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  );
+  res.json(result.rows[0]);
+});
+
+export default router;
+src/routes/tools.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { z } from 'zod';
+
+const router = Router();
+
+const createToolSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(['http', 'function', 'mcp', 'bash', 'builtin']),
+  description: z.string().optional(),
+  config: z.record(z.any()).optional(),
+  schema: z.record(z.any()).optional(),
+});
+
+const assignToolSchema = z.object({
+  permissions: z.object({
+    read: z.boolean().default(true),
+    write: z.boolean().default(true),
+    execute: z.boolean().default(true),
+  }).optional(),
+  rate_limit: z.number().int().positive().default(100),
+});
+
+// Create tool
+router.post('/companies/:companyId/tools', async (req, res) => {
+  const parsed = createToolSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const d = parsed.data;
+  const result = await db.query(
+    `INSERT INTO tools (company_id, name, type, description, config, schema)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [
+      req.params.companyId,
+      d.name,
+      d.type,
+      d.description || null,
+      JSON.stringify(d.config || {}),
+      JSON.stringify(d.schema || {}),
+    ]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// List tools
+router.get('/companies/:companyId/tools', async (req, res) => {
+  const result = await db.query(
+    `SELECT t.*,
+       (SELECT COUNT(*) FROM agent_tools at WHERE at.tool_id = t.id) as agent_count
+     FROM tools t
+     WHERE t.company_id = $1
+     ORDER BY t.name ASC`,
+    [req.params.companyId]
+  );
+  res.json(result.rows);
+});
+
+// Assign tool to agent
+router.post('/agents/:agentId/tools/:toolId', async (req, res) => {
+  const parsed = assignToolSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+  const d = parsed.data;
+  const result = await db.query(
+    `INSERT INTO agent_tools (agent_id, tool_id, permissions, rate_limit)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (agent_id, tool_id)
+     DO UPDATE SET permissions = $3, rate_limit = $4
+     RETURNING *`,
+    [
+      req.params.agentId,
+      req.params.toolId,
+      JSON.stringify(d.permissions || { read: true, write: true, execute: true }),
+      d.rate_limit,
+    ]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// Remove tool from agent
+router.delete('/agents/:agentId/tools/:toolId', async (req, res) => {
+  await db.query(
+    'DELETE FROM agent_tools WHERE agent_id = $1 AND tool_id = $2',
+    [req.params.agentId, req.params.toolId]
+  );
+  res.json({ deleted: true });
+});
+
+// Get tool call history
+router.get('/companies/:companyId/tool-calls', async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 50;
+  const result = await db.query(
+    `SELECT tc.*, t.name as tool_name, a.name as agent_name
+     FROM tool_calls tc
+     JOIN tools t ON t.id = tc.tool_id
+     JOIN agents a ON a.id = tc.agent_id
+     WHERE tc.company_id = $1
+     ORDER BY tc.created_at DESC
+     LIMIT $2`,
+    [req.params.companyId, limit]
+  );
+  res.json(result.rows);
+});
+
+// Toggle tool enabled/disabled
+router.patch('/tools/:id', async (req, res) => {
+  const { enabled, config, description } = req.body;
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  if (enabled !== undefined) { params.push(enabled); sets.push(`enabled = $${params.length}`); }
+  if (config) { params.push(JSON.stringify(config)); sets.push(`config = $${params.length}`); }
+  if (description) { params.push(description); sets.push(`description = $${params.length}`); }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  params.push(req.params.id);
+  const result = await db.query(
+    `UPDATE tools SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  );
+  res.json(result.rows[0]);
+});
+
+export default router;
+src/routes/approvals.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+import { decideApproval } from '../governance/approvals.js';
+
+const router = Router();
+
+// List pending approvals
+router.get('/companies/:companyId/approvals', async (req, res) => {
+  const status = req.query.status || 'pending';
+  const result = await db.query(
+    `SELECT ap.*,
+       a.name as agent_name,
+       a.role as agent_role,
+       t.title as task_title
+     FROM approvals ap
+     JOIN agents a ON a.id = ap.requested_by
+     LEFT JOIN tasks t ON t.id = ap.task_id
+     WHERE ap.company_id = $1
+       AND ap.status = $2
+     ORDER BY ap.created_at DESC`,
+    [req.params.companyId, status]
+  );
+  res.json(result.rows);
+});
+
+// Approve
+router.post('/approvals/:id/approve', async (req, res) => {
+  try {
+    await decideApproval(req.params.id, 'approved', 'board', req.body.note);
+    res.json({ status: 'approved' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Reject
+router.post('/approvals/:id/reject', async (req, res) => {
+  try {
+    await decideApproval(req.params.id, 'rejected', 'board', req.body.note);
+    res.json({ status: 'rejected' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Policies CRUD
+router.post('/companies/:companyId/policies', async (req, res) => {
+  const { name, description, type, rules } = req.body;
+  const result = await db.query(
+    `INSERT INTO policies (company_id, name, description, type, rules)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [req.params.companyId, name, description, type, JSON.stringify(rules)]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+router.get('/companies/:companyId/policies', async (req, res) => {
+  const result = await db.query(
+    'SELECT * FROM policies WHERE company_id = $1 ORDER BY created_at ASC',
+    [req.params.companyId]
+  );
+  res.json(result.rows);
+});
+
+router.patch('/policies/:id', async (req, res) => {
+  const { enabled, rules, name, description } = req.body;
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  if (enabled !== undefined) { params.push(enabled); sets.push(`enabled = $${params.length}`); }
+  if (rules) { params.push(JSON.stringify(rules)); sets.push(`rules = $${params.length}`); }
+  if (name) { params.push(name); sets.push(`name = $${params.length}`); }
+  if (description) { params.push(description); sets.push(`description = $${params.length}`); }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  params.push(req.params.id);
+  const result = await db.query(
+    `UPDATE policies SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  );
+  res.json(result.rows[0]);
+});
+
+export default router;
+src/routes/index.ts — updated
+TypeScript
+import { Router } from 'express';
+import companies from './companies.js';
+import agents from './agents.js';
+import tasks from './tasks.js';
+import messages from './messages.js';
+import goals from './goals.js';
+import tools from './tools.js';
+import approvals from './approvals.js';
+
+const router = Router();
+
+router.use('/companies', companies);
+router.use('/', agents);
+router.use('/', tasks);
+router.use('/', messages);
+router.use('/', goals);
+router.use('/', tools);
+router.use('/', approvals);
+
+router.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+export default router;
+________________________________________
+Dashboard (React + Vite)
+packages/dashboard/package.json
+JSON
+{
+  "name": "@biuro/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}
+packages/dashboard/vite.config.ts
+TypeScript
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3200,
+    proxy: {
+      '/api': 'http://localhost:3100',
+      '/ws': {
+        target: 'ws://localhost:3100',
+        ws: true,
+      },
+    },
+  },
+});
+packages/dashboard/tailwind.config.js
+JavaScript
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+packages/dashboard/postcss.config.js
+JavaScript
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+packages/dashboard/index.html
+HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autonomiczne Biuro</title>
+</head>
+<body class="bg-gray-950 text-gray-100">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
+packages/dashboard/src/styles/globals.css
+CSS
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+}
+packages/dashboard/src/main.tsx
+React
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import './styles/globals.css';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+);
+packages/dashboard/src/api/client.ts
+TypeScript
+const API_BASE = '/api';
+
+async function request<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(error.error || res.statusText);
+  }
+
+  return res.json();
+}
+
+export const api = {
+  // Companies
+  listCompanies: () => request<any[]>('/companies'),
+  getCompany: (id: string) => request<any>(`/companies/${id}`),
+  createCompany: (data: any) =>
+    request<any>('/companies', { method: 'POST', body: JSON.stringify(data) }),
+  getCompanyStats: (id: string) => request<any>(`/companies/${id}/stats`),
+
+  // Agents
+  listAgents: (companyId: string) => request<any[]>(`/companies/${companyId}/agents`),
+  getAgent: (id: string) => request<any>(`/agents/${id}`),
+  createAgent: (companyId: string, data: any) =>
+    request<any>(`/companies/${companyId}/agents`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  pauseAgent: (id: string) =>
+    request<any>(`/agents/${id}/pause`, { method: 'POST' }),
+  resumeAgent: (id: string) =>
+    request<any>(`/agents/${id}/resume`, { method: 'POST' }),
+  terminateAgent: (id: string) =>
+    request<any>(`/agents/${id}/terminate`, { method: 'POST' }),
+  getOrgChart: (companyId: string) =>
+    request<any[]>(`/companies/${companyId}/org-chart`),
+  getHeartbeats: (agentId: string) =>
+    request<any[]>(`/agents/${agentId}/heartbeats`),
+
+  // Tasks
+  listTasks: (companyId: string, filters?: Record<string, string>) => {
+    const params = new URLSearchParams(filters || {});
+    return request<any[]>(`/companies/${companyId}/tasks?${params}`);
+  },
+  getTask: (id: string) => request<any>(`/tasks/${id}`),
+  createTask: (companyId: string, data: any) =>
+    request<any>(`/companies/${companyId}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateTask: (id: string, data: any) =>
+    request<any>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Goals
+  listGoals: (companyId: string) =>
+    request<any[]>(`/companies/${companyId}/goals`),
+  createGoal: (companyId: string, data: any) =>
+    request<any>(`/companies/${companyId}/goals`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Tools
+  listTools: (companyId: string) =>
+    request<any[]>(`/companies/${companyId}/tools`),
+  createTool: (companyId: string, data: any) =>
+    request<any>(`/companies/${companyId}/tools`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  assignTool: (agentId: string, toolId: string, data?: any) =>
+    request<any>(`/agents/${agentId}/tools/${toolId}`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+  getToolCalls: (companyId: string) =>
+    request<any[]>(`/companies/${companyId}/tool-calls`),
+
+  // Approvals
+  listApprovals: (companyId: string, status?: string) =>
+    request<any[]>(`/companies/${companyId}/approvals?status=${status || 'pending'}`),
+  approveApproval: (id: string, note?: string) =>
+    request<any>(`/approvals/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+  rejectApproval: (id: string, note?: string) =>
+    request<any>(`/approvals/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+
+  // Policies
+  listPolicies: (companyId: string) =>
+    request<any[]>(`/companies/${companyId}/policies`),
+  createPolicy: (companyId: string, data: any) =>
+    request<any>(`/companies/${companyId}/policies`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Audit
+  getAuditLog: (companyId: string, limit?: number) =>
+    request<any[]>(`/companies/${companyId}/audit-log?limit=${limit || 50}`),
+
+  // Messages
+  getTaskMessages: (taskId: string) =>
+    request<any[]>(`/tasks/${taskId}/messages`),
+  sendMessage: (taskId: string, content: string) =>
+    request<any>(`/tasks/${taskId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+};
+packages/dashboard/src/hooks/useWebSocket.ts
+React
+import { useEffect, useRef, useState, useCallback } from 'react';
+
+export interface WsMessage {
+  type: string;
+  data: any;
+  timestamp: string;
+}
+
+export function useWebSocket(companyId: string | null) {
+  const wsRef = useRef<WebSocket | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [messages, setMessages] = useState<WsMessage[]>([]);
+  const [lastMessage, setLastMessage] = useState<WsMessage | null>(null);
+
+  useEffect(() => {
+    if (!companyId) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws?company=${companyId}`;
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => setConnected(true);
+
+    ws.onmessage = (event) => {
+      try {
+        const msg: WsMessage = JSON.parse(event.data);
+        setLastMessage(msg);
+        setMessages((prev) => [msg, ...prev].slice(0, 100)); // keep last 100
+      } catch {
+        // ignore
+      }
+    };
+
+    ws.onclose = () => {
+      setConnected(false);
+      // Auto-reconnect after 3s
+      setTimeout(() => {
+        if (wsRef.current === ws) {
+          // Trigger re-render to reconnect
+          setConnected(false);
+        }
+      }, 3000);
+    };
+
+    ws.onerror = () => setConnected(false);
+
+    return () => {
+      ws.close();
+    };
+  }, [companyId]);
+
+  const clearMessages = useCallback(() => setMessages([]), []);
+
+  return { connected, messages, lastMessage, clearMessages };
+}
+packages/dashboard/src/hooks/useApi.ts
+React
+import { useState, useEffect, useCallback } from 'react';
+
+export function useApi<T>(
+  fetcher: () => Promise<T>,
+  deps: any[] = []
+) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetcher();
+      setData(result);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, deps);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { data, loading, error, refetch };
+}
+packages/dashboard/src/components/StatusBadge.tsx
+React
+import React from 'react';
+
+const STATUS_COLORS: Record<string, string> = {
+  // Agent statuses
+  idle: 'bg-gray-600 text-gray-200',
+  working: 'bg-green-600 text-white animate-pulse',
+  paused: 'bg-yellow-600 text-white',
+  terminated: 'bg-red-800 text-red-200',
+
+  // Task statuses
+  backlog: 'bg-gray-600 text-gray-200',
+  assigned: 'bg-blue-600 text-white',
+  in_progress: 'bg-green-600 text-white',
+  review: 'bg-purple-600 text-white',
+  done: 'bg-emerald-700 text-white',
+  blocked: 'bg-red-600 text-white',
+  cancelled: 'bg-gray-700 text-gray-400',
+
+  // Approval statuses
+  pending: 'bg-yellow-600 text-white',
+  approved: 'bg-green-600 text-white',
+  rejected: 'bg-red-600 text-white',
+};
+
+export function StatusBadge({ status }: { status: string }) {
+  const color = STATUS_COLORS[status] || 'bg-gray-600 text-gray-200';
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
+      {status}
+    </span>
+  );
+}
+packages/dashboard/src/components/CostBadge.tsx
+React
+import React from 'react';
+
+export function CostBadge({ amount }: { amount: number }) {
+  const color =
+    amount > 10
+      ? 'text-red-400'
+      : amount > 1
+        ? 'text-yellow-400'
+        : 'text-green-400';
+
+  return (
+    <span className={`font-mono text-sm ${color}`}>
+      ${amount.toFixed(4)}
+    </span>
+  );
+}
+packages/dashboard/src/components/LiveFeed.tsx
+React
+import React from 'react';
+import type { WsMessage } from '../hooks/useWebSocket';
+
+const ICONS: Record<string, string> = {
+  'heartbeat.completed': '💓',
+  'approval.requested': '🎫',
+  'approval.approved': '✅',
+  'approval.rejected': '❌',
+  'agent.auto_paused': '⚠️',
+};
+
+export function LiveFeed({
+  messages,
+  connected,
+}: {
+  messages: WsMessage[];
+  connected: boolean;
+}) {
+  return (
+    <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-300">Live Feed</h3>
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-2 h-2 rounded-full ${
+              connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+            }`}
+          />
+          <span className="text-xs text-gray-500">
+            {connected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-2 max-h-80 overflow-y-auto">
+        {messages.length === 0 ? (
+          <p className="text-gray-600 text-sm">Waiting for events...</p>
+        ) : (
+          messages.map((msg, i) => (
+            <div
+              key={i}
+              className="text-sm flex items-start gap-2 py-1 border-b border-gray-800/50"
+            >
+              <span>{ICONS[msg.type] || '📡'}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-gray-400">{msg.type}</span>
+                {msg.data?.agentName && (
+                  <span className="text-blue-400 ml-1">
+                    {msg.data.agentName}
+                  </span>
+                )}
+                {msg.data?.cost && (
+                  <span className="text-yellow-500 ml-1">
+                    ${msg.data.cost.toFixed(4)}
+                  </span>
+                )}
+              </div>
+              <span className="text-gray-600 text-xs whitespace-nowrap">
+                {new Date(msg.timestamp).toLocaleTimeString()}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+packages/dashboard/src/components/Layout.tsx
+React
+import React from 'react';
+import { Sidebar } from './Sidebar';
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      <main className="flex-1 overflow-y-auto p-6">{children}</main>
+    </div>
+  );
+}
+packages/dashboard/src/components/Sidebar.tsx
+React
+import React from 'react';
+import { NavLink } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Users,
+  ListTodo,
+  Target,
+  Wrench,
+  Shield,
+  DollarSign,
+  ScrollText,
+  Network,
+} from 'lucide-react';
+
+const links = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/agents', icon: Users, label: 'Agents' },
+  { to: '/tasks', icon: ListTodo, label: 'Tasks' },
+  { to: '/goals', icon: Target, label: 'Goals' },
+  { to: '/org-chart', icon: Network, label: 'Org Chart' },
+  { to: '/tools', icon: Wrench, label: 'Tools' },
+  { to: '/approvals', icon: Shield, label: 'Approvals' },
+  { to: '/budgets', icon: DollarSign, label: 'Budgets' },
+  { to: '/audit-log', icon: ScrollText, label: 'Audit Log' },
+];
+
+export function Sidebar() {
+  return (
+    <aside className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col">
+      <div className="p-4 border-b border-gray-800">
+        <h1 className="text-lg font-bold">🏢 Biuro</h1>
+        <p className="text-xs text-gray-500">Autonomiczne Biuro</p>
+      </div>
+      <nav className="flex-1 p-2 space-y-1">
+        {links.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-blue-600/20 text-blue-400'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+              }`
+            }
+          >
+            <Icon size={18} />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+packages/dashboard/src/pages/DashboardPage.tsx
+React
+import React, { useState, useEffect } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { StatusBadge } from '../components/StatusBadge';
+import { CostBadge } from '../components/CostBadge';
+import { LiveFeed } from '../components/LiveFeed';
+
+export function DashboardPage({ companyId }: { companyId: string }) {
+  const { data: stats, refetch } = useApi(
+    () => api.getCompanyStats(companyId),
+    [companyId]
+  );
+  const { data: agents } = useApi(
+    () => api.listAgents(companyId),
+    [companyId]
+  );
+  const { data: tasks } = useApi(
+    () => api.listTasks(companyId),
+    [companyId]
+  );
+  const { data: pendingApprovals } = useApi(
+    () => api.listApprovals(companyId, 'pending'),
+    [companyId]
+  );
+  const ws = useWebSocket(companyId);
+
+  // Auto-refresh on heartbeat events
+  useEffect(() => {
+    if (ws.lastMessage?.type === 'heartbeat.completed') {
+      refetch();
+    }
+  }, [ws.lastMessage]);
+
+  if (!stats) return <div className="text-gray-500">Loading...</div>;
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Dashboard</h2>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+          <p className="text-gray-500 text-sm">Total Cost</p>
+          <p className="text-2xl font-bold text-green-400">
+            ${stats.totalCostUsd.toFixed(2)}
+          </p>
+        </div>
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+          <p className="text-gray-500 text-sm">Active Agents</p>
+          <p className="text-2xl font-bold">
+            {agents?.filter((a: any) => a.status !== 'terminated').length || 0}
+          </p>
+        </div>
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+          <p className="text-gray-500 text-sm">Open Tasks</p>
+          <p className="text-2xl font-bold">
+            {tasks?.filter((t: any) => !['done', 'cancelled'].includes(t.status)).length || 0}
+          </p>
+        </div>
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+          <p className="text-gray-500 text-sm">Pending Approvals</p>
+          <p className="text-2xl font-bold text-yellow-400">
+            {pendingApprovals?.length || 0}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+        {/* Agent Status */}
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Agents</h3>
+          <div className="space-y-2">
+            {agents?.map((agent: any) => (
+              <div
+                key={agent.id}
+                className="flex items-center justify-between py-2 border-b border-gray-800/50"
+              >
+                <div>
+                  <span className="font-medium">{agent.name}</span>
+                  <span className="text-gray-500 text-sm ml-2">
+                    {agent.role}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {agent.budget_spent && (
+                    <CostBadge amount={parseFloat(agent.budget_spent)} />
+                  )}
+                  <StatusBadge status={agent.status} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Live Feed */}
+        <LiveFeed messages={ws.messages} connected={ws.connected} />
+      </div>
+
+      {/* Recent Tasks */}
+      <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">
+          Recent Tasks
+        </h3>
+        <div className="space-y-2">
+          {tasks?.slice(0, 10).map((task: any) => (
+            <div
+              key={task.id}
+              className="flex items-center justify-between py-2 border-b border-gray-800/50"
+            >
+              <div className="flex-1 min-w-0">
+                <span className="font-medium truncate block">
+                  {task.title}
+                </span>
+                {task.assigned_to_name && (
+                  <span className="text-gray-500 text-sm">
+                    → {task.assigned_to_name}
+                  </span>
+                )}
+              </div>
+              <StatusBadge status={task.status} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+packages/dashboard/src/pages/AgentsPage.tsx
+React
+import React, { useState } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { StatusBadge } from '../components/StatusBadge';
+import { CostBadge } from '../components/CostBadge';
+
+export function AgentsPage({ companyId }: { companyId: string }) {
+  const { data: agents, refetch } = useApi(
+    () => api.listAgents(companyId),
+    [companyId]
+  );
+  const [creating, setCreating] = useState(false);
+
+  const handleAction = async (
+    agentId: string,
+    action: 'pause' | 'resume' | 'terminate'
+  ) => {
+    if (action === 'terminate' && !confirm('Terminate this agent?')) return;
+    await api[`${action}Agent`](agentId);
+    refetch();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Agents</h2>
+        <button
+          onClick={() => setCreating(true)}
+          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          + Hire Agent
+        </button>
+      </div>
+
+      <div className="grid gap-4">
+        {agents?.map((agent: any) => (
+          <div
+            key={agent.id}
+            className="bg-gray-900 rounded-lg border border-gray-800 p-4"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h3 className="font-semibold text-lg">{agent.name}</h3>
+                  <StatusBadge status={agent.status} />
+                </div>
+                <p className="text-gray-500">
+                  {agent.title || agent.role} · {agent.runtime}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {agent.status === 'paused' && (
+                  <button
+                    onClick={() => handleAction(agent.id, 'resume')}
+                    className="text-xs bg-green-700 hover:bg-green-600 px-3 py-1 rounded"
+                  >
+                    Resume
+                  </button>
+                )}
+                {['idle', 'working'].includes(agent.status) && (
+                  <button
+                    onClick={() => handleAction(agent.id, 'pause')}
+                    className="text-xs bg-yellow-700 hover:bg-yellow-600 px-3 py-1 rounded"
+                  >
+                    Pause
+                  </button>
+                )}
+                {agent.status !== 'terminated' && (
+                  <button
+                    onClick={() => handleAction(agent.id, 'terminate')}
+                    className="text-xs bg-red-800 hover:bg-red-700 px-3 py-1 rounded"
+                  >
+                    Terminate
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Budget bar */}
+            {agent.budget_limit && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Budget</span>
+                  <span>
+                    <CostBadge amount={parseFloat(agent.budget_spent || 0)} />
+                    {' / $'}
+                    {parseFloat(agent.budget_limit).toFixed(2)}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      parseFloat(agent.budget_spent) / parseFloat(agent.budget_limit) > 0.8
+                        ? 'bg-red-500'
+                        : 'bg-blue-500'
+                    }`}
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (parseFloat(agent.budget_spent || 0) /
+                          parseFloat(agent.budget_limit)) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-2 text-xs text-gray-600 font-mono">
+              {agent.id}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+packages/dashboard/src/pages/TasksPage.tsx
+React
+import React, { useState } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { StatusBadge } from '../components/StatusBadge';
+
+export function TasksPage({ companyId }: { companyId: string }) {
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const { data: tasks, refetch } = useApi(
+    () =>
+      api.listTasks(
+        companyId,
+        statusFilter ? { status: statusFilter } : undefined
+      ),
+    [companyId, statusFilter]
+  );
+
+  const statuses = [
+    '',
+    'backlog',
+    'assigned',
+    'in_progress',
+    'review',
+    'done',
+    'blocked',
+    'cancelled',
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Tasks</h2>
+        <div className="flex gap-2">
+          {statuses.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                statusFilter === s
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              {s || 'All'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {tasks?.map((task: any) => (
+          <div
+            key={task.id}
+            className="bg-gray-900 rounded-lg border border-gray-800 p-4 hover:border-gray-700 transition-colors cursor-pointer"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-medium">{task.title}</h3>
+                  <StatusBadge status={task.status} />
+                  {task.priority > 0 && (
+                    <span className="text-xs text-orange-400">
+                      P{task.priority}
+                    </span>
+                  )}
+                </div>
+                {task.description && (
+                  <p className="text-gray-500 text-sm mt-1 truncate">
+                    {task.description}
+                  </p>
+                )}
+                <div className="flex items-center gap-4 mt-2 text-xs text-gray-600">
+                  {task.assigned_to_name && (
+                    <span>→ {task.assigned_to_name}</span>
+                  )}
+                  {task.goal_title && <span>🎯 {task.goal_title}</span>}
+                  <span>
+                    {new Date(task.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {task.result && (
+              <div className="mt-3 p-2 bg-gray-800 rounded text-sm text-gray-300">
+                <span className="text-gray-500 text-xs">Result: </span>
+                {task.result.slice(0, 200)}
+                {task.result.length > 200 && '...'}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {tasks?.length === 0 && (
+          <p className="text-gray-600 text-center py-8">No tasks found</p>
+        )}
+      </div>
+    </div>
+  );
+}
+packages/dashboard/src/pages/ApprovalsPage.tsx
+React
+import React from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { StatusBadge } from '../components/StatusBadge';
+
+export function ApprovalsPage({ companyId }: { companyId: string }) {
+  const { data: approvals, refetch } = useApi(
+    () => api.listApprovals(companyId, 'pending'),
+    [companyId]
+  );
+
+  const handleDecision = async (id: string, decision: 'approve' | 'reject') => {
+    if (decision === 'approve') {
+      await api.approveApproval(id);
+    } else {
+      await api.rejectApproval(id);
+    }
+    refetch();
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Approvals</h2>
+
+      {approvals?.length === 0 ? (
+        <div className="text-center py-12 text-gray-600">
+          <p className="text-4xl mb-2">✅</p>
+          <p>No pending approvals</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {approvals?.map((approval: any) => (
+            <div
+              key={approval.id}
+              className="bg-gray-900 rounded-lg border border-yellow-800/50 p-4"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-yellow-400">🎫</span>
+                    <h3 className="font-medium">{approval.type}</h3>
+                    <StatusBadge status={approval.status} />
+                  </div>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Requested by{' '}
+                    <span className="text-blue-400">
+                      {approval.agent_name}
+                    </span>{' '}
+                    ({approval.agent_role})
+                  </p>
+                  {approval.task_title && (
+                    <p className="text-gray-600 text-xs mt-1">
+                      Task: {approval.task_title}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDecision(approval.id, 'approve')}
+                    className="bg-green-700 hover:bg-green-600 px-4 py-2 rounded text-sm font-medium"
+                  >
+                    ✅ Approve
+                  </button>
+                  <button
+                    onClick={() => handleDecision(approval.id, 'reject')}
+                    className="bg-red-800 hover:bg-red-700 px-4 py-2 rounded text-sm font-medium"
+                  >
+                    ❌ Reject
+                  </button>
+                </div>
+              </div>
+
+              {approval.payload && (
+                <pre className="mt-3 p-2 bg-gray-800 rounded text-xs text-gray-400 overflow-x-auto">
+                  {JSON.stringify(approval.payload, null, 2)}
+                </pre>
+              )}
+
+              <p className="text-xs text-gray-600 mt-2">
+                {new Date(approval.created_at).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+packages/dashboard/src/pages/AuditLogPage.tsx
+React
+import React from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { CostBadge } from '../components/CostBadge';
+
+const ACTION_ICONS: Record<string, string> = {
+  'heartbeat.completed': '💓',
+  'task.created': '📋',
+  'agent.hired': '🤝',
+  'agent.terminated': '🔴',
+  'agent.auto_paused': '⚠️',
+  'tool.success': '🔧',
+  'tool.error': '🔧❌',
+  'tool.denied': '🔧🚫',
+  'approval.requested': '🎫',
+  'approval.approved': '✅',
+  'approval.rejected': '❌',
+};
+
+export function AuditLogPage({ companyId }: { companyId: string }) {
+  const { data: logs } = useApi(
+    () => api.getAuditLog(companyId, 100),
+    [companyId]
+  );
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Audit Log</h2>
+
+      <div className="bg-gray-900 rounded-lg border border-gray-800">
+        {logs?.map((log: any, i: number) => (
+          <div
+            key={log.id}
+            className={`flex items-start gap-3 p-3 ${
+              i < (logs?.length || 0) - 1 ? 'border-b border-gray-800/50' : ''
+            }`}
+          >
+            <span className="text-lg">
+              {ACTION_ICONS[log.action] || '📝'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-300">
+                  {log.action}
+                </span>
+                {log.agent_name && (
+                  <span className="text-xs text-blue-400">
+                    {log.agent_name}
+                  </span>
+                )}
+                {log.cost_usd && parseFloat(log.cost_usd) > 0 && (
+                  <CostBadge amount={parseFloat(log.cost_usd)} />
+                )}
+              </div>
+              {log.details && Object.keys(log.details).length > 0 && (
+                <p className="text-xs text-gray-600 mt-0.5 truncate">
+                  {JSON.stringify(log.details)}
+                </p>
+              )}
+            </div>
+            <span className="text-xs text-gray-600 whitespace-nowrap">
+              {new Date(log.created_at).toLocaleTimeString()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+packages/dashboard/src/pages/OrgChartPage.tsx
+React
+import React from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { StatusBadge } from '../components/StatusBadge';
+
+function OrgNode({ node, depth = 0 }: { node: any; depth?: number }) {
+  return (
+    <div className={depth > 0 ? 'ml-8 border-l border-gray-800 pl-4' : ''}>
+      <div className="flex items-center gap-3 py-2">
+        <div className="bg-gray-800 rounded-lg px-3 py-2 border border-gray-700">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{node.name}</span>
+            <StatusBadge status={node.status} />
+          </div>
+          <p className="text-xs text-gray-500">
+            {node.title || node.role}
+          </p>
+        </div>
+      </div>
+      {node.reports?.map((child: any) => (
+        <OrgNode key={child.id} node={child} depth={depth + 1} />
+      ))}
+    </div>
+  );
+}
+
+export function OrgChartPage({ companyId }: { companyId: string }) {
+  const { data: orgChart } = useApi(
+    () => api.getOrgChart(companyId),
+    [companyId]
+  );
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Org Chart</h2>
+
+      <div className="bg-gray-900 rounded-lg border border-gray-800 p-6">
+        {orgChart?.map((root: any) => (
+          <OrgNode key={root.id} node={root} />
+        ))}
+
+        {orgChart?.length === 0 && (
+          <p className="text-gray-600 text-center py-8">
+            No agents hired yet
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+packages/dashboard/src/pages/BudgetsPage.tsx
+React
+import React from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { CostBadge } from '../components/CostBadge';
+
+export function BudgetsPage({ companyId }: { companyId: string }) {
+  const { data: agents } = useApi(
+    () => api.listAgents(companyId),
+    [companyId]
+  );
+
+  const agentsWithBudget = agents?.filter((a: any) => a.budget_limit) || [];
+  const totalSpent = agentsWithBudget.reduce(
+    (sum: number, a: any) => sum + parseFloat(a.budget_spent || 0),
+    0
+  );
+  const totalLimit = agentsWithBudget.reduce(
+    (sum: number, a: any) => sum + parseFloat(a.budget_limit),
+    0
+  );
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Budgets</h2>
+
+      {/* Summary */}
+      <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-gray-400">Total Monthly Budget</span>
+          <span>
+            <CostBadge amount={totalSpent} />
+            <span className="text-gray-500"> / ${totalLimit.toFixed(2)}</span>
+          </span>
+        </div>
+        <div className="w-full bg-gray-800 rounded-full h-3">
+          <div
+            className={`h-3 rounded-full transition-all ${
+              totalLimit > 0 && totalSpent / totalLimit > 0.8
+                ? 'bg-red-500'
+                : 'bg-blue-500'
+            }`}
+            style={{
+              width: `${totalLimit > 0 ? Math.min(100, (totalSpent / totalLimit) * 100) : 0}%`,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Per-agent */}
+      <div className="space-y-3">
+        {agentsWithBudget.map((agent: any) => {
+          const spent = parseFloat(agent.budget_spent || 0);
+          const limit = parseFloat(agent.budget_limit);
+          const pct = limit > 0 ? (spent / limit) * 100 : 0;
+
+          return (
+            <div
+              key={agent.id}
+              className="bg-gray-900 rounded-lg border border-gray-800 p-4"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="font-medium">{agent.name}</span>
+                  <span className="text-gray-500 text-sm ml-2">
+                    {agent.role}
+                  </span>
+                </div>
+                <span>
+                  <CostBadge amount={spent} />
+                  <span className="text-gray-500"> / ${limit.toFixed(2)}</span>
+                  <span className="text-gray-600 text-xs ml-2">
+                    ({pct.toFixed(1)}%)
+                  </span>
+                </span>
+              </div>
+              <div className="w-full bg-gray-800 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    pct > 90
+                      ? 'bg-red-500'
+                      : pct > 70
+                        ? 'bg-yellow-500'
+                        : 'bg-blue-500'
+                  }`}
+                  style={{ width: `${Math.min(100, pct)}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+packages/dashboard/src/App.tsx
+React
+import React, { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import { Layout } from './components/Layout';
+import { DashboardPage } from './pages/DashboardPage';
+import { AgentsPage } from './pages/AgentsPage';
+import { TasksPage } from './pages/TasksPage';
+import { OrgChartPage } from './pages/OrgChartPage';
+import { ApprovalsPage } from './pages/ApprovalsPage';
+import { AuditLogPage } from './pages/AuditLogPage';
+import { BudgetsPage } from './pages/BudgetsPage';
+import { api } from './api/client';
+
+export default function App() {
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.listCompanies().then((list) => {
+      setCompanies(list);
+      if (list.length > 0) {
+        setCompanyId(list[0].id);
+      }
+    });
+  }, []);
+
+  if (!companyId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-4">🏢 Autonomiczne Biuro</h1>
+          {companies.length === 0 ? (
+            <div>
+              <p className="text-gray-500 mb-4">
+                No companies found. Create one via API:
+              </p>
+              <pre className="bg-gray-900 rounded-lg p-4 text-sm text-left">
+                {`curl -X POST http://localhost:3100/api/companies \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "My AI Company", "mission": "..."}'`}
+              </pre>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-gray-500">Select a company:</p>
+              {companies.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCompanyId(c.id)}
+                  className="block w-full bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-lg p-4 text-left"
+                >
+                  <span className="font-medium">{c.name}</span>
+                  {c.mission && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {c.mission}
+                    </p>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Layout>
+      {/* Company selector */}
+      {companies.length > 1 && (
+        <div className="mb-4">
+          <select
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1 text-sm"
+          >
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <Routes>
+        <Route
+          path="/"
+          element={<DashboardPage companyId={companyId} />}
+        />
+        <Route
+          path="/agents"
+          element={<AgentsPage companyId={companyId} />}
+        />
+        <Route
+          path="/tasks"
+          element={<TasksPage companyId={companyId} />}
+        />
+        <Route
+          path="/org-chart"
+          element={<OrgChartPage companyId={companyId} />}
+        />
+        <Route
+          path="/approvals"
+          element={<ApprovalsPage companyId={companyId} />}
+        />
+        <Route
+          path="/budgets"
+          element={<BudgetsPage companyId={companyId} />}
+        />
+        <Route
+          path="/audit-log"
+          element={<AuditLogPage companyId={companyId} />}
+        />
+      </Routes>
+    </Layout>
+  );
+}
+________________________________________
+Testowy scenariusz Fazy 2
+Bash
+# ================================
+# Zakładamy, że Faza 1 działa i mamy firmę + agentów
+# ================================
+
+# 1. Utwórz narzędzia
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/tools \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "web_search",
+    "type": "builtin",
+    "description": "Search the web for information. Use when you need current data or research.",
+    "config": { "api_key": "your-search-api-key" }
+  }' | jq .
+WEB_SEARCH_TOOL_ID="<uuid>"
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/tools \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "file_write",
+    "type": "builtin",
+    "description": "Write a file to the workspace. Use for creating documents, code, configs.",
+    "config": {}
+  }' | jq .
+FILE_WRITE_TOOL_ID="<uuid>"
+
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/tools \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "github_api",
+    "type": "http",
+    "description": "Interact with GitHub API. Create repos, issues, PRs.",
+    "config": {
+      "endpoint": "https://api.github.com/{path}",
+      "method": "POST",
+      "headers": { "Authorization": "Bearer ghp_..." }
+    }
+  }' | jq .
+GITHUB_TOOL_ID="<uuid>"
+
+
+# 2. Przypisz narzędzia do agentów
+
+# CTO dostaje wszystko
+curl -s -X POST http://localhost:3100/api/agents/$CTO_ID/tools/$WEB_SEARCH_TOOL_ID \
+  -H "Content-Type: application/json" \
+  -d '{ "rate_limit": 50 }' | jq .
+
+curl -s -X POST http://localhost:3100/api/agents/$CTO_ID/tools/$FILE_WRITE_TOOL_ID | jq .
+curl -s -X POST http://localhost:3100/api/agents/$CTO_ID/tools/$GITHUB_TOOL_ID | jq .
+
+# Developer dostaje file_write i github
+curl -s -X POST http://localhost:3100/api/agents/$DEV_ID/tools/$FILE_WRITE_TOOL_ID | jq .
+curl -s -X POST http://localhost:3100/api/agents/$DEV_ID/tools/$GITHUB_TOOL_ID \
+  -H "Content-Type: application/json" \
+  -d '{ "permissions": {"read": true, "write": true, "execute": true}, "rate_limit": 30 }' | jq .
+
+# CEO NIE dostaje narzędzi technicznych — jest strategiczny
+
+
+# 3. Utwórz polityki governance
+
+# Deployy wymagają zatwierdzenia zarządu
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/policies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Deploy requires board approval",
+    "type": "approval_required",
+    "rules": {
+      "actions": ["deploy", "strategy_change"],
+      "roles": []
+    }
+  }' | jq .
+
+# Alert gdy budżet przekroczy 80%
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/policies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Budget warning at 80%",
+    "type": "budget_threshold",
+    "rules": { "threshold_pct": 80 }
+  }' | jq .
+
+# Max 3 poziomy delegacji
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/policies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Delegation depth limit",
+    "type": "delegation_limit",
+    "rules": { "max_depth": 3 }
+  }' | jq .
+
+# Rate limit heartbeatów
+curl -s -X POST http://localhost:3100/api/companies/$COMPANY_ID/policies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Agent rate limit",
+    "type": "rate_limit",
+    "rules": { "max_per_hour": 30, "actions": ["heartbeat.completed"] }
+  }' | jq .
+
+
+# 4. Dashboard
+
+cd packages/dashboard
+pnpm dev
+# Otwórz http://localhost:3200
+
+
+# 5. Sprawdź nowe endpointy
+
+# Tool calls
+curl -s http://localhost:3100/api/companies/$COMPANY_ID/tool-calls | jq .
+
+# Pending approvals
+curl -s http://localhost:3100/api/companies/$COMPANY_ID/approvals | jq .
+
+# Policies
+curl -s http://localhost:3100/api/companies/$COMPANY_ID/policies | jq .
+
+# Approve a pending request
+curl -s -X POST http://localhost:3100/api/approvals/$APPROVAL_ID/approve \
+  -H "Content-Type: application/json" \
+  -d '{ "note": "Go ahead" }' | jq .
+________________________________________
+Co masz po Fazie 2
+text
+✅ Faza 1 (wszystko z wcześniej)
+  +
+✅ Tool registry — rejestruj dowolne narzędzia (HTTP, bash, builtin, function)
+✅ Tool permissions per agent — kto co może
+✅ Tool rate limiting — max wywołań / godzinę
+✅ Tool call logging — pełna historia użycia narzędzi
+✅ Builtin tools — web search, file ops, HTTP requests
+✅ Domain whitelisting dla HTTP tools
+✅ Bash command whitelisting
+✅ Governance policies — definiuj reguły dla firmy
+✅ Approval gates — agenci proszą, zarząd decyduje
+✅ Auto-unblock — po zatwierdzeniu task wraca do pracy
+✅ Config versioning — każda zmiana konfiguracji jest zapisana
+✅ Rollback — cofnij złą zmianę do poprzedniej wersji
+✅ Safety system — loop detection, circular delegation, flood protection
+✅ Auto-pause — agent jest automatycznie pauzowany przy anomaliach
+✅ WebSocket — live updates w dashboardzie
+✅ Dashboard React — pełny UI z:
+    ├── Dashboard overview z KPIs
+    ├── Agents list z budget bars
+    ├── Tasks list z filtrami
+    ├── Org Chart (drzewo hierarchii)
+    ├── Approvals panel (approve/reject)
+    ├── Budgets overview
+    ├── Audit log
+    └── Live feed (real-time events)
+

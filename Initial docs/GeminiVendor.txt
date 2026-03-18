@@ -1,0 +1,469 @@
+Dodanie Google Gemini jako runtime
+Pełna instrukcja — każdy plik, każda zmiana, w kolejności.
+
+1. Instalacja pakietu
+Bash
+
+pnpm --filter @biuro/server add @google/genai
+2. Zmiana w .env
+Plik: .env
+
+Dopisz:
+
+env
+
+GOOGLE_API_KEY=AIza...
+3. Zmiana w packages/server/src/env.ts
+Dopisz do obiektu envSchema:
+
+TypeScript
+
+GOOGLE_API_KEY: z.string().optional(),
+Cały obiekt po zmianie wygląda tak:
+
+TypeScript
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(),        // ← NOWE
+  PORT: z.coerce.number().default(3100),
+  HEARTBEAT_INTERVAL_MS: z.coerce.number().default(30000),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+});
+4. Nowy plik: packages/server/src/runtimes/gemini.ts
+Utwórz plik: packages/server/src/runtimes/gemini.ts
+
+TypeScript
+
+import { GoogleGenAI } from '@google/genai';
+import { env } from '../env.js';
+import { logger } from '../utils/logger.js';
+import type {
+  AgentRuntime,
+  AgentContext,
+  AgentResponse,
+  AgentAction,
+} from './types.js';
+
+// Gemini 2.5 Flash pricing (per million tokens)
+const COST_PER_MTK_INPUT = 0.15;     // $0.15 / 1M input tokens (≤200k)
+const COST_PER_MTK_OUTPUT = 0.60;    // $0.60 / 1M output tokens (non-thinking)
+// Powyżej 200k kontekstu: input $0.35, output $1.50
+// Thinking tokens: output $3.50
+// Dostosuj jeśli używasz innego modelu
+
+export class GeminiRuntime implements AgentRuntime {
+  name = 'gemini';
+  private client: GoogleGenAI;
+  private model: string;
+
+  constructor(model?: string) {
+    if (!env.GOOGLE_API_KEY) {
+      throw new Error('GOOGLE_API_KEY is required for Gemini runtime');
+    }
+    this.client = new GoogleGenAI({ apiKey: env.GOOGLE_API_KEY });
+    this.model = model || 'gemini-2.5-flash';
+  }
+
+  async execute(context: AgentContext): Promise<AgentResponse> {
+    const actionSchema = `
+Respond with a JSON object containing your actions. Format:
+{
+  "thinking": "your reasoning about what to do",
+  "actions": [
+    {
+      "type": "complete_task",
+      "result": "description of what you accomplished"
+    }
+  ]
+}
+
+Available action types:
+- complete_task: { "type": "complete_task", "result": "..." }
+- delegate: { "type": "delegate", "to": "agent_role", "description": "..." }
+- message: { "type": "message", "to": "agent_role", "content": "..." }
+- use_tool: { "type": "use_tool", "tool": "tool_name", "params": { ... } }
+- blocked: { "type": "blocked", "reason": "..." }
+- continue: { "type": "continue", "result": "progress so far..." }
+
+You may include multiple actions. Always include at least one.
+Respond ONLY with valid JSON.`;
+
+    // Build contents array for Gemini
+    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+    // Add conversation history
+    for (const msg of context.conversationHistory) {
+      contents.push({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }],
+      });
+    }
+
+    // Add current task + action schema
+    contents.push({
+      role: 'user',
+      parts: [{ text: `${context.taskDescription}\n\n${actionSchema}` }],
+    });
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.model,
+        contents,
+        config: {
+          systemInstruction: context.systemPrompt,
+          maxOutputTokens: 4096,
+          temperature: 0.7,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const rawText = response.text || '';
+
+      // Parse usage metadata
+      const usageMetadata = response.usageMetadata;
+      const inputTokens = usageMetadata?.promptTokenCount || 0;
+      const outputTokens = usageMetadata?.candidatesTokenCount || 0;
+
+      // Calculate cost
+      const costUsd =
+        (inputTokens / 1_000_000) * COST_PER_MTK_INPUT +
+        (outputTokens / 1_000_000) * COST_PER_MTK_OUTPUT;
+
+      // Parse actions from JSON response
+      let actions: AgentAction[] = [];
+      try {
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          actions = parsed.actions || [];
+        }
+      } catch (err) {
+        logger.warn(
+          { rawText: rawText.slice(0, 200) },
+          'Failed to parse Gemini JSON, treating as complete_task'
+        );
+        actions = [{ type: 'complete_task', result: rawText }];
+      }
+
+      // Validate actions
+      actions = actions.filter((a) =>
+        [
+          'complete_task',
+          'delegate',
+          'message',
+          'use_tool',
+          'blocked',
+          'continue',
+          'request_approval',
+        ].includes(a.type)
+      );
+
+      if (actions.length === 0) {
+        actions = [{ type: 'complete_task', result: rawText }];
+      }
+
+      logger.debug(
+        {
+          model: this.model,
+          inputTokens,
+          outputTokens,
+          cost: costUsd.toFixed(6),
+          actions: actions.map((a) => a.type),
+        },
+        'Gemini response received'
+      );
+
+      return {
+        actions,
+        rawResponse: rawText,
+        cost: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          usd: costUsd,
+        },
+      };
+    } catch (err: any) {
+      // Handle Gemini-specific errors
+      if (err.status === 429) {
+        logger.warn('Gemini rate limit hit, will retry next heartbeat');
+        return {
+          actions: [{ type: 'continue', result: 'Rate limited, will retry' }],
+          rawResponse: '',
+          cost: { input_tokens: 0, output_tokens: 0, usd: 0 },
+        };
+      }
+
+      if (err.status === 400 && err.message?.includes('SAFETY')) {
+        logger.warn({ err }, 'Gemini safety filter triggered');
+        return {
+          actions: [
+            {
+              type: 'blocked',
+              reason: 'Content blocked by Gemini safety filters',
+            },
+          ],
+          rawResponse: '',
+          cost: { input_tokens: 0, output_tokens: 0, usd: 0 },
+        };
+      }
+
+      throw err;
+    }
+  }
+}
+5. Zmiana w packages/server/src/runtimes/registry.ts
+Dopisz import na górze:
+
+TypeScript
+
+import { GeminiRuntime } from './gemini.js';
+Dopisz blok rejestracji w funkcji initRuntimes(), po bloku OpenAI:
+
+TypeScript
+
+if (env.GOOGLE_API_KEY) {
+  runtimes.set('gemini', new GeminiRuntime());
+  logger.info('Registered Gemini runtime');
+}
+Cały plik po zmianach:
+
+TypeScript
+
+import type { AgentRuntime } from './types.js';
+import { ClaudeRuntime } from './claude.js';
+import { OpenAIRuntime } from './openai.js';
+import { GeminiRuntime } from './gemini.js';         // ← NOWE
+import { env } from '../env.js';
+import { logger } from '../utils/logger.js';
+
+const runtimes: Map<string, AgentRuntime> = new Map();
+
+export function initRuntimes() {
+  if (env.ANTHROPIC_API_KEY) {
+    runtimes.set('claude', new ClaudeRuntime());
+    logger.info('Registered Claude runtime');
+  }
+
+  if (env.OPENAI_API_KEY) {
+    runtimes.set('openai', new OpenAIRuntime());
+    logger.info('Registered OpenAI runtime');
+  }
+
+  if (env.GOOGLE_API_KEY) {                           // ← NOWE
+    runtimes.set('gemini', new GeminiRuntime());       // ← NOWE
+    logger.info('Registered Gemini runtime');           // ← NOWE
+  }                                                    // ← NOWE
+
+  if (runtimes.size === 0) {
+    logger.warn('No API keys configured — no runtimes available');
+  }
+}
+
+export function getRuntime(name: string): AgentRuntime {
+  const runtime = runtimes.get(name);
+  if (!runtime) {
+    throw new Error(
+      `Runtime "${name}" not available. Configured: ${[...runtimes.keys()].join(', ')}`
+    );
+  }
+  return runtime;
+}
+
+export function listRuntimes(): string[] {
+  return [...runtimes.keys()];
+}
+6. Zmiana w packages/server/src/db/schema.sql
+Zmień constraint w tabeli agents — dodaj 'gemini' do dozwolonych runtime'ów.
+
+Jeśli masz check constraint na kolumnie runtime, zmień go:
+
+SQL
+
+-- Jeśli masz CHECK constraint, zaktualizuj:
+ALTER TABLE agents DROP CONSTRAINT IF EXISTS agents_runtime_check;
+ALTER TABLE agents ADD CONSTRAINT agents_runtime_check
+  CHECK (runtime IN ('claude', 'openai', 'gemini', 'http', 'bash'));
+Jeśli nie masz check constrainta na runtime (kolumna to po prostu TEXT) — nic nie musisz zmieniać w schema. Gemini zadziała od razu.
+
+7. Zmiana w packages/server/src/routes/agents.ts
+Zmień domyślny model w createAgentSchema — dodaj gemini do walidacji:
+
+Znajdź:
+
+TypeScript
+
+runtime: z.string().default('claude'),
+model: z.string().default('claude-sonnet-4-20250514'),
+Zmień na:
+
+TypeScript
+
+runtime: z.enum(['claude', 'openai', 'gemini', 'http', 'bash']).default('claude'),
+model: z.string().default('claude-sonnet-4-20250514'),
+To nie jest blokujące (Zod .string() też przepuści "gemini"), ale walidacja enum daje lepszy error message.
+
+8. Zmiana w Dashboard — CreateAgentForm.tsx
+Plik: packages/dashboard/src/components/CreateAgentForm.tsx
+
+Znajdź sekcję Select z label="Runtime":
+
+React
+
+<Select
+  label="Runtime"
+  value={runtime}
+  onChange={(e) => setRuntime(e.target.value)}
+  options={[
+    { value: 'claude', label: 'Claude (Anthropic)' },
+    { value: 'openai', label: 'GPT-4o (OpenAI)' },
+  ]}
+/>
+Zmień na:
+
+React
+
+<Select
+  label="Runtime"
+  value={runtime}
+  onChange={(e) => setRuntime(e.target.value)}
+  options={[
+    { value: 'claude', label: 'Claude (Anthropic)' },
+    { value: 'openai', label: 'GPT-4o (OpenAI)' },
+    { value: 'gemini', label: 'Gemini 2.5 Flash (Google)' },
+  ]}
+/>
+9. Zmiana w Dashboard — AgentsPage.tsx (opcjonalne, kosmetyczne)
+Jeśli gdzieś wyświetlasz ikonę/kolor per runtime, dodaj gemini:
+
+React
+
+const RUNTIME_COLORS: Record<string, string> = {
+  claude: 'text-orange-400',
+  openai: 'text-green-400',
+  gemini: 'text-blue-400',        // ← NOWE
+  http: 'text-gray-400',
+  bash: 'text-yellow-400',
+};
+10. Zmiana w Template Preset (opcjonalne)
+Plik: packages/server/src/templates/presets/saas-startup.json
+
+Jeśli chcesz żeby jeden z agentów używał Gemini w presecie, zmień np. marketera:
+
+Znajdź agenta z "role": "marketer":
+
+JSON
+
+{
+  "ref": "agent_4",
+  "name": "Eve",
+  "role": "marketer",
+  ...
+  "runtime": "claude",
+  "model": "claude-sonnet-4-20250514",
+Zmień na:
+
+JSON
+
+{
+  "ref": "agent_4",
+  "name": "Eve",
+  "role": "marketer",
+  ...
+  "runtime": "gemini",
+  "model": "gemini-2.5-flash",
+11. Zmiana w CLI — agent.ts (opcjonalne)
+Plik: packages/cli/src/commands/agent.ts
+
+Znajdź:
+
+TypeScript
+
+.option('--runtime <runtime>', 'claude or openai', 'claude')
+Zmień na:
+
+TypeScript
+
+.option('--runtime <runtime>', 'claude, openai, or gemini', 'claude')
+12. Zmiana w .env.example
+Dopisz:
+
+env
+
+GOOGLE_API_KEY=
+13. Zmiana w docker-compose.yml
+Dopisz do sekcji environment serwisu server (i worker jeśli masz):
+
+YAML
+
+GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+14. Zmiana w README.md
+W sekcji "Works with" dopisz:
+
+text
+
+Works with: Claude · GPT-4o · Gemini · OpenAI Codex · Cursor · Custom HTTP · Bash
+W sekcji "Environment Variables" dopisz:
+
+env
+
+GOOGLE_API_KEY=AIza...             # Google Gemini API key
+W sekcji "FAQ → How much does it cost?" dopisz:
+
+text
+
+Gemini 2.5 Flash: ~$0.0002 per heartbeat (cheapest option)
+Podsumowanie zmian
+text
+
+NOWE PLIKI (1):
+  packages/server/src/runtimes/gemini.ts
+
+ZMIENIONE PLIKI (10):
+  .env                              → dodaj GOOGLE_API_KEY
+  .env.example                      → dodaj GOOGLE_API_KEY
+  packages/server/src/env.ts        → dodaj GOOGLE_API_KEY do schema
+  packages/server/src/runtimes/registry.ts → import + rejestracja
+  packages/server/src/routes/agents.ts     → runtime enum validation
+  packages/server/src/db/schema.sql        → CHECK constraint (jeśli istnieje)
+  packages/dashboard/src/components/CreateAgentForm.tsx → opcja w select
+  packages/cli/src/commands/agent.ts       → help text
+  docker-compose.yml                       → env variable
+  README.md                                → dokumentacja
+
+OPCJONALNE (2):
+  packages/server/src/templates/presets/saas-startup.json → preset agent
+  packages/dashboard/src/pages/AgentsPage.tsx → runtime color
+Test
+Po wprowadzeniu zmian:
+
+Bash
+
+# 1. Ustaw klucz
+echo 'GOOGLE_API_KEY=AIza...' >> .env
+
+# 2. Zrestartuj serwer
+pnpm --filter @biuro/server dev
+
+# 3. Sprawdź logi — powinno być:
+#    Registered Claude runtime
+#    Registered OpenAI runtime
+#    Registered Gemini runtime        ← NOWE
+
+# 4. Utwórz agenta z Gemini
+curl -X POST http://localhost:3100/api/companies/$CID/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Eve",
+    "role": "marketer",
+    "title": "Head of Marketing",
+    "runtime": "gemini",
+    "model": "gemini-2.5-flash",
+    "system_prompt": "You are Eve, Head of Marketing...",
+    "monthly_budget_usd": 5.00
+  }'
+
+# 5. Przypisz task i obserwuj heartbeat
+# Agent powinien wykonać task używając Gemini

@@ -1,0 +1,271 @@
+import { useEffect, useState } from 'react';
+import { Pause, Play, UserMinus, Plus, X } from 'lucide-react';
+import { clsx } from 'clsx';
+import { useApi } from '../hooks/useApi';
+import { useCompany } from '../context/CompanyContext';
+
+const initialForm = {
+  name: '',
+  role: '',
+  title: '',
+  runtime: 'claude',
+  system_prompt: '',
+  monthly_budget_usd: '10',
+  reports_to: '',
+};
+
+export default function AgentsPage() {
+  const { request, loading, error } = useApi();
+  const { selectedCompany, selectedCompanyId } = useCompany();
+  const [agents, setAgents] = useState<any[]>([]);
+  const [showHireModal, setShowHireModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState(initialForm);
+
+  const fetchAgents = async () => {
+    if (!selectedCompanyId) {
+      setAgents([]);
+      return;
+    }
+
+    const data = await request(`/companies/${selectedCompanyId}/agents`);
+    setAgents(data);
+  };
+
+  useEffect(() => {
+    void fetchAgents();
+  }, [selectedCompanyId]);
+
+  const handleAction = async (agentId: string, action: 'pause' | 'resume' | 'terminate') => {
+    await request(`/agents/${agentId}/${action}`, { method: 'POST' });
+    await fetchAgents();
+  };
+
+  const handleHireAgent = async () => {
+    if (!selectedCompanyId || !form.name.trim() || !form.role.trim()) return;
+
+    setSubmitting(true);
+    try {
+      await request(`/companies/${selectedCompanyId}/agents`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name.trim(),
+          role: form.role.trim(),
+          title: form.title.trim() || undefined,
+          runtime: form.runtime,
+          system_prompt: form.system_prompt.trim() || undefined,
+          monthly_budget_usd: Number(form.monthly_budget_usd) || 0,
+          reports_to: form.reports_to || undefined,
+        }),
+      });
+      setForm(initialForm);
+      setShowHireModal(false);
+      await fetchAgents();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!selectedCompany) {
+    return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to manage agents.</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Agents</h2>
+          <p className="text-sm text-muted-foreground">Team for {selectedCompany.name}</p>
+        </div>
+        <button
+          onClick={() => setShowHireModal(true)}
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Hire Agent
+        </button>
+      </div>
+
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      <div className="grid grid-cols-1 gap-6">
+        <div className="border rounded-lg overflow-hidden bg-card">
+          <table className="w-full text-left">
+            <thead className="bg-muted/50 border-b text-sm font-medium text-muted-foreground">
+              <tr>
+                <th className="px-6 py-3">Name / Role</th>
+                <th className="px-6 py-3">Status</th>
+                <th className="px-6 py-3">Runtime</th>
+                <th className="px-6 py-3">Manager</th>
+                <th className="px-6 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {agents.map((agent) => (
+                <tr key={agent.id} className="hover:bg-accent/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="font-semibold">{agent.name}</div>
+                    <div className="text-sm text-muted-foreground">{agent.title || agent.role}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={clsx(
+                        'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize',
+                        agent.status === 'idle' && 'bg-green-100 text-green-700',
+                        agent.status === 'paused' && 'bg-yellow-100 text-yellow-700',
+                        agent.status === 'terminated' && 'bg-red-100 text-red-700',
+                      )}
+                    >
+                      {agent.status}
+                    </span>
+                  </td>
+                  <td
+                    className={clsx(
+                      'px-6 py-4 font-mono text-sm font-medium',
+                      agent.runtime === 'claude' ? 'text-orange-600' :
+                      agent.runtime === 'openai' ? 'text-green-600' :
+                      agent.runtime === 'gemini' ? 'text-blue-600' :
+                      'text-gray-600',
+                    )}
+                  >
+                    {agent.runtime}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                    {agents.find((candidate) => candidate.id === agent.reports_to)?.name || 'None'}
+                  </td>
+                  <td className="px-6 py-4 text-right space-x-2">
+                    {agent.status !== 'terminated' && (
+                      <>
+                        {agent.status === 'paused' ? (
+                          <button
+                            onClick={() => void handleAction(agent.id, 'resume')}
+                            className="p-2 hover:bg-green-50 text-green-600 rounded-md transition-colors"
+                            title="Resume"
+                          >
+                            <Play className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => void handleAction(agent.id, 'pause')}
+                            className="p-2 hover:bg-yellow-50 text-yellow-600 rounded-md transition-colors"
+                            title="Pause"
+                          >
+                            <Pause className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => void handleAction(agent.id, 'terminate')}
+                          className="p-2 hover:bg-red-50 text-red-600 rounded-md transition-colors"
+                          title="Terminate"
+                        >
+                          <UserMinus className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {agents.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic">
+                    No agents hired yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showHireModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-xl">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-semibold">Hire Agent</h3>
+                <p className="text-sm text-muted-foreground">Add a new teammate to {selectedCompany.name}</p>
+              </div>
+              <button onClick={() => setShowHireModal(false)} className="rounded-md p-2 hover:bg-accent">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Name"
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              />
+              <input
+                value={form.role}
+                onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
+                placeholder="Role"
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              />
+              <input
+                value={form.title}
+                onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                placeholder="Title"
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              />
+              <select
+                value={form.runtime}
+                onChange={(event) => setForm((current) => ({ ...current, runtime: event.target.value }))}
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                <option value="claude">Claude</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Gemini</option>
+              </select>
+              <input
+                value={form.monthly_budget_usd}
+                onChange={(event) => setForm((current) => ({ ...current, monthly_budget_usd: event.target.value }))}
+                placeholder="Monthly budget (USD)"
+                type="number"
+                min="0"
+                step="0.01"
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              />
+              <select
+                value={form.reports_to}
+                onChange={(event) => setForm((current) => ({ ...current, reports_to: event.target.value }))}
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                <option value="">No manager</option>
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={form.system_prompt}
+                onChange={(event) => setForm((current) => ({ ...current, system_prompt: event.target.value }))}
+                placeholder="System prompt (optional)"
+                rows={4}
+                className="md:col-span-2 rounded-md border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowHireModal(false)}
+                className="rounded-md border px-4 py-2 text-sm hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleHireAgent()}
+                disabled={submitting || !form.name.trim() || !form.role.trim()}
+                className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? 'Hiring...' : 'Hire Agent'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

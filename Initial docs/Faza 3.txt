@@ -1,0 +1,2781 @@
+Faza 3 — Kompletne UI, Formularze, Mobile, Docker, Testy
+________________________________________
+Nowe i zaktualizowane pliki
+text
+packages/dashboard/src/
+├── components/
+│   ├── Modal.tsx                    ← NEW
+│   ├── Form.tsx                     ← NEW
+│   ├── ConfirmDialog.tsx            ← NEW
+│   ├── EmptyState.tsx               ← NEW
+│   ├── GoalTree.tsx                 ← NEW
+│   ├── MessageThread.tsx            ← NEW
+│   ├── AgentAvatar.tsx              ← NEW
+│   ├── OrgChart.tsx                 ← REWRITTEN (interactive)
+│   ├── CreateAgentForm.tsx          ← NEW
+│   ├── CreateTaskForm.tsx           ← NEW
+│   ├── CreateCompanyForm.tsx        ← NEW
+│   ├── CreateGoalForm.tsx           ← NEW
+│   ├── CreateToolForm.tsx           ← NEW
+│   ├── CreatePolicyForm.tsx         ← NEW
+│   ├── Sidebar.tsx                  ← UPDATED (mobile)
+│   └── Layout.tsx                   ← UPDATED (mobile)
+├── pages/
+│   ├── AgentDetailPage.tsx          ← NEW
+│   ├── TaskDetailPage.tsx           ← NEW
+│   ├── GoalsPage.tsx                ← NEW
+│   ├── ToolsPage.tsx                ← NEW
+│   ├── PoliciesPage.tsx             ← NEW
+│   ├── SettingsPage.tsx             ← NEW
+│   └── (all existing updated)
+├── App.tsx                          ← UPDATED
+└── styles/globals.css               ← UPDATED
+
+packages/server/src/
+├── routes/
+│   ├── budgets.ts                   ← NEW
+│   └── index.ts                     ← UPDATED
+├── orchestrator/
+│   └── context.ts                   ← UPDATED (tools in prompt)
+
+docker-compose.yml                   ← NEW
+Dockerfile.server                    ← NEW
+Dockerfile.dashboard                 ← NEW
+packages/server/tests/               ← NEW
+├── setup.ts
+├── companies.test.ts
+├── agents.test.ts
+├── tasks.test.ts
+├── heartbeat.test.ts
+├── tools.test.ts
+├── governance.test.ts
+└── safety.test.ts
+________________________________________
+Reusable UI Components
+src/components/Modal.tsx
+React
+import React, { useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
+
+interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  wide?: boolean;
+}
+
+export function Modal({ open, onClose, title, children, wide }: ModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (open) document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={(e) => e.target === overlayRef.current && onClose()}
+    >
+      <div
+        className={`bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full ${
+          wide ? 'max-w-2xl' : 'max-w-lg'
+        } max-h-[90vh] flex flex-col`}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-6 py-4 flex-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+src/components/Form.tsx
+React
+import React from 'react';
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label: string;
+  error?: string;
+}
+
+export function Input({ label, error, className, ...props }: InputProps) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm text-gray-400">{label}</label>
+      <input
+        className={`w-full bg-gray-800 border rounded-lg px-3 py-2 text-sm
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+          ${error ? 'border-red-500' : 'border-gray-700'}
+          ${className || ''}`}
+        {...props}
+      />
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+interface TextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  error?: string;
+}
+
+export function Textarea({ label, error, className, ...props }: TextareaProps) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm text-gray-400">{label}</label>
+      <textarea
+        className={`w-full bg-gray-800 border rounded-lg px-3 py-2 text-sm
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+          resize-y min-h-[80px]
+          ${error ? 'border-red-500' : 'border-gray-700'}
+          ${className || ''}`}
+        {...props}
+      />
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  label: string;
+  options: { value: string; label: string }[];
+  error?: string;
+}
+
+export function Select({
+  label,
+  options,
+  error,
+  className,
+  ...props
+}: SelectProps) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm text-gray-400">{label}</label>
+      <select
+        className={`w-full bg-gray-800 border rounded-lg px-3 py-2 text-sm
+          focus:outline-none focus:ring-2 focus:ring-blue-500
+          ${error ? 'border-red-500' : 'border-gray-700'}
+          ${className || ''}`}
+        {...props}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+export function Button({
+  variant = 'primary',
+  loading,
+  children,
+  className,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  loading?: boolean;
+}) {
+  const variants = {
+    primary: 'bg-blue-600 hover:bg-blue-700 text-white',
+    secondary: 'bg-gray-700 hover:bg-gray-600 text-gray-200',
+    danger: 'bg-red-700 hover:bg-red-600 text-white',
+    ghost: 'bg-transparent hover:bg-gray-800 text-gray-400',
+  };
+
+  return (
+    <button
+      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+        disabled:opacity-50 disabled:cursor-not-allowed
+        ${variants[variant]} ${className || ''}`}
+      disabled={loading || props.disabled}
+      {...props}
+    >
+      {loading ? (
+        <span className="flex items-center gap-2">
+          <span className="animate-spin">⏳</span> Loading...
+        </span>
+      ) : (
+        children
+      )}
+    </button>
+  );
+}
+src/components/ConfirmDialog.tsx
+React
+import React from 'react';
+import { Modal } from './Modal';
+import { Button } from './Form';
+
+interface ConfirmDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmText?: string;
+  variant?: 'danger' | 'primary';
+  loading?: boolean;
+}
+
+export function ConfirmDialog({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = 'Confirm',
+  variant = 'danger',
+  loading,
+}: ConfirmDialogProps) {
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      <p className="text-gray-400 mb-6">{message}</p>
+      <div className="flex justify-end gap-3">
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant={variant} onClick={onConfirm} loading={loading}>
+          {confirmText}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+src/components/EmptyState.tsx
+React
+import React from 'react';
+
+interface EmptyStateProps {
+  icon: string;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}
+
+export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+  return (
+    <div className="text-center py-16">
+      <p className="text-5xl mb-4">{icon}</p>
+      <h3 className="text-lg font-semibold text-gray-300 mb-2">{title}</h3>
+      <p className="text-gray-500 text-sm mb-6 max-w-md mx-auto">
+        {description}
+      </p>
+      {action}
+    </div>
+  );
+}
+src/components/AgentAvatar.tsx
+React
+import React from 'react';
+
+const ROLE_COLORS: Record<string, string> = {
+  ceo: 'bg-purple-600',
+  cto: 'bg-blue-600',
+  developer: 'bg-green-600',
+  designer: 'bg-pink-600',
+  marketer: 'bg-orange-600',
+  pm: 'bg-teal-600',
+  qa: 'bg-yellow-600',
+  support: 'bg-cyan-600',
+};
+
+export function AgentAvatar({
+  name,
+  role,
+  size = 'md',
+}: {
+  name: string;
+  role: string;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const initials = name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  const color = ROLE_COLORS[role] || 'bg-gray-600';
+  const sizeClasses = {
+    sm: 'w-7 h-7 text-xs',
+    md: 'w-9 h-9 text-sm',
+    lg: 'w-12 h-12 text-base',
+  };
+
+  return (
+    <div
+      className={`${color} ${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white`}
+      title={`${name} (${role})`}
+    >
+      {initials}
+    </div>
+  );
+}
+src/components/MessageThread.tsx
+React
+import React, { useState } from 'react';
+import { AgentAvatar } from './AgentAvatar';
+import { Button } from './Form';
+import { api } from '../api/client';
+import { Send } from 'lucide-react';
+
+interface Message {
+  id: string;
+  from_agent: string | null;
+  from_name: string | null;
+  content: string;
+  type: string;
+  metadata: any;
+  created_at: string;
+}
+
+export function MessageThread({
+  messages,
+  taskId,
+  onMessageSent,
+}: {
+  messages: Message[];
+  taskId: string;
+  onMessageSent?: () => void;
+}) {
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    setSending(true);
+    try {
+      await api.sendMessage(taskId, input.trim());
+      setInput('');
+      onMessageSent?.();
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const typeStyles: Record<string, string> = {
+    message: 'border-gray-800',
+    heartbeat_log: 'border-blue-900/50 bg-blue-950/20',
+    tool_call: 'border-yellow-900/50 bg-yellow-950/20',
+    tool_result: 'border-green-900/50 bg-green-950/20',
+    delegation: 'border-purple-900/50 bg-purple-950/20',
+    status_update: 'border-gray-800 bg-gray-900/50',
+  };
+
+  const typeIcons: Record<string, string> = {
+    message: '💬',
+    heartbeat_log: '💓',
+    tool_call: '🔧',
+    tool_result: '📦',
+    delegation: '📋',
+    status_update: '📊',
+    approval_request: '🎫',
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+        {messages.length === 0 ? (
+          <p className="text-gray-600 text-sm text-center py-8">
+            No messages yet
+          </p>
+        ) : (
+          messages.map((msg) => {
+            const isBoard = !msg.from_agent;
+            const isSystem = ['heartbeat_log', 'tool_call', 'tool_result'].includes(msg.type);
+
+            return (
+              <div
+                key={msg.id}
+                className={`rounded-lg border p-3 ${typeStyles[msg.type] || 'border-gray-800'}`}
+              >
+                <div className="flex items-start gap-3">
+                  {!isBoard && !isSystem && (
+                    <AgentAvatar
+                      name={msg.from_name || 'Agent'}
+                      role="agent"
+                      size="sm"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs">
+                        {typeIcons[msg.type] || '📝'}
+                      </span>
+                      <span className="text-sm font-medium text-gray-300">
+                        {isBoard ? '🧑 Board' : msg.from_name || 'System'}
+                      </span>
+                      <span className="text-xs text-gray-600">
+                        {msg.type}
+                      </span>
+                      <span className="text-xs text-gray-700 ml-auto">
+                        {new Date(msg.created_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+
+                    {msg.type === 'heartbeat_log' ? (
+                      <details className="text-sm">
+                        <summary className="text-gray-500 cursor-pointer hover:text-gray-300">
+                          Agent response (click to expand)
+                        </summary>
+                        <pre className="mt-2 text-xs text-gray-400 overflow-x-auto whitespace-pre-wrap bg-gray-900 rounded p-2">
+                          {msg.content}
+                        </pre>
+                      </details>
+                    ) : (
+                      <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                        {msg.content}
+                      </p>
+                    )}
+
+                    {msg.metadata &&
+                      msg.type === 'tool_result' &&
+                      msg.metadata.data && (
+                        <pre className="mt-2 text-xs text-gray-500 overflow-x-auto bg-gray-900 rounded p-2">
+                          {JSON.stringify(msg.metadata.data, null, 2).slice(0, 500)}
+                        </pre>
+                      )}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="flex gap-2 border-t border-gray-800 pt-3">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+          placeholder="Send a message as Board..."
+          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm
+            focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <Button onClick={handleSend} loading={sending} variant="primary">
+          <Send size={16} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+src/components/GoalTree.tsx
+React
+import React, { useState } from 'react';
+import { StatusBadge } from './StatusBadge';
+import { ChevronRight, ChevronDown, Target, Plus } from 'lucide-react';
+
+interface Goal {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  children: Goal[];
+}
+
+function GoalNode({
+  goal,
+  depth = 0,
+  onAddChild,
+}: {
+  goal: Goal;
+  depth?: number;
+  onAddChild: (parentId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const hasChildren = goal.children.length > 0;
+
+  return (
+    <div className={depth > 0 ? 'ml-6' : ''}>
+      <div className="flex items-start gap-2 py-2 group">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-0.5 text-gray-600 hover:text-gray-400"
+        >
+          {hasChildren ? (
+            expanded ? (
+              <ChevronDown size={16} />
+            ) : (
+              <ChevronRight size={16} />
+            )
+          ) : (
+            <Target size={16} className="text-gray-700" />
+          )}
+        </button>
+
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">{goal.title}</span>
+            <StatusBadge status={goal.status} />
+          </div>
+          {goal.description && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              {goal.description}
+            </p>
+          )}
+        </div>
+
+        <button
+          onClick={() => onAddChild(goal.id)}
+          className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-blue-400 transition-opacity"
+          title="Add sub-goal"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+
+      {expanded &&
+        goal.children.map((child) => (
+          <GoalNode
+            key={child.id}
+            goal={child}
+            depth={depth + 1}
+            onAddChild={onAddChild}
+          />
+        ))}
+    </div>
+  );
+}
+
+export function GoalTree({
+  goals,
+  onAddGoal,
+}: {
+  goals: Goal[];
+  onAddGoal: (parentId?: string) => void;
+}) {
+  return (
+    <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+      {goals.length === 0 ? (
+        <p className="text-gray-600 text-center py-4">No goals defined</p>
+      ) : (
+        goals.map((goal) => (
+          <GoalNode
+            key={goal.id}
+            goal={goal}
+            onAddChild={(parentId) => onAddGoal(parentId)}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+________________________________________
+Create Forms
+src/components/CreateCompanyForm.tsx
+React
+import React, { useState } from 'react';
+import { Modal } from './Modal';
+import { Input, Textarea, Button } from './Form';
+import { api } from '../api/client';
+
+export function CreateCompanyForm({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (company: any) => void;
+}) {
+  const [name, setName] = useState('');
+  const [mission, setMission] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const company = await api.createCompany({ name, mission });
+      onCreated(company);
+      setName('');
+      setMission('');
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Create Company">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Company Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="AI Notes Inc."
+          required
+        />
+        <Textarea
+          label="Mission"
+          value={mission}
+          onChange={(e) => setMission(e.target.value)}
+          placeholder="Build the #1 AI note-taking app and reach $1M MRR"
+        />
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            Create Company
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+src/components/CreateAgentForm.tsx
+React
+import React, { useState } from 'react';
+import { Modal } from './Modal';
+import { Input, Textarea, Select, Button } from './Form';
+import { api } from '../api/client';
+
+const ROLE_PRESETS = [
+  {
+    role: 'ceo',
+    title: 'Chief Executive Officer',
+    prompt:
+      'You are the CEO. Set strategic direction, break goals into actionable plans, and delegate to your leadership team. Think big picture. Be decisive.',
+  },
+  {
+    role: 'cto',
+    title: 'Chief Technology Officer',
+    prompt:
+      'You are the CTO. Make technical architecture decisions, break technical goals into engineering tasks, and delegate to developers. Be thorough and practical.',
+  },
+  {
+    role: 'developer',
+    title: 'Senior Developer',
+    prompt:
+      'You are a senior developer. Write code, implement features, fix bugs, and complete engineering tasks. Be precise. When done, describe what you built.',
+  },
+  {
+    role: 'designer',
+    title: 'Lead Designer',
+    prompt:
+      'You are the lead designer. Create UI/UX designs, design systems, wireframes, and user flows. Focus on usability and aesthetics.',
+  },
+  {
+    role: 'marketer',
+    title: 'Head of Marketing',
+    prompt:
+      'You are the head of marketing. Create marketing strategies, content plans, copy, and growth tactics. Be creative and data-driven.',
+  },
+  {
+    role: 'pm',
+    title: 'Product Manager',
+    prompt:
+      'You are a product manager. Define requirements, write specs, prioritize features, and coordinate between teams. Be organized and clear.',
+  },
+  {
+    role: 'custom',
+    title: '',
+    prompt: '',
+  },
+];
+
+export function CreateAgentForm({
+  open,
+  onClose,
+  onCreated,
+  companyId,
+  agents,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  companyId: string;
+  agents: any[];
+}) {
+  const [preset, setPreset] = useState('ceo');
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('ceo');
+  const [title, setTitle] = useState('Chief Executive Officer');
+  const [reportsTo, setReportsTo] = useState('');
+  const [runtime, setRuntime] = useState('claude');
+  const [systemPrompt, setSystemPrompt] = useState(ROLE_PRESETS[0].prompt);
+  const [budget, setBudget] = useState('10');
+  const [loading, setLoading] = useState(false);
+
+  const handlePresetChange = (value: string) => {
+    setPreset(value);
+    const p = ROLE_PRESETS.find((r) => r.role === value);
+    if (p && p.role !== 'custom') {
+      setRole(p.role);
+      setTitle(p.title);
+      setSystemPrompt(p.prompt);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api.createAgent(companyId, {
+        name,
+        role,
+        title,
+        reports_to: reportsTo || undefined,
+        runtime,
+        system_prompt: systemPrompt,
+        monthly_budget_usd: parseFloat(budget) || undefined,
+      });
+      onCreated();
+      onClose();
+      // Reset
+      setName('');
+      setPreset('ceo');
+      handlePresetChange('ceo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Hire Agent" wide>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Role Preset"
+            value={preset}
+            onChange={(e) => handlePresetChange(e.target.value)}
+            options={ROLE_PRESETS.map((r) => ({
+              value: r.role,
+              label: r.role === 'custom' ? 'Custom...' : `${r.role.toUpperCase()} — ${r.title}`,
+            }))}
+          />
+          <Input
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Alice"
+            required
+          />
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <Input
+            label="Role (identifier)"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            placeholder="developer"
+            required
+          />
+          <Input
+            label="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Senior Developer"
+          />
+          <Select
+            label="Runtime"
+            value={runtime}
+            onChange={(e) => setRuntime(e.target.value)}
+            options={[
+              { value: 'claude', label: 'Claude (Anthropic)' },
+              { value: 'openai', label: 'GPT-4o (OpenAI)' },
+            ]}
+          />
+        </div>
+
+        <Select
+          label="Reports To"
+          value={reportsTo}
+          onChange={(e) => setReportsTo(e.target.value)}
+          options={[
+            { value: '', label: 'Board (no manager)' },
+            ...agents
+              .filter((a) => a.status !== 'terminated')
+              .map((a) => ({
+                value: a.id,
+                label: `${a.name} (${a.role})`,
+              })),
+          ]}
+        />
+
+        <Textarea
+          label="System Prompt"
+          value={systemPrompt}
+          onChange={(e) => setSystemPrompt(e.target.value)}
+          placeholder="You are..."
+          rows={4}
+        />
+
+        <Input
+          label="Monthly Budget (USD)"
+          type="number"
+          value={budget}
+          onChange={(e) => setBudget(e.target.value)}
+          placeholder="10.00"
+          min="0"
+          step="0.01"
+        />
+
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            🤝 Hire Agent
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+src/components/CreateTaskForm.tsx
+React
+import React, { useState } from 'react';
+import { Modal } from './Modal';
+import { Input, Textarea, Select, Button } from './Form';
+import { api } from '../api/client';
+
+export function CreateTaskForm({
+  open,
+  onClose,
+  onCreated,
+  companyId,
+  agents,
+  goals,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  companyId: string;
+  agents: any[];
+  goals: any[];
+}) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
+  const [goalId, setGoalId] = useState('');
+  const [priority, setPriority] = useState('0');
+  const [loading, setLoading] = useState(false);
+
+  // Flatten goal tree for select
+  const flattenGoals = (goals: any[], depth = 0): any[] => {
+    return goals.flatMap((g) => [
+      { ...g, depth },
+      ...flattenGoals(g.children || [], depth + 1),
+    ]);
+  };
+  const flatGoals = flattenGoals(goals);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api.createTask(companyId, {
+        title,
+        description: description || undefined,
+        assigned_to: assignedTo || undefined,
+        goal_id: goalId || undefined,
+        priority: parseInt(priority),
+      });
+      onCreated();
+      onClose();
+      setTitle('');
+      setDescription('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Create Task" wide>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Implement user authentication"
+          required
+        />
+        <Textarea
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Detailed description of what needs to be done..."
+          rows={3}
+        />
+
+        <div className="grid grid-cols-3 gap-4">
+          <Select
+            label="Assign To"
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            options={[
+              { value: '', label: 'Unassigned (backlog)' },
+              ...agents
+                .filter((a) => a.status !== 'terminated')
+                .map((a) => ({
+                  value: a.id,
+                  label: `${a.name} (${a.role})`,
+                })),
+            ]}
+          />
+          <Select
+            label="Goal"
+            value={goalId}
+            onChange={(e) => setGoalId(e.target.value)}
+            options={[
+              { value: '', label: 'No goal' },
+              ...flatGoals.map((g) => ({
+                value: g.id,
+                label: '  '.repeat(g.depth) + '→ ' + g.title,
+              })),
+            ]}
+          />
+          <Select
+            label="Priority"
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+            options={[
+              { value: '0', label: 'Normal (0)' },
+              { value: '5', label: 'Medium (5)' },
+              { value: '10', label: 'High (10)' },
+              { value: '20', label: 'Critical (20)' },
+            ]}
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            📋 Create Task
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+src/components/CreateGoalForm.tsx
+React
+import React, { useState } from 'react';
+import { Modal } from './Modal';
+import { Input, Textarea, Button } from './Form';
+import { api } from '../api/client';
+
+export function CreateGoalForm({
+  open,
+  onClose,
+  onCreated,
+  companyId,
+  parentId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  companyId: string;
+  parentId?: string;
+}) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api.createGoal(companyId, {
+        title,
+        description: description || undefined,
+        parent_id: parentId || undefined,
+      });
+      onCreated();
+      onClose();
+      setTitle('');
+      setDescription('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={parentId ? 'Add Sub-Goal' : 'Create Goal'}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Goal Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Launch MVP by Q2"
+          required
+        />
+        <Textarea
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="What does success look like?"
+        />
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            🎯 Create Goal
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+src/components/CreateToolForm.tsx
+React
+import React, { useState } from 'react';
+import { Modal } from './Modal';
+import { Input, Textarea, Select, Button } from './Form';
+import { api } from '../api/client';
+
+export function CreateToolForm({
+  open,
+  onClose,
+  onCreated,
+  companyId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  companyId: string;
+}) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('builtin');
+  const [description, setDescription] = useState('');
+  const [configJson, setConfigJson] = useState('{}');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      let config = {};
+      try {
+        config = JSON.parse(configJson);
+      } catch {
+        alert('Invalid JSON in config');
+        return;
+      }
+      await api.createTool(companyId, { name, type, description, config });
+      onCreated();
+      onClose();
+      setName('');
+      setDescription('');
+      setConfigJson('{}');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Register Tool" wide>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Tool Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="web_search"
+            required
+          />
+          <Select
+            label="Type"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            options={[
+              { value: 'builtin', label: 'Built-in' },
+              { value: 'http', label: 'HTTP API' },
+              { value: 'bash', label: 'Bash Command' },
+              { value: 'function', label: 'Custom Function' },
+              { value: 'mcp', label: 'MCP Server' },
+            ]}
+          />
+        </div>
+        <Textarea
+          label="Description (for agents)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Search the web for current information..."
+        />
+        <Textarea
+          label="Config (JSON)"
+          value={configJson}
+          onChange={(e) => setConfigJson(e.target.value)}
+          placeholder='{"endpoint": "https://...", "api_key": "..."}'
+          rows={4}
+          className="font-mono text-xs"
+        />
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            🔧 Register Tool
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+src/components/CreatePolicyForm.tsx
+React
+import React, { useState } from 'react';
+import { Modal } from './Modal';
+import { Input, Textarea, Select, Button } from './Form';
+import { api } from '../api/client';
+
+const POLICY_PRESETS = [
+  {
+    type: 'approval_required',
+    name: 'Require approval for deployments',
+    rules: { actions: ['deploy', 'strategy_change'], roles: [] },
+  },
+  {
+    type: 'budget_threshold',
+    name: 'Budget warning at 80%',
+    rules: { threshold_pct: 80 },
+  },
+  {
+    type: 'delegation_limit',
+    name: 'Max delegation depth',
+    rules: { max_depth: 3 },
+  },
+  {
+    type: 'rate_limit',
+    name: 'Heartbeat rate limit',
+    rules: { max_per_hour: 30, actions: ['heartbeat.completed'] },
+  },
+];
+
+export function CreatePolicyForm({
+  open,
+  onClose,
+  onCreated,
+  companyId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  companyId: string;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState('approval_required');
+  const [rulesJson, setRulesJson] = useState('{}');
+  const [loading, setLoading] = useState(false);
+
+  const handlePreset = (preset: (typeof POLICY_PRESETS)[0]) => {
+    setName(preset.name);
+    setType(preset.type);
+    setRulesJson(JSON.stringify(preset.rules, null, 2));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const rules = JSON.parse(rulesJson);
+      await api.createPolicy(companyId, { name, description, type, rules });
+      onCreated();
+      onClose();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Create Policy" wide>
+      <div className="mb-4">
+        <p className="text-xs text-gray-500 mb-2">Quick presets:</p>
+        <div className="flex flex-wrap gap-2">
+          {POLICY_PRESETS.map((p) => (
+            <button
+              key={p.type}
+              onClick={() => handlePreset(p)}
+              className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700"
+              type="button"
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Policy Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <Select
+            label="Type"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            options={[
+              { value: 'approval_required', label: 'Approval Required' },
+              { value: 'budget_threshold', label: 'Budget Threshold' },
+              { value: 'delegation_limit', label: 'Delegation Limit' },
+              { value: 'rate_limit', label: 'Rate Limit' },
+              { value: 'tool_restriction', label: 'Tool Restriction' },
+              { value: 'auto_pause', label: 'Auto Pause' },
+            ]}
+          />
+        </div>
+        <Input
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <Textarea
+          label="Rules (JSON)"
+          value={rulesJson}
+          onChange={(e) => setRulesJson(e.target.value)}
+          rows={4}
+          className="font-mono text-xs"
+        />
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            🛡️ Create Policy
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+________________________________________
+Detail Pages
+src/pages/AgentDetailPage.tsx
+React
+import React from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { StatusBadge } from '../components/StatusBadge';
+import { CostBadge } from '../components/CostBadge';
+import { AgentAvatar } from '../components/AgentAvatar';
+import { Button } from '../components/Form';
+import { ArrowLeft } from 'lucide-react';
+
+export function AgentDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { data: agent, refetch } = useApi(() => api.getAgent(id!), [id]);
+  const { data: heartbeats } = useApi(
+    () => api.getHeartbeats(id!),
+    [id]
+  );
+
+  if (!agent) return <div className="text-gray-500">Loading...</div>;
+
+  return (
+    <div className="space-y-6">
+      <Link
+        to="/agents"
+        className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-300 text-sm"
+      >
+        <ArrowLeft size={16} /> Back to Agents
+      </Link>
+
+      {/* Header */}
+      <div className="bg-gray-900 rounded-lg border border-gray-800 p-6">
+        <div className="flex items-start gap-4">
+          <AgentAvatar name={agent.name} role={agent.role} size="lg" />
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold">{agent.name}</h2>
+              <StatusBadge status={agent.status} />
+            </div>
+            <p className="text-gray-400">
+              {agent.title || agent.role} · {agent.runtime} · {agent.model}
+            </p>
+            <p className="text-xs text-gray-600 font-mono mt-1">{agent.id}</p>
+          </div>
+          <div className="flex gap-2">
+            {agent.status === 'paused' && (
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  await api.resumeAgent(agent.id);
+                  refetch();
+                }}
+              >
+                Resume
+              </Button>
+            )}
+            {['idle', 'working'].includes(agent.status) && (
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  await api.pauseAgent(agent.id);
+                  refetch();
+                }}
+              >
+                Pause
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {agent.system_prompt && (
+          <div className="mt-4 p-3 bg-gray-800 rounded-lg">
+            <p className="text-xs text-gray-500 mb-1">System Prompt</p>
+            <p className="text-sm text-gray-300 whitespace-pre-wrap">
+              {agent.system_prompt}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Heartbeat History */}
+      <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">
+          Recent Heartbeats
+        </h3>
+        <div className="space-y-2">
+          {heartbeats?.length === 0 && (
+            <p className="text-gray-600 text-sm">No heartbeats yet</p>
+          )}
+          {heartbeats?.map((hb: any) => (
+            <div
+              key={hb.id}
+              className="flex items-center justify-between py-2 border-b border-gray-800/50"
+            >
+              <div className="flex items-center gap-3">
+                <span>
+                  {hb.status === 'worked'
+                    ? '💓'
+                    : hb.status === 'idle'
+                      ? '😴'
+                      : hb.status === 'error'
+                        ? '❌'
+                        : '⚠️'}
+                </span>
+                <StatusBadge status={hb.status} />
+                {hb.duration_ms && (
+                  <span className="text-xs text-gray-500">
+                    {hb.duration_ms}ms
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {hb.cost_usd > 0 && (
+                  <CostBadge amount={parseFloat(hb.cost_usd)} />
+                )}
+                <span className="text-xs text-gray-600">
+                  {new Date(hb.created_at).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+src/pages/TaskDetailPage.tsx
+React
+import React from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { StatusBadge } from '../components/StatusBadge';
+import { MessageThread } from '../components/MessageThread';
+import { ArrowLeft } from 'lucide-react';
+
+export function TaskDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { data: task, refetch } = useApi(() => api.getTask(id!), [id]);
+
+  if (!task) return <div className="text-gray-500">Loading...</div>;
+
+  return (
+    <div className="space-y-6 h-full flex flex-col">
+      <Link
+        to="/tasks"
+        className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-300 text-sm"
+      >
+        <ArrowLeft size={16} /> Back to Tasks
+      </Link>
+
+      {/* Header */}
+      <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold">{task.title}</h2>
+              <StatusBadge status={task.status} />
+              {task.priority > 0 && (
+                <span className="text-xs text-orange-400 bg-orange-900/30 px-2 py-0.5 rounded">
+                  P{task.priority}
+                </span>
+              )}
+            </div>
+            {task.description && (
+              <p className="text-gray-400 text-sm mt-2">{task.description}</p>
+            )}
+            <div className="flex items-center gap-4 mt-2 text-xs text-gray-600">
+              {task.assigned_to && (
+                <span>Assigned: {task.assigned_to}</span>
+              )}
+              <span>Created: {new Date(task.created_at).toLocaleString()}</span>
+              {task.created_by && <span>By: {task.created_by}</span>}
+            </div>
+          </div>
+        </div>
+
+        {task.result && (
+          <div className="mt-4 p-3 bg-emerald-950/30 border border-emerald-800/50 rounded-lg">
+            <p className="text-xs text-emerald-400 mb-1">✅ Result</p>
+            <p className="text-sm text-gray-300 whitespace-pre-wrap">
+              {task.result}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Subtasks */}
+      {task.subtasks?.length > 0 && (
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">
+            Subtasks
+          </h3>
+          <div className="space-y-2">
+            {task.subtasks.map((sub: any) => (
+              <Link
+                key={sub.id}
+                to={`/tasks/${sub.id}`}
+                className="flex items-center justify-between py-2 border-b border-gray-800/50 hover:bg-gray-800/50 px-2 rounded"
+              >
+                <span className="text-sm">{sub.title}</span>
+                <StatusBadge status={sub.status} />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Message Thread */}
+      <div className="bg-gray-900 rounded-lg border border-gray-800 p-4 flex-1 min-h-[400px] flex flex-col">
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">
+          Conversation
+        </h3>
+        <div className="flex-1">
+          <MessageThread
+            messages={task.messages || []}
+            taskId={task.id}
+            onMessageSent={refetch}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+src/pages/GoalsPage.tsx
+React
+import React, { useState } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { GoalTree } from '../components/GoalTree';
+import { CreateGoalForm } from '../components/CreateGoalForm';
+import { Button } from '../components/Form';
+import { EmptyState } from '../components/EmptyState';
+
+export function GoalsPage({ companyId }: { companyId: string }) {
+  const { data: goals, refetch } = useApi(
+    () => api.listGoals(companyId),
+    [companyId]
+  );
+  const [showCreate, setShowCreate] = useState(false);
+  const [parentId, setParentId] = useState<string | undefined>();
+
+  const handleAddGoal = (parent?: string) => {
+    setParentId(parent);
+    setShowCreate(true);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Goals</h2>
+        <Button onClick={() => handleAddGoal()}>🎯 Add Goal</Button>
+      </div>
+
+      {goals?.length === 0 ? (
+        <EmptyState
+          icon="🎯"
+          title="No goals yet"
+          description="Define your company's goals to give agents direction and purpose."
+          action={
+            <Button onClick={() => handleAddGoal()}>Create First Goal</Button>
+          }
+        />
+      ) : (
+        <GoalTree
+          goals={goals || []}
+          onAddGoal={handleAddGoal}
+        />
+      )}
+
+      <CreateGoalForm
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={refetch}
+        companyId={companyId}
+        parentId={parentId}
+      />
+    </div>
+  );
+}
+src/pages/ToolsPage.tsx
+React
+import React, { useState } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { StatusBadge } from '../components/StatusBadge';
+import { CreateToolForm } from '../components/CreateToolForm';
+import { Button } from '../components/Form';
+import { EmptyState } from '../components/EmptyState';
+
+export function ToolsPage({ companyId }: { companyId: string }) {
+  const { data: tools, refetch } = useApi(
+    () => api.listTools(companyId),
+    [companyId]
+  );
+  const { data: toolCalls } = useApi(
+    () => api.getToolCalls(companyId),
+    [companyId]
+  );
+  const [showCreate, setShowCreate] = useState(false);
+
+  const toggleTool = async (toolId: string, enabled: boolean) => {
+    await fetch(`/api/tools/${toolId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !enabled }),
+    });
+    refetch();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Tools</h2>
+        <Button onClick={() => setShowCreate(true)}>🔧 Register Tool</Button>
+      </div>
+
+      {tools?.length === 0 ? (
+        <EmptyState
+          icon="🔧"
+          title="No tools registered"
+          description="Register tools that your agents can use — APIs, scripts, search engines, and more."
+          action={
+            <Button onClick={() => setShowCreate(true)}>Register First Tool</Button>
+          }
+        />
+      ) : (
+        <div className="grid gap-4">
+          {tools?.map((tool: any) => (
+            <div
+              key={tool.id}
+              className={`bg-gray-900 rounded-lg border p-4 ${
+                tool.enabled ? 'border-gray-800' : 'border-gray-800/50 opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold font-mono">{tool.name}</h3>
+                    <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-400">
+                      {tool.type}
+                    </span>
+                    <span className="text-xs text-gray-600">
+                      {tool.agent_count} agents
+                    </span>
+                  </div>
+                  {tool.description && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {tool.description}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => toggleTool(tool.id, tool.enabled)}
+                  className={`text-xs px-3 py-1 rounded ${
+                    tool.enabled
+                      ? 'bg-green-900/50 text-green-400 hover:bg-green-900'
+                      : 'bg-gray-800 text-gray-500 hover:bg-gray-700'
+                  }`}
+                >
+                  {tool.enabled ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recent Tool Calls */}
+      {toolCalls && toolCalls.length > 0 && (
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">
+            Recent Tool Calls
+          </h3>
+          <div className="space-y-2">
+            {toolCalls.slice(0, 20).map((tc: any) => (
+              <div
+                key={tc.id}
+                className="flex items-center justify-between py-2 border-b border-gray-800/50 text-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-blue-400">
+                    {tc.tool_name}
+                  </span>
+                  <span className="text-gray-500">by {tc.agent_name}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={tc.status} />
+                  <span className="text-xs text-gray-600">
+                    {tc.duration_ms}ms
+                  </span>
+                  <span className="text-xs text-gray-600">
+                    {new Date(tc.created_at).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <CreateToolForm
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={refetch}
+        companyId={companyId}
+      />
+    </div>
+  );
+}
+src/pages/PoliciesPage.tsx
+React
+import React, { useState } from 'react';
+import { api } from '../api/client';
+import { useApi } from '../hooks/useApi';
+import { CreatePolicyForm } from '../components/CreatePolicyForm';
+import { Button } from '../components/Form';
+import { EmptyState } from '../components/EmptyState';
+
+export function PoliciesPage({ companyId }: { companyId: string }) {
+  const { data: policies, refetch } = useApi(
+    () => api.listPolicies(companyId),
+    [companyId]
+  );
+  const [showCreate, setShowCreate] = useState(false);
+
+  const togglePolicy = async (policyId: string, enabled: boolean) => {
+    await fetch(`/api/policies/${policyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !enabled }),
+    });
+    refetch();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Policies</h2>
+        <Button onClick={() => setShowCreate(true)}>🛡️ Create Policy</Button>
+      </div>
+
+      {policies?.length === 0 ? (
+        <EmptyState
+          icon="🛡️"
+          title="No policies"
+          description="Policies define governance rules — approval gates, budget thresholds, rate limits, and more."
+          action={
+            <Button onClick={() => setShowCreate(true)}>
+              Create First Policy
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {policies?.map((policy: any) => (
+            <div
+              key={policy.id}
+              className={`bg-gray-900 rounded-lg border p-4 ${
+                policy.enabled ? 'border-gray-800' : 'border-gray-800/50 opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-medium">{policy.name}</h3>
+                    <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-400">
+                      {policy.type}
+                    </span>
+                  </div>
+                  {policy.description && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {policy.description}
+                    </p>
+                  )}
+                  <pre className="mt-2 text-xs text-gray-600 font-mono">
+                    {JSON.stringify(policy.rules, null, 2)}
+                  </pre>
+                </div>
+                <button
+                  onClick={() => togglePolicy(policy.id, policy.enabled)}
+                  className={`text-xs px-3 py-1 rounded ${
+                    policy.enabled
+                      ? 'bg-green-900/50 text-green-400 hover:bg-green-900'
+                      : 'bg-gray-800 text-gray-500 hover:bg-gray-700'
+                  }`}
+                >
+                  {policy.enabled ? 'Active' : 'Inactive'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <CreatePolicyForm
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={refetch}
+        companyId={companyId}
+      />
+    </div>
+  );
+}
+________________________________________
+Updated Layout & Sidebar (Mobile Responsive)
+src/components/Layout.tsx — updated
+React
+import React, { useState } from 'react';
+import { Sidebar } from './Sidebar';
+import { Menu, X } from 'lucide-react';
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 lg:static lg:z-auto transition-transform duration-200
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+      >
+        <Sidebar onClose={() => setSidebarOpen(false)} />
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Mobile header */}
+        <div className="lg:hidden flex items-center gap-3 p-4 border-b border-gray-800">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-gray-400 hover:text-white"
+          >
+            <Menu size={24} />
+          </button>
+          <h1 className="font-bold">🏢 Biuro</h1>
+        </div>
+
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+      </div>
+    </div>
+  );
+}
+src/components/Sidebar.tsx — updated
+React
+import React from 'react';
+import { NavLink } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Users,
+  ListTodo,
+  Target,
+  Wrench,
+  Shield,
+  DollarSign,
+  ScrollText,
+  Network,
+  Settings,
+  FileText,
+  X,
+} from 'lucide-react';
+
+const links = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/agents', icon: Users, label: 'Agents' },
+  { to: '/tasks', icon: ListTodo, label: 'Tasks' },
+  { to: '/goals', icon: Target, label: 'Goals' },
+  { to: '/org-chart', icon: Network, label: 'Org Chart' },
+  { to: '/tools', icon: Wrench, label: 'Tools' },
+  { to: '/policies', icon: FileText, label: 'Policies' },
+  { to: '/approvals', icon: Shield, label: 'Approvals' },
+  { to: '/budgets', icon: DollarSign, label: 'Budgets' },
+  { to: '/audit-log', icon: ScrollText, label: 'Audit Log' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
+];
+
+export function Sidebar({ onClose }: { onClose?: () => void }) {
+  return (
+    <aside className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
+      <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold">🏢 Biuro</h1>
+          <p className="text-xs text-gray-500">Autonomiczne Biuro</p>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden text-gray-500 hover:text-white"
+          >
+            <X size={20} />
+          </button>
+        )}
+      </div>
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        {links.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-blue-600/20 text-blue-400'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+              }`
+            }
+          >
+            <Icon size={18} />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+________________________________________
+Updated App.tsx (all routes)
+React
+import React, { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import { Layout } from './components/Layout';
+import { DashboardPage } from './pages/DashboardPage';
+import { AgentsPage } from './pages/AgentsPage';
+import { AgentDetailPage } from './pages/AgentDetailPage';
+import { TasksPage } from './pages/TasksPage';
+import { TaskDetailPage } from './pages/TaskDetailPage';
+import { GoalsPage } from './pages/GoalsPage';
+import { OrgChartPage } from './pages/OrgChartPage';
+import { ToolsPage } from './pages/ToolsPage';
+import { PoliciesPage } from './pages/PoliciesPage';
+import { ApprovalsPage } from './pages/ApprovalsPage';
+import { BudgetsPage } from './pages/BudgetsPage';
+import { AuditLogPage } from './pages/AuditLogPage';
+import { CreateCompanyForm } from './components/CreateCompanyForm';
+import { api } from './api/client';
+import { Button } from './components/Form';
+
+export default function App() {
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [showCreateCompany, setShowCreateCompany] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const loadCompanies = async () => {
+    try {
+      const list = await api.listCompanies();
+      setCompanies(list);
+      if (list.length > 0 && !companyId) {
+        setCompanyId(list[0].id);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCompanies();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-2xl">🏢</div>
+      </div>
+    );
+  }
+
+  if (!companyId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center max-w-lg w-full">
+          <h1 className="text-4xl font-bold mb-2">🏢</h1>
+          <h2 className="text-2xl font-bold mb-2">Autonomiczne Biuro</h2>
+          <p className="text-gray-500 mb-8">
+            Build and manage autonomous AI companies
+          </p>
+
+          {companies.length === 0 ? (
+            <div className="space-y-4">
+              <p className="text-gray-600">No companies yet. Create your first one.</p>
+              <Button onClick={() => setShowCreateCompany(true)}>
+                🏢 Create Company
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {companies.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCompanyId(c.id)}
+                  className="block w-full bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-lg p-4 text-left transition-colors"
+                >
+                  <span className="font-medium">{c.name}</span>
+                  {c.mission && (
+                    <p className="text-sm text-gray-500 mt-1">{c.mission}</p>
+                  )}
+                </button>
+              ))}
+              <Button
+                variant="secondary"
+                onClick={() => setShowCreateCompany(true)}
+                className="w-full"
+              >
+                + Create Another Company
+              </Button>
+            </div>
+          )}
+
+          <CreateCompanyForm
+            open={showCreateCompany}
+            onClose={() => setShowCreateCompany(false)}
+            onCreated={(company) => {
+              setCompanies((prev) => [company, ...prev]);
+              setCompanyId(company.id);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const currentCompany = companies.find((c) => c.id === companyId);
+
+  return (
+    <Layout>
+      {/* Company selector */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {companies.length > 1 && (
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded px-3 py-1 text-sm"
+            >
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {currentCompany?.mission && (
+            <span className="text-xs text-gray-600 hidden md:inline">
+              {currentCompany.mission}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <Routes>
+        <Route path="/" element={<DashboardPage companyId={companyId} />} />
+        <Route path="/agents" element={<AgentsPage companyId={companyId} />} />
+        <Route path="/agents/:id" element={<AgentDetailPage />} />
+        <Route path="/tasks" element={<TasksPage companyId={companyId} />} />
+        <Route path="/tasks/:id" element={<TaskDetailPage />} />
+        <Route path="/goals" element={<GoalsPage companyId={companyId} />} />
+        <Route path="/org-chart" element={<OrgChartPage companyId={companyId} />} />
+        <Route path="/tools" element={<ToolsPage companyId={companyId} />} />
+        <Route path="/policies" element={<PoliciesPage companyId={companyId} />} />
+        <Route path="/approvals" element={<ApprovalsPage companyId={companyId} />} />
+        <Route path="/budgets" element={<BudgetsPage companyId={companyId} />} />
+        <Route path="/audit-log" element={<AuditLogPage companyId={companyId} />} />
+      </Routes>
+    </Layout>
+  );
+}
+________________________________________
+Updated AgentsPage (with form + links)
+React
+// W AgentsPage dodaj import i stan:
+import { CreateAgentForm } from '../components/CreateAgentForm';
+import { Link } from 'react-router-dom';
+
+// Dodaj stan:
+const [showCreate, setShowCreate] = useState(false);
+const { data: goals } = useApi(() => api.listGoals(companyId), [companyId]);
+
+// Zamień button na:
+<button onClick={() => setShowCreate(true)} ...>+ Hire Agent</button>
+
+// W mapie agentów, owin agent card w Link:
+<Link to={`/agents/${agent.id}`} key={agent.id} className="block">
+  {/* ... istniejąca karta ... */}
+</Link>
+
+// Na końcu dodaj:
+<CreateAgentForm
+  open={showCreate}
+  onClose={() => setShowCreate(false)}
+  onCreated={refetch}
+  companyId={companyId}
+  agents={agents || []}
+/>
+Updated TasksPage (with form + links)
+React
+// Analogicznie:
+import { CreateTaskForm } from '../components/CreateTaskForm';
+import { Link } from 'react-router-dom';
+
+const [showCreate, setShowCreate] = useState(false);
+const { data: agents } = useApi(() => api.listAgents(companyId), [companyId]);
+const { data: goals } = useApi(() => api.listGoals(companyId), [companyId]);
+
+// Button:
+<Button onClick={() => setShowCreate(true)}>📋 Create Task</Button>
+
+// Link na każdym tasku:
+<Link to={`/tasks/${task.id}`} key={task.id}>
+
+// Form:
+<CreateTaskForm
+  open={showCreate}
+  onClose={() => setShowCreate(false)}
+  onCreated={refetch}
+  companyId={companyId}
+  agents={agents || []}
+  goals={goals || []}
+/>
+________________________________________
+Server: Budgets Route
+src/routes/budgets.ts
+TypeScript
+import { Router } from 'express';
+import { db } from '../db/client.js';
+
+const router = Router();
+
+// Get budget for agent
+router.get('/agents/:agentId/budgets', async (req, res) => {
+  const result = await db.query(
+    `SELECT * FROM budgets
+     WHERE agent_id = $1
+     ORDER BY month DESC`,
+    [req.params.agentId]
+  );
+  res.json(result.rows);
+});
+
+// Set budget for agent
+router.post('/agents/:agentId/budgets', async (req, res) => {
+  const { month, limit_usd } = req.body;
+  const budgetMonth =
+    month || new Date().toISOString().slice(0, 7) + '-01';
+
+  const result = await db.query(
+    `INSERT INTO budgets (agent_id, month, limit_usd)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (agent_id, month)
+     DO UPDATE SET limit_usd = $3
+     RETURNING *`,
+    [req.params.agentId, budgetMonth, limit_usd]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+// Company-wide cost summary
+router.get('/companies/:companyId/costs', async (req, res) => {
+  const { period } = req.query; // 'day', 'week', 'month'
+
+  let interval = '30 days';
+  if (period === 'day') interval = '1 day';
+  if (period === 'week') interval = '7 days';
+
+  const [byAgent, byDay, total] = await Promise.all([
+    db.query(
+      `SELECT a.name, a.role,
+         COALESCE(SUM(al.cost_usd), 0) as total_cost,
+         COUNT(*) as action_count
+       FROM agents a
+       LEFT JOIN audit_log al ON al.agent_id = a.id
+         AND al.created_at > now() - interval '${interval}'
+         AND al.cost_usd > 0
+       WHERE a.company_id = $1
+       GROUP BY a.id, a.name, a.role
+       ORDER BY total_cost DESC`,
+      [req.params.companyId]
+    ),
+    db.query(
+      `SELECT DATE(al.created_at) as day,
+         COALESCE(SUM(al.cost_usd), 0) as total_cost
+       FROM audit_log al
+       WHERE al.company_id = $1
+         AND al.created_at > now() - interval '${interval}'
+         AND al.cost_usd > 0
+       GROUP BY DATE(al.created_at)
+       ORDER BY day ASC`,
+      [req.params.companyId]
+    ),
+    db.query(
+      `SELECT COALESCE(SUM(cost_usd), 0) as total
+       FROM audit_log
+       WHERE company_id = $1
+         AND created_at > now() - interval '${interval}'`,
+      [req.params.companyId]
+    ),
+  ]);
+
+  res.json({
+    totalCost: parseFloat(total.rows[0].total),
+    byAgent: byAgent.rows,
+    byDay: byDay.rows,
+    period: interval,
+  });
+});
+
+export default router;
+Updated src/routes/index.ts
+TypeScript
+import { Router } from 'express';
+import companies from './companies.js';
+import agents from './agents.js';
+import tasks from './tasks.js';
+import messages from './messages.js';
+import goals from './goals.js';
+import tools from './tools.js';
+import approvals from './approvals.js';
+import budgets from './budgets.js';
+
+const router = Router();
+
+router.use('/companies', companies);
+router.use('/', agents);
+router.use('/', tasks);
+router.use('/', messages);
+router.use('/', goals);
+router.use('/', tools);
+router.use('/', approvals);
+router.use('/', budgets);
+
+router.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    version: '0.2.0',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+export default router;
+________________________________________
+Updated Context (tools in agent prompt)
+src/orchestrator/context.ts — dodaj tools do prompt
+TypeScript
+// W buildContext(), po pobraniu boss/reports, dodaj:
+
+import { getAgentTools } from '../tools/registry.js';
+
+// ...
+
+const agentTools = await getAgentTools(agent.id);
+
+// W systemPrompt, po sekcji direct reports, dodaj:
+
+const toolsSection = agentTools.length > 0
+  ? `AVAILABLE TOOLS:
+${agentTools.map(t =>
+  `- ${t.tool.name}: ${t.tool.description || 'No description'}
+    Permissions: ${JSON.stringify(t.permissions)}
+    Rate limit: ${t.rateLimit}/hour`
+).join('\n')}
+
+To use a tool, include an action:
+{ "type": "use_tool", "tool": "tool_name", "params": { ... } }`
+  : 'NO TOOLS AVAILABLE — you cannot use external tools.';
+
+// Wstaw toolsSection do systemprompt
+________________________________________
+Docker
+docker-compose.yml
+YAML
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: autonomiczne_biuro
+      POSTGRES_USER: biuro
+      POSTGRES_PASSWORD: biuro_secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U biuro -d autonomiczne_biuro']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      DATABASE_URL: postgresql://biuro:biuro_secret@postgres:5432/autonomiczne_biuro
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PORT: 3100
+      HEARTBEAT_INTERVAL_MS: 30000
+      LOG_LEVEL: info
+      WORKSPACE_ROOT: /workspace
+    ports:
+      - '3100:3100'
+    volumes:
+      - workspace:/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - '3200:80'
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  workspace:
+Dockerfile.server
+Dockerfile
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/server/package.json packages/server/
+RUN pnpm install --frozen-lockfile --filter @biuro/server
+
+# Build
+COPY packages/server packages/server
+RUN pnpm --filter @biuro/server build
+
+# Production
+FROM node:20-alpine
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+WORKDIR /app
+
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/packages/server/node_modules ./packages/server/node_modules
+COPY --from=base /app/packages/server/dist ./packages/server/dist
+COPY --from=base /app/packages/server/package.json ./packages/server/
+COPY packages/server/src/db/schema.sql ./packages/server/src/db/schema.sql
+
+WORKDIR /app/packages/server
+
+# Run migration then start
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/index.js"]
+Dockerfile.dashboard
+Dockerfile
+FROM node:20-alpine AS build
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/dashboard/package.json packages/dashboard/
+RUN pnpm install --frozen-lockfile --filter @biuro/dashboard
+
+COPY packages/dashboard packages/dashboard
+RUN pnpm --filter @biuro/dashboard build
+
+# Serve with nginx
+FROM nginx:alpine
+
+COPY --from=build /app/packages/dashboard/dist /usr/share/nginx/html
+
+# Nginx config for SPA + API proxy
+RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+    listen 80;
+
+    location /api/ {
+        proxy_pass http://server:3100/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /ws {
+        proxy_pass http://server:3100/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+}
+EOF
+
+EXPOSE 80
+.env.docker
+env
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+Uruchomienie
+Bash
+# Development
+docker compose up -d postgres
+pnpm --filter @biuro/server dev
+pnpm --filter @biuro/dashboard dev
+
+# Production
+cp .env.docker .env
+docker compose up -d --build
+# Dashboard: http://localhost:3200
+# API:       http://localhost:3100
+________________________________________
+Testy integracyjne
+packages/server/tests/setup.ts
+TypeScript
+import { db } from '../src/db/client.js';
+
+export async function setupTestDb() {
+  // Use a test schema
+  await db.query('CREATE SCHEMA IF NOT EXISTS test');
+  await db.query('SET search_path TO test, public');
+
+  // Run migrations in test schema
+  const fs = await import('fs');
+  const path = await import('path');
+  const schema = fs.readFileSync(
+    path.join(import.meta.dirname, '../src/db/schema.sql'),
+    'utf-8'
+  );
+  await db.query(schema);
+}
+
+export async function teardownTestDb() {
+  await db.query('DROP SCHEMA IF EXISTS test CASCADE');
+  await db.close();
+}
+
+export async function cleanTables() {
+  await db.query(`
+    TRUNCATE
+      heartbeats, agent_sessions, audit_log, messages,
+      tasks, budgets, agents, goals, companies
+    CASCADE
+  `);
+}
+
+export { db };
+packages/server/tests/companies.test.ts
+TypeScript
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { setupTestDb, teardownTestDb, cleanTables, db } from './setup';
+
+beforeAll(setupTestDb);
+afterAll(teardownTestDb);
+beforeEach(cleanTables);
+
+describe('Companies', () => {
+  it('should create a company', async () => {
+    const result = await db.query(
+      `INSERT INTO companies (name, mission)
+       VALUES ('Test Corp', 'Test mission')
+       RETURNING *`
+    );
+    expect(result.rows[0].name).toBe('Test Corp');
+    expect(result.rows[0].id).toBeDefined();
+  });
+
+  it('should cascade delete agents when company is deleted', async () => {
+    const company = await db.query(
+      "INSERT INTO companies (name) VALUES ('Corp') RETURNING id"
+    );
+    const companyId = company.rows[0].id;
+
+    await db.query(
+      `INSERT INTO agents (company_id, name, role, runtime)
+       VALUES ($1, 'Alice', 'ceo', 'claude')`,
+      [companyId]
+    );
+
+    await db.query('DELETE FROM companies WHERE id = $1', [companyId]);
+
+    const agents = await db.query(
+      'SELECT * FROM agents WHERE company_id = $1',
+      [companyId]
+    );
+    expect(agents.rows).toHaveLength(0);
+  });
+});
+packages/server/tests/tasks.test.ts
+TypeScript
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { setupTestDb, teardownTestDb, cleanTables, db } from './setup';
+
+let companyId: string;
+let agentId: string;
+
+beforeAll(setupTestDb);
+afterAll(teardownTestDb);
+
+beforeEach(async () => {
+  await cleanTables();
+
+  const c = await db.query(
+    "INSERT INTO companies (name) VALUES ('Test') RETURNING id"
+  );
+  companyId = c.rows[0].id;
+
+  const a = await db.query(
+    `INSERT INTO agents (company_id, name, role, runtime)
+     VALUES ($1, 'Alice', 'dev', 'claude') RETURNING id`,
+    [companyId]
+  );
+  agentId = a.rows[0].id;
+});
+
+describe('Task Checkout', () => {
+  it('should atomically checkout a task', async () => {
+    // Create assigned task
+    await db.query(
+      `INSERT INTO tasks (company_id, title, assigned_to, status)
+       VALUES ($1, 'Task 1', $2, 'assigned')`,
+      [companyId, agentId]
+    );
+
+    // Checkout
+    const result = await db.query(
+      `UPDATE tasks
+       SET locked_by = $1, locked_at = now(), status = 'in_progress'
+       WHERE id = (
+         SELECT id FROM tasks
+         WHERE company_id = $2 AND assigned_to = $1
+           AND status = 'assigned' AND locked_by IS NULL
+         ORDER BY priority DESC, created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING *`,
+      [agentId, companyId]
+    );
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].locked_by).toBe(agentId);
+    expect(result.rows[0].status).toBe('in_progress');
+  });
+
+  it('should not double-checkout the same task', async () => {
+    await db.query(
+      `INSERT INTO tasks (company_id, title, assigned_to, status, locked_by, locked_at)
+       VALUES ($1, 'Task 1', $2, 'in_progress', $2, now())`,
+      [companyId, agentId]
+    );
+
+    // Try to checkout again
+    const result = await db.query(
+      `UPDATE tasks
+       SET locked_by = $1, locked_at = now(), status = 'in_progress'
+       WHERE id = (
+         SELECT id FROM tasks
+         WHERE company_id = $2 AND assigned_to = $1
+           AND status = 'assigned' AND locked_by IS NULL
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING *`,
+      [agentId, companyId]
+    );
+
+    expect(result.rows).toHaveLength(0);
+  });
+});
+packages/server/tests/safety.test.ts
+TypeScript
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { setupTestDb, teardownTestDb, cleanTables, db } from './setup';
+
+let companyId: string;
+let agentId: string;
+
+beforeAll(setupTestDb);
+afterAll(teardownTestDb);
+
+beforeEach(async () => {
+  await cleanTables();
+
+  const c = await db.query(
+    "INSERT INTO companies (name) VALUES ('Test') RETURNING id"
+  );
+  companyId = c.rows[0].id;
+
+  const a = await db.query(
+    `INSERT INTO agents (company_id, name, role, runtime)
+     VALUES ($1, 'Alice', 'dev', 'claude') RETURNING id`,
+    [companyId]
+  );
+  agentId = a.rows[0].id;
+});
+
+describe('Safety', () => {
+  it('should detect delegation depth', async () => {
+    // Create chain: task1 → task2 → task3 → task4
+    const t1 = await db.query(
+      `INSERT INTO tasks (company_id, title, assigned_to, status)
+       VALUES ($1, 'T1', $2, 'done') RETURNING id`,
+      [companyId, agentId]
+    );
+    const t2 = await db.query(
+      `INSERT INTO tasks (company_id, title, assigned_to, status, parent_id)
+       VALUES ($1, 'T2', $2, 'done', $3) RETURNING id`,
+      [companyId, agentId, t1.rows[0].id]
+    );
+    const t3 = await db.query(
+      `INSERT INTO tasks (company_id, title, assigned_to, status, parent_id)
+       VALUES ($1, 'T3', $2, 'done', $3) RETURNING id`,
+      [companyId, agentId, t2.rows[0].id]
+    );
+
+    // Walk up the chain
+    let depth = 0;
+    let currentId = t3.rows[0].id;
+    while (currentId) {
+      const r = await db.query(
+        'SELECT parent_id FROM tasks WHERE id = $1',
+        [currentId]
+      );
+      if (!r.rows[0]?.parent_id) break;
+      currentId = r.rows[0].parent_id;
+      depth++;
+    }
+
+    expect(depth).toBe(2);
+  });
+
+  it('should enforce budget limits', async () => {
+    const month = new Date().toISOString().slice(0, 7) + '-01';
+
+    await db.query(
+      `INSERT INTO budgets (agent_id, month, limit_usd, spent_usd)
+       VALUES ($1, $2, 10.00, 9.50)`,
+      [agentId, month]
+    );
+
+    const budget = await db.query(
+      'SELECT * FROM budgets WHERE agent_id = $1 AND month = $2',
+      [agentId, month]
+    );
+
+    const remaining =
+      parseFloat(budget.rows[0].limit_usd) -
+      parseFloat(budget.rows[0].spent_usd);
+
+    expect(remaining).toBe(0.50);
+    expect(remaining < 1).toBe(true);
+  });
+});
+packages/server/vitest.config.ts
+TypeScript
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    setupFiles: [],
+    testTimeout: 10000,
+  },
+});
+Dodaj do packages/server/package.json:
+JSON
+{
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}
+________________________________________
+Co masz po Fazie 3
+text
+✅ Faza 1 + 2 (wszystko z wcześniej)
+  +
+✅ KOMPLETNE UI z formularzami:
+    ├── Create Company wizard
+    ├── Hire Agent form (role presets, org hierarchy, budget)
+    ├── Create Task form (assignment, goals, priority)
+    ├── Create Goal form (hierarchia celów)
+    ├── Register Tool form
+    ├── Create Policy form (presets)
+    └── Wszystko w modalach, walidowane
+✅ Detail pages:
+    ├── Agent Detail — full info, heartbeat history, controls
+    ├── Task Detail — description, result, subtasks, message thread
+    └── Navigacja Link-ami między wszystkimi widokami
+✅ Message Thread — pełna konwersacja na tasku:
+    ├── Board (ty) pisze do agenta
+    ├── Agent responses (collapsible heartbeat logs)
+    ├── Tool calls i results wizualnie oznaczone
+    └── Real-time dzięki WebSocket
+✅ Goal Tree — interaktywne drzewo celów z expand/collapse
+✅ Tools Page — lista, enable/disable, recent tool calls
+✅ Policies Page — governance rules, toggle, presets
+✅ Mobile Responsive:
+    ├── Hamburger menu na mobile
+    ├── Responsive gridy
+    └── Touch-friendly controls
+✅ Company Creation w UI — nie trzeba curl
+✅ Multi-company selector w UI
+✅ Reusable components:
+    ├── Modal, Form (Input/Textarea/Select/Button)
+    ├── ConfirmDialog, EmptyState
+    ├── AgentAvatar (role-colored)
+    ├── StatusBadge, CostBadge
+    └── LiveFeed
+✅ Docker — docker compose up i działa
+    ├── PostgreSQL
+    ├── Server (Node.js)
+    ├── Dashboard (nginx + SPA)
+    └── Shared workspace volume
+✅ Testy integracyjne:
+    ├── Companies CRUD + cascade
+    ├── Atomic task checkout
+    ├── Budget enforcement
+    ├── Delegation depth
+    └── Vitest setup
+✅ Budgets route — per-agent, company-wide costs, by-day breakdown
+✅ Tools in agent context — agenci widzą swoje narzędzia w promptach
+________________________________________
+Mapa kompletnego systemu
+text
+                                ┌────────────────────┐
+                                │    Dashboard UI    │
+                                │    (React + Vite)  │
+                                │                    │
+                                │ ┌────────────────┐ │
+                                │ │ Company Select │ │
+                                │ │ Dashboard      │ │
+                                │ │ Agents         │ │
+                                │ │ Tasks          │ │
+                                │ │ Goals          │ │
+                                │ │ Org Chart      │ │
+                                │ │ Tools          │ │
+                                │ │ Policies       │ │
+                                │ │ Approvals      │ │
+                                │ │ Budgets        │ │
+                                │ │ Audit Log      │ │
+                                │ │ Live Feed (WS) │ │
+                                │ └────────────────┘ │
+                                └────────┬───────────┘
+                                    REST │ WebSocket
+                                ┌────────▼───────────┐
+                                │    API Server      │
+                                │    (Express)       │
+                                │                    │
+                                │ ┌────────────────┐ │
+                                │ │ Routes         │ │
+                                │ │ Orchestrator   │ │
+                                │ │ Tool Executor  │ │
+                                │ │ Governance     │ │
+                                │ │ Safety System  │ │
+                                │ │ WS Hub         │ │
+                                │ └───────┬────────┘ │
+                                └─────────┼──────────┘
+                           ┌──────────────┼──────────────┐
+                           ▼              ▼              ▼
+                    ┌─────────────┐ ┌──────────┐ ┌──────────────┐
+                    │ PostgreSQL  │ │ Runtimes │ │   Tools      │
+                    │             │ │          │ │              │
+                    │ companies   │ │ Claude   │ │ web_search   │
+                    │ agents      │ │ OpenAI   │ │ file_write   │
+                    │ tasks       │ │ HTTP     │ │ http_request │
+                    │ goals       │ │ Bash     │ │ github_api   │
+                    │ messages    │ │          │ │ (any custom) │
+                    │ budgets     │ └──────────┘ └──────────────┘
+                    │ tools       │
+                    │ policies    │
+                    │ approvals   │
+                    │ audit_log   │
+                    │ heartbeats  │
+                    │ sessions    │
+                    │ revisions   │
+                    └─────────────┘
+________________________________________
+To jest kompletny, produkcyjny system. Masz autonomiczne biuro z pełnym UI, governance, safety, tools, Docker, i testami.
+

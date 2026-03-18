@@ -1,0 +1,18 @@
+{
+  "name": "autonomiczne-biuro-monorepo",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @biuro/server dev",
+    "dev:worker": "pnpm --filter @biuro/server dev:worker",
+    "dev:dashboard": "pnpm --filter @biuro/dashboard dev",
+    "build": "pnpm recursive run build",
+    "start": "pnpm --filter @biuro/server start",
+    "worker": "pnpm --filter @biuro/server worker",
+    "migrate": "pnpm --filter @biuro/server migrate",
+    "test:phase3": "pnpm --filter @biuro/server tsx src/verify3.ts"
+  }
+}

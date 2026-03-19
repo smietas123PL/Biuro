@@ -4,13 +4,19 @@ import { v4 as uuidv4 } from 'uuid';
 export const BillingService = {
   async getBalance(companyId: string): Promise<number> {
     const res = await db.query(
-      "SELECT balance FROM company_credits WHERE company_id = $1",
+      'SELECT balance FROM company_credits WHERE company_id = $1',
       [companyId]
     );
     return res.rows[0]?.balance || 0;
   },
 
-  async addCredits(companyId: string, amount: number, type: string, description: string, stripeId?: string) {
+  async addCredits(
+    companyId: string,
+    amount: number,
+    type: string,
+    description: string,
+    stripeId?: string
+  ) {
     return db.transaction(async (client) => {
       // 1. Update or Insert balance
       await client.query(
@@ -30,7 +36,7 @@ export const BillingService = {
   },
 
   async recordUsage(companyId: string, amount: number, description: string) {
-     // Usage is negative amount
-     return this.addCredits(companyId, -Math.abs(amount), 'usage', description);
-  }
+    // Usage is negative amount
+    return this.addCredits(companyId, -Math.abs(amount), 'usage', description);
+  },
 };

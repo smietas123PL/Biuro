@@ -5,7 +5,12 @@ import type {
   GoalDecompositionPlanner,
   GoalDecompositionSuggestResponse,
 } from '@biuro/shared';
-import { CheckCircle2, CircleDashed, GitBranchPlus, Sparkles } from 'lucide-react';
+import {
+  CheckCircle2,
+  CircleDashed,
+  GitBranchPlus,
+  Sparkles,
+} from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
 
@@ -56,12 +61,17 @@ function buildGoalTree(goals: Goal[]): GoalNode[] {
 }
 
 function buildDraftTree(goals: GoalDecompositionDraftGoal[]) {
-  const nodeMap = new Map<string, (GoalDecompositionDraftGoal & { children: GoalDecompositionDraftGoal[] })>();
+  const nodeMap = new Map<
+    string,
+    GoalDecompositionDraftGoal & { children: GoalDecompositionDraftGoal[] }
+  >();
   for (const goal of goals) {
     nodeMap.set(goal.ref, { ...goal, children: [] });
   }
 
-  const roots: Array<GoalDecompositionDraftGoal & { children: GoalDecompositionDraftGoal[] }> = [];
+  const roots: Array<
+    GoalDecompositionDraftGoal & { children: GoalDecompositionDraftGoal[] }
+  > = [];
   for (const goal of goals) {
     const node = nodeMap.get(goal.ref);
     if (!node) {
@@ -111,11 +121,14 @@ function GoalTreeNode({ goal, depth }: { goal: GoalNode; depth: number }) {
               )}
               {goal.children.length > 0 && (
                 <span className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                  {goal.children.length} subgoal{goal.children.length === 1 ? '' : 's'}
+                  {goal.children.length} subgoal
+                  {goal.children.length === 1 ? '' : 's'}
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">{goal.description || 'No description provided.'}</p>
+            <p className="text-sm text-muted-foreground">
+              {goal.description || 'No description provided.'}
+            </p>
           </div>
         </div>
       </div>
@@ -137,7 +150,11 @@ function DraftTreeNode({
 }: {
   goal: GoalDecompositionDraftGoal & { children: GoalDecompositionDraftGoal[] };
   depth: number;
-  onChange: (ref: string, field: 'title' | 'description', value: string) => void;
+  onChange: (
+    ref: string,
+    field: 'title' | 'description',
+    value: string
+  ) => void;
   tasks: GoalDecompositionDraftTask[];
   onTaskChange: (
     ref: string,
@@ -150,7 +167,10 @@ function DraftTreeNode({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border bg-background px-4 py-4" style={{ marginLeft: `${depth * 18}px` }}>
+      <div
+        className="rounded-xl border bg-background px-4 py-4"
+        style={{ marginLeft: `${depth * 18}px` }}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
             {depth === 0 ? 'Root goal' : 'Subgoal'}
@@ -162,26 +182,34 @@ function DraftTreeNode({
         <div className="mt-3 space-y-3">
           <input
             value={goal.title}
-            onChange={(event) => onChange(goal.ref, 'title', event.target.value)}
+            onChange={(event) =>
+              onChange(goal.ref, 'title', event.target.value)
+            }
             className="w-full rounded-md border bg-card px-3 py-2 text-sm font-medium"
           />
           <textarea
             value={goal.description}
-            onChange={(event) => onChange(goal.ref, 'description', event.target.value)}
+            onChange={(event) =>
+              onChange(goal.ref, 'description', event.target.value)
+            }
             className="min-h-[96px] w-full rounded-md border bg-card px-3 py-2 text-sm leading-7"
           />
         </div>
 
         {starterTasks.length > 0 && (
           <div className="mt-4 rounded-xl border bg-muted/20 p-3">
-            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Starter tasks</div>
+            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+              Starter tasks
+            </div>
             <div className="mt-3 space-y-3">
               {starterTasks.map((task) => (
                 <div key={task.ref} className="rounded-lg border bg-card p-3">
                   <div className="grid gap-3 md:grid-cols-[1fr_110px]">
                     <input
                       value={task.title}
-                      onChange={(event) => onTaskChange(task.ref, 'title', event.target.value)}
+                      onChange={(event) =>
+                        onTaskChange(task.ref, 'title', event.target.value)
+                      }
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm font-medium"
                     />
                     <input
@@ -189,13 +217,21 @@ function DraftTreeNode({
                       min={0}
                       max={100}
                       value={task.priority}
-                      onChange={(event) => onTaskChange(task.ref, 'priority', event.target.value)}
+                      onChange={(event) =>
+                        onTaskChange(task.ref, 'priority', event.target.value)
+                      }
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     />
                   </div>
                   <select
                     value={task.suggested_agent_id || ''}
-                    onChange={(event) => onTaskChange(task.ref, 'suggested_agent_id', event.target.value)}
+                    onChange={(event) =>
+                      onTaskChange(
+                        task.ref,
+                        'suggested_agent_id',
+                        event.target.value
+                      )
+                    }
                     className="mt-3 w-full rounded-md border bg-background px-3 py-2 text-sm"
                   >
                     <option value="">No owner yet</option>
@@ -207,7 +243,9 @@ function DraftTreeNode({
                   </select>
                   <textarea
                     value={task.description}
-                    onChange={(event) => onTaskChange(task.ref, 'description', event.target.value)}
+                    onChange={(event) =>
+                      onTaskChange(task.ref, 'description', event.target.value)
+                    }
                     className="mt-3 min-h-[82px] w-full rounded-md border bg-background px-3 py-2 text-sm leading-7"
                   />
                 </div>
@@ -220,7 +258,11 @@ function DraftTreeNode({
       {goal.children.map((child) => (
         <DraftTreeNode
           key={child.ref}
-          goal={child as GoalDecompositionDraftGoal & { children: GoalDecompositionDraftGoal[] }}
+          goal={
+            child as GoalDecompositionDraftGoal & {
+              children: GoalDecompositionDraftGoal[];
+            }
+          }
           depth={depth + 1}
           tasks={tasks}
           onChange={onChange}
@@ -241,9 +283,15 @@ export default function GoalsPage() {
   const [aiBusy, setAiBusy] = useState(false);
   const [applyBusy, setApplyBusy] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [aiPlanner, setAiPlanner] = useState<GoalDecompositionPlanner | null>(null);
-  const [aiDraftGoals, setAiDraftGoals] = useState<GoalDecompositionDraftGoal[]>([]);
-  const [aiDraftTasks, setAiDraftTasks] = useState<GoalDecompositionDraftTask[]>([]);
+  const [aiPlanner, setAiPlanner] = useState<GoalDecompositionPlanner | null>(
+    null
+  );
+  const [aiDraftGoals, setAiDraftGoals] = useState<
+    GoalDecompositionDraftGoal[]
+  >([]);
+  const [aiDraftTasks, setAiDraftTasks] = useState<
+    GoalDecompositionDraftTask[]
+  >([]);
   const [aiDraftMeta, setAiDraftMeta] = useState<{
     title: string;
     description: string;
@@ -285,12 +333,15 @@ export default function GoalsPage() {
 
     setAiBusy(true);
     try {
-      const result = (await request(`/companies/${selectedCompanyId}/goals/ai-decompose`, {
-        method: 'POST',
-        body: JSON.stringify({
-          prompt: aiPrompt.trim(),
-        }),
-      })) as GoalDecompositionSuggestResponse;
+      const result = (await request(
+        `/companies/${selectedCompanyId}/goals/ai-decompose`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            prompt: aiPrompt.trim(),
+          }),
+        }
+      )) as GoalDecompositionSuggestResponse;
 
       setAiDraftGoals(result.suggestion.goals);
       setAiDraftTasks(result.suggestion.starter_tasks);
@@ -307,9 +358,15 @@ export default function GoalsPage() {
     }
   };
 
-  const updateDraftGoal = (ref: string, field: 'title' | 'description', value: string) => {
+  const updateDraftGoal = (
+    ref: string,
+    field: 'title' | 'description',
+    value: string
+  ) => {
     setAiDraftGoals((current) =>
-      current.map((goal) => (goal.ref === ref ? { ...goal, [field]: value } : goal))
+      current.map((goal) =>
+        goal.ref === ref ? { ...goal, [field]: value } : goal
+      )
     );
   };
 
@@ -331,7 +388,8 @@ export default function GoalsPage() {
 
               if (field === 'suggested_agent_id') {
                 const nextId = value || null;
-                const nextAgent = agentOptions.find((agent) => agent.id === nextId) ?? null;
+                const nextAgent =
+                  agentOptions.find((agent) => agent.id === nextId) ?? null;
                 return {
                   ...task,
                   suggested_agent_id: nextId,
@@ -356,19 +414,22 @@ export default function GoalsPage() {
 
     setApplyBusy(true);
     try {
-      const result = (await request(`/companies/${selectedCompanyId}/goals/ai-decompose/apply`, {
-        method: 'POST',
-        body: JSON.stringify({
-          suggestion: {
-            title: aiDraftMeta.title,
-            description: aiDraftMeta.description,
-            goals: aiDraftGoals,
-            starter_tasks: aiDraftTasks,
-            confidence: aiDraftMeta.confidence,
-            warnings: aiDraftMeta.warnings,
-          },
-        }),
-      })) as {
+      const result = (await request(
+        `/companies/${selectedCompanyId}/goals/ai-decompose/apply`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            suggestion: {
+              title: aiDraftMeta.title,
+              description: aiDraftMeta.description,
+              goals: aiDraftGoals,
+              starter_tasks: aiDraftTasks,
+              confidence: aiDraftMeta.confidence,
+              warnings: aiDraftMeta.warnings,
+            },
+          }),
+        }
+      )) as {
         created_goal_count: number;
         created_task_count: number;
       };
@@ -384,7 +445,11 @@ export default function GoalsPage() {
   };
 
   if (!selectedCompany) {
-    return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to inspect goals.</div>;
+    return (
+      <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
+        Choose a company to inspect goals.
+      </div>
+    );
   }
 
   return (
@@ -392,7 +457,9 @@ export default function GoalsPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Goals</h2>
-          <p className="text-sm text-muted-foreground">Mission structure for {selectedCompany.name}</p>
+          <p className="text-sm text-muted-foreground">
+            Mission structure for {selectedCompany.name}
+          </p>
         </div>
         <div className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm text-muted-foreground">
           <Sparkles className="h-4 w-4 text-amber-500" />
@@ -400,27 +467,41 @@ export default function GoalsPage() {
         </div>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {successMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{successMessage}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {successMessage}
+        </div>
+      )}
 
       <div className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold">AI Goal Decomposition</h3>
             <p className="text-sm text-muted-foreground">
-              Describe a broad objective in plain language and get an editable goal tree before applying it.
+              Describe a broad objective in plain language and get an editable
+              goal tree before applying it.
             </p>
           </div>
           {aiPlanner && (
             <span className="rounded-full border bg-amber-50 px-3 py-1 text-xs text-amber-700">
-              {aiPlanner.mode === 'llm' ? `Planned by ${aiPlanner.runtime || 'LLM'}` : 'Fallback decomposition'}
+              {aiPlanner.mode === 'llm'
+                ? `Planned by ${aiPlanner.runtime || 'LLM'}`
+                : 'Fallback decomposition'}
             </span>
           )}
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-4">
-            <label className="block text-sm font-medium text-foreground" htmlFor="goal-decomposition-prompt">
+            <label
+              className="block text-sm font-medium text-foreground"
+              htmlFor="goal-decomposition-prompt"
+            >
               Describe the mission in plain language
             </label>
             <textarea
@@ -440,7 +521,8 @@ export default function GoalsPage() {
                 {aiBusy ? 'Generating...' : 'Generate Goal Tree'}
               </button>
               <div className="text-xs text-muted-foreground">
-                Uses company runtime routing first, then falls back to a deterministic hierarchy.
+                Uses company runtime routing first, then falls back to a
+                deterministic hierarchy.
               </div>
             </div>
           </div>
@@ -449,16 +531,24 @@ export default function GoalsPage() {
             {aiDraftMeta && aiDraftGoals.length > 0 ? (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <div className="text-sm font-medium text-foreground">AI-generated goal tree</div>
+                  <div className="text-sm font-medium text-foreground">
+                    AI-generated goal tree
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     Confidence: {aiDraftMeta.confidence}
                   </div>
                 </div>
 
                 <div className="rounded-xl border bg-background p-4">
-                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Decomposition summary</div>
-                  <div className="mt-2 text-base font-semibold text-foreground">{aiDraftMeta.title}</div>
-                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{aiDraftMeta.description}</p>
+                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    Decomposition summary
+                  </div>
+                  <div className="mt-2 text-base font-semibold text-foreground">
+                    {aiDraftMeta.title}
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    {aiDraftMeta.description}
+                  </p>
                 </div>
 
                 <div className="space-y-3">
@@ -480,13 +570,16 @@ export default function GoalsPage() {
                     {aiDraftGoals.length} goals
                   </span>
                   <span className="rounded-full border bg-background px-2 py-1">
-                    {aiDraftTasks.length} starter task{aiDraftTasks.length === 1 ? '' : 's'}
+                    {aiDraftTasks.length} starter task
+                    {aiDraftTasks.length === 1 ? '' : 's'}
                   </span>
                 </div>
 
                 {aiDraftMeta.warnings.length > 0 && (
                   <div className="rounded-2xl border bg-amber-50/70 p-4">
-                    <div className="text-sm font-medium text-amber-900">Planning warnings</div>
+                    <div className="text-sm font-medium text-amber-900">
+                      Planning warnings
+                    </div>
                     <div className="mt-2 space-y-2">
                       {aiDraftMeta.warnings.map((warning) => (
                         <div key={warning} className="text-sm text-amber-900">
@@ -503,8 +596,12 @@ export default function GoalsPage() {
                     onClick={() => void applyDecomposition()}
                     disabled={
                       applyBusy ||
-                      aiDraftGoals.some((goal) => goal.title.trim().length === 0) ||
-                      aiDraftTasks.some((task) => task.title.trim().length === 0)
+                      aiDraftGoals.some(
+                        (goal) => goal.title.trim().length === 0
+                      ) ||
+                      aiDraftTasks.some(
+                        (task) => task.title.trim().length === 0
+                      )
                     }
                     className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -527,7 +624,9 @@ export default function GoalsPage() {
       <div className="rounded-2xl border bg-card shadow-sm">
         <div className="border-b px-6 py-4">
           <div className="text-sm text-muted-foreground">
-            {loading ? 'Loading goals...' : `${goals.length} goal${goals.length === 1 ? '' : 's'} loaded`}
+            {loading
+              ? 'Loading goals...'
+              : `${goals.length} goal${goals.length === 1 ? '' : 's'} loaded`}
           </div>
         </div>
 

@@ -7,11 +7,11 @@ services:
       POSTGRES_DB: autonomiczne_biuro
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U biuro -d autonomiczne_biuro"]
+      test: ['CMD-SHELL', 'pg_isready -U biuro -d autonomiczne_biuro']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -20,16 +20,16 @@ services:
     image: redis:7.4-alpine
     restart: unless-stopped
     command:
-      - "redis-server"
-      - "--appendonly"
-      - "yes"
+      - 'redis-server'
+      - '--appendonly'
+      - 'yes'
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redisdata:/data
 
   server:
-    build: 
+    build:
       context: .
       dockerfile: packages/server/Dockerfile
     command: pnpm start
@@ -41,15 +41,16 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      LLM_MOCK_MODE: ${LLM_MOCK_MODE:-false}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       MAX_CONCURRENT_HEARTBEATS: ${MAX_CONCURRENT_HEARTBEATS:-20}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-autonomiczne-biuro}
       OTEL_TRACE_CONSOLE_EXPORTER: ${OTEL_TRACE_CONSOLE_EXPORTER:-false}
       OTEL_TRACE_HISTORY_LIMIT: ${OTEL_TRACE_HISTORY_LIMIT:-200}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318/v1/traces}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
     ports:
-      - "3100:3100"
+      - '3100:3100'
     depends_on:
       db:
         condition: service_healthy
@@ -58,7 +59,8 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/api/health >/dev/null"]
+      test:
+        ['CMD-SHELL', 'wget -qO- http://localhost:3100/api/health >/dev/null']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -76,13 +78,14 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      LLM_MOCK_MODE: ${LLM_MOCK_MODE:-false}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       MAX_CONCURRENT_HEARTBEATS: ${MAX_CONCURRENT_HEARTBEATS:-20}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-autonomiczne-biuro}
       OTEL_TRACE_CONSOLE_EXPORTER: ${OTEL_TRACE_CONSOLE_EXPORTER:-false}
       OTEL_TRACE_HISTORY_LIMIT: ${OTEL_TRACE_HISTORY_LIMIT:-200}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318/v1/traces}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       WORKER_METRICS_PORT: 9464
     depends_on:
       db:
@@ -92,7 +95,7 @@ services:
       otel-collector:
         condition: service_started
     ports:
-      - "${WORKER_METRICS_HOST_PORT:-9464}:9464"
+      - '${WORKER_METRICS_HOST_PORT:-9464}:9464'
 
   dashboard:
     build:
@@ -100,12 +103,12 @@ services:
       dockerfile: packages/dashboard/Dockerfile
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - '3000:80'
     depends_on:
       server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost >/dev/null"]
+      test: ['CMD-SHELL', 'wget -qO- http://localhost >/dev/null']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -115,10 +118,10 @@ services:
     image: prom/prometheus:v2.54.1
     restart: unless-stopped
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
     ports:
-      - "9090:9090"
+      - '9090:9090'
     volumes:
       - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheusdata:/prometheus
@@ -132,9 +135,9 @@ services:
     image: grafana/tempo:2.6.1
     restart: unless-stopped
     command:
-      - "-config.file=/etc/tempo/tempo.yml"
+      - '-config.file=/etc/tempo/tempo.yml'
     ports:
-      - "${TEMPO_HOST_PORT:-3202}:3200"
+      - '${TEMPO_HOST_PORT:-3202}:3200'
     volumes:
       - ./infra/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempodata:/tmp/tempo
@@ -143,9 +146,9 @@ services:
     image: otel/opentelemetry-collector-contrib:0.109.0
     restart: unless-stopped
     command:
-      - "--config=/etc/otelcol-contrib/config.yml"
+      - '--config=/etc/otelcol-contrib/config.yml'
     ports:
-      - "${OTEL_COLLECTOR_HOST_PORT:-4318}:4318"
+      - '${OTEL_COLLECTOR_HOST_PORT:-4318}:4318'
     volumes:
       - ./infra/observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
     depends_on:
@@ -157,10 +160,10 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
     ports:
-      - "3001:3000"
+      - '3001:3000'
     volumes:
       - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro

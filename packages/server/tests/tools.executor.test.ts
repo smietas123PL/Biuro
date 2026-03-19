@@ -27,7 +27,10 @@ import { executeTool } from '../src/tools/executor.js';
 import { env } from '../src/env.js';
 
 describe('tools executor builtins', () => {
-  const workspaceDir = path.join(path.resolve(env.WORKSPACE_ROOT), 'tmp-test-artifacts');
+  const workspaceDir = path.join(
+    path.resolve(env.WORKSPACE_ROOT),
+    'tmp-test-artifacts'
+  );
 
   beforeEach(async () => {
     dbMock.query.mockReset();
@@ -101,7 +104,9 @@ describe('tools executor builtins', () => {
     });
 
     expect(dbMock.query).toHaveBeenCalledTimes(2);
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('INSERT INTO tool_calls');
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      'INSERT INTO tool_calls'
+    );
     expect(dbMock.query.mock.calls[1]?.[1]?.[5]).toBe('success');
   });
 
@@ -131,7 +136,10 @@ describe('tools executor builtins', () => {
       bytes_written: 15,
     });
 
-    const persisted = await readFile(path.join(workspaceDir, 'generated', 'note.txt'), 'utf8');
+    const persisted = await readFile(
+      path.join(workspaceDir, 'generated', 'note.txt'),
+      'utf8'
+    );
     expect(persisted).toBe('hello workspace');
     expect(dbMock.query.mock.calls[1]?.[1]?.[5]).toBe('success');
   });
@@ -159,9 +167,12 @@ describe('tools executor builtins', () => {
       command: 'git status --short',
     });
 
-    expect(runSandboxedBashCommandMock).toHaveBeenCalledWith('git status --short', {
-      allowed_commands: ['git status', 'pwd'],
-    });
+    expect(runSandboxedBashCommandMock).toHaveBeenCalledWith(
+      'git status --short',
+      {
+        allowed_commands: ['git status', 'pwd'],
+      }
+    );
     expect(result).toBe('On branch main');
     expect(dbMock.query.mock.calls[1]?.[1]?.[5]).toBe('success');
   });

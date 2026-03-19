@@ -43,21 +43,23 @@ function buildWsUrl(server: Server, query: Record<string, string>) {
 }
 
 async function waitForClose(url: string) {
-  return await new Promise<{ code: number; reason: string }>((resolve, reject) => {
-    const ws = new WebSocket(url);
+  return await new Promise<{ code: number; reason: string }>(
+    (resolve, reject) => {
+      const ws = new WebSocket(url);
 
-    ws.once('close', (code, reason) => {
-      resolve({ code, reason: reason.toString() });
-    });
+      ws.once('close', (code, reason) => {
+        resolve({ code, reason: reason.toString() });
+      });
 
-    ws.once('error', () => {
-      // Expected for refused websocket sessions closed immediately after handshake.
-    });
+      ws.once('error', () => {
+        // Expected for refused websocket sessions closed immediately after handshake.
+      });
 
-    setTimeout(() => {
-      reject(new Error(`Timed out waiting for websocket close: ${url}`));
-    }, 2000);
-  });
+      setTimeout(() => {
+        reject(new Error(`Timed out waiting for websocket close: ${url}`));
+      }, 2000);
+    }
+  );
 }
 
 async function openSocket(url: string) {
@@ -69,7 +71,11 @@ async function openSocket(url: string) {
     });
 
     ws.once('close', (code, reason) => {
-      reject(new Error(`Socket closed before opening (${code}: ${reason.toString()})`));
+      reject(
+        new Error(
+          `Socket closed before opening (${code}: ${reason.toString()})`
+        )
+      );
     });
 
     ws.once('error', reject);
@@ -87,7 +93,11 @@ async function waitForMessage(ws: WebSocket) {
     });
 
     ws.once('close', (code, reason) => {
-      reject(new Error(`Socket closed before message (${code}: ${reason.toString()})`));
+      reject(
+        new Error(
+          `Socket closed before message (${code}: ${reason.toString()})`
+        )
+      );
     });
 
     ws.once('error', reject);
@@ -132,7 +142,9 @@ describe('websocket authorization', () => {
   });
 
   it('rejects websocket connections without a session token when auth is enabled', async () => {
-    const result = await waitForClose(buildWsUrl(server, { companyId: 'company-1' }));
+    const result = await waitForClose(
+      buildWsUrl(server, { companyId: 'company-1' })
+    );
 
     expect(result.code).toBe(4401);
     expect(result.reason).toBe('Missing token');
@@ -144,7 +156,9 @@ describe('websocket authorization', () => {
       .mockResolvedValueOnce({ rows: [{ user_id: 'user-1' }] })
       .mockResolvedValueOnce({ rows: [] });
 
-    const result = await waitForClose(buildWsUrl(server, { companyId: 'company-1', token: 'valid-token' }));
+    const result = await waitForClose(
+      buildWsUrl(server, { companyId: 'company-1', token: 'valid-token' })
+    );
 
     expect(result.code).toBe(4403);
     expect(result.reason).toBe('Forbidden');
@@ -156,10 +170,15 @@ describe('websocket authorization', () => {
       .mockResolvedValueOnce({ rows: [{ user_id: 'user-1' }] })
       .mockResolvedValueOnce({ rows: [{ role: 'owner' }] });
 
-    const ws = await openSocket(buildWsUrl(server, { companyId: 'company-1', token: 'valid-token' }));
+    const ws = await openSocket(
+      buildWsUrl(server, { companyId: 'company-1', token: 'valid-token' })
+    );
     const messagePromise = waitForMessage(ws);
 
-    hub.broadcast('company-1', 'agent.working', { agentId: 'agent-1', taskId: 'task-1' });
+    hub.broadcast('company-1', 'agent.working', {
+      agentId: 'agent-1',
+      taskId: 'task-1',
+    });
 
     const payload = JSON.parse(await messagePromise);
     expect(payload).toMatchObject({
@@ -181,8 +200,12 @@ describe('websocket authorization', () => {
     envMock.WS_RATE_LIMIT_WINDOW_MS = 60_000;
     envMock.AUTH_ENABLED = false;
 
-    const firstSocket = await openSocket(buildWsUrl(server, { companyId: 'company-1' }));
-    const secondResult = await waitForClose(buildWsUrl(server, { companyId: 'company-1' }));
+    const firstSocket = await openSocket(
+      buildWsUrl(server, { companyId: 'company-1' })
+    );
+    const secondResult = await waitForClose(
+      buildWsUrl(server, { companyId: 'company-1' })
+    );
 
     expect(secondResult.code).toBe(4429);
     expect(secondResult.reason).toBe('Too many websocket connection attempts');

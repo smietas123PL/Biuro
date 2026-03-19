@@ -175,8 +175,11 @@ function getStatusTone(status: AgentRecord['status']) {
   };
 }
 
-function normalizeThought(item: Pick<ActivityItem, 'type' | 'summary' | 'thought'>) {
-  const explicitThought = typeof item.thought === 'string' ? item.thought.trim() : '';
+function normalizeThought(
+  item: Pick<ActivityItem, 'type' | 'summary' | 'thought'>
+) {
+  const explicitThought =
+    typeof item.thought === 'string' ? item.thought.trim() : '';
   if (explicitThought) {
     return explicitThought;
   }
@@ -186,7 +189,10 @@ function normalizeThought(item: Pick<ActivityItem, 'type' | 'summary' | 'thought
     return null;
   }
 
-  if (summary === 'Completed a heartbeat cycle.' || summary.startsWith('Heartbeat status:')) {
+  if (
+    summary === 'Completed a heartbeat cycle.' ||
+    summary.startsWith('Heartbeat status:')
+  ) {
     return null;
   }
 
@@ -194,7 +200,8 @@ function normalizeThought(item: Pick<ActivityItem, 'type' | 'summary' | 'thought
 }
 
 function formatCurrency(value: number | null | undefined) {
-  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  const amount =
+    typeof value === 'number' && Number.isFinite(value) ? value : 0;
   return `$${amount.toFixed(2)}`;
 }
 
@@ -237,7 +244,10 @@ function getBudgetUtilization(budget: BudgetItem | null) {
     return null;
   }
 
-  return Math.min(100, Math.max(0, (budget.spent_usd / budget.limit_usd) * 100));
+  return Math.min(
+    100,
+    Math.max(0, (budget.spent_usd / budget.limit_usd) * 100)
+  );
 }
 
 export default function OrgChartPage() {
@@ -246,15 +256,24 @@ export default function OrgChartPage() {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentRecord | null>(null);
-  const [selectedHeartbeats, setSelectedHeartbeats] = useState<HeartbeatItem[]>([]);
+  const [selectedAgentDetail, setSelectedAgentDetail] =
+    useState<AgentRecord | null>(null);
+  const [selectedHeartbeats, setSelectedHeartbeats] = useState<HeartbeatItem[]>(
+    []
+  );
   const [selectedBudget, setSelectedBudget] = useState<BudgetItem | null>(null);
   const [panelLoading, setPanelLoading] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<'pause' | 'resume' | null>(null);
-  const [liveSnapshots, setLiveSnapshots] = useState<Record<string, LiveAgentSnapshot>>({});
+  const [actionLoading, setActionLoading] = useState<'pause' | 'resume' | null>(
+    null
+  );
+  const [liveSnapshots, setLiveSnapshots] = useState<
+    Record<string, LiveAgentSnapshot>
+  >({});
   const [now, setNow] = useState(Date.now());
-  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as LiveOrgEvent | null;
+  const lastEvent = useWebSocket(
+    selectedCompanyId ?? undefined
+  ) as LiveOrgEvent | null;
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -280,20 +299,30 @@ export default function OrgChartPage() {
       setLiveSnapshots({});
 
       const [orgChartResult, activityResult] = await Promise.allSettled([
-        request(`/companies/${selectedCompanyId}/org-chart`) as Promise<AgentRecord[]>,
-        request(`/companies/${selectedCompanyId}/activity-feed?limit=24`, undefined, {
-          suppressError: true,
-        }) as Promise<ActivityItem[]>,
+        request(`/companies/${selectedCompanyId}/org-chart`) as Promise<
+          AgentRecord[]
+        >,
+        request(
+          `/companies/${selectedCompanyId}/activity-feed?limit=24`,
+          undefined,
+          {
+            suppressError: true,
+          }
+        ) as Promise<ActivityItem[]>,
       ]);
 
       if (orgChartResult.status === 'fulfilled') {
         setAgents(orgChartResult.value);
         setSelectedAgentId((current) =>
-          current && orgChartResult.value.some((agent) => agent.id === current) ? current : null
+          current && orgChartResult.value.some((agent) => agent.id === current)
+            ? current
+            : null
         );
       }
 
-      setActivity(activityResult.status === 'fulfilled' ? activityResult.value : []);
+      setActivity(
+        activityResult.status === 'fulfilled' ? activityResult.value : []
+      );
     };
 
     void fetchOrgChart();
@@ -313,29 +342,37 @@ export default function OrgChartPage() {
       setPanelError(null);
 
       try {
-        const [agentResult, heartbeatsResult, budgetsResult] = await Promise.allSettled([
-          request(`/agents/${selectedAgentId}`) as Promise<AgentRecord>,
-          request(`/agents/${selectedAgentId}/heartbeats`, undefined, {
-            suppressError: true,
-          }) as Promise<HeartbeatItem[]>,
-          request(`/agents/${selectedAgentId}/budgets`, undefined, {
-            suppressError: true,
-          }) as Promise<BudgetItem[]>,
-        ]);
+        const [agentResult, heartbeatsResult, budgetsResult] =
+          await Promise.allSettled([
+            request(`/agents/${selectedAgentId}`) as Promise<AgentRecord>,
+            request(`/agents/${selectedAgentId}/heartbeats`, undefined, {
+              suppressError: true,
+            }) as Promise<HeartbeatItem[]>,
+            request(`/agents/${selectedAgentId}/budgets`, undefined, {
+              suppressError: true,
+            }) as Promise<BudgetItem[]>,
+          ]);
 
         if (agentResult.status !== 'fulfilled') {
           throw agentResult.reason;
         }
 
         setSelectedAgentDetail(agentResult.value);
-        setSelectedHeartbeats(heartbeatsResult.status === 'fulfilled' ? heartbeatsResult.value : []);
+        setSelectedHeartbeats(
+          heartbeatsResult.status === 'fulfilled' ? heartbeatsResult.value : []
+        );
         setSelectedBudget(
-          budgetsResult.status === 'fulfilled' && Array.isArray(budgetsResult.value)
-            ? budgetsResult.value[0] ?? null
+          budgetsResult.status === 'fulfilled' &&
+            Array.isArray(budgetsResult.value)
+            ? (budgetsResult.value[0] ?? null)
             : null
         );
       } catch (err) {
-        setPanelError(err instanceof Error ? err.message : 'Unable to load agent live details.');
+        setPanelError(
+          err instanceof Error
+            ? err.message
+            : 'Unable to load agent live details.'
+        );
       } finally {
         setPanelLoading(false);
       }
@@ -359,9 +396,16 @@ export default function OrgChartPage() {
         ...current,
         [agentId]: {
           ...current[agentId],
-          currentTaskId: lastEvent.data?.taskId ?? lastEvent.data?.task_id ?? current[agentId]?.currentTaskId ?? null,
+          currentTaskId:
+            lastEvent.data?.taskId ??
+            lastEvent.data?.task_id ??
+            current[agentId]?.currentTaskId ??
+            null,
           currentTaskTitle:
-            lastEvent.data?.taskTitle ?? lastEvent.data?.task_title ?? current[agentId]?.currentTaskTitle ?? null,
+            lastEvent.data?.taskTitle ??
+            lastEvent.data?.task_title ??
+            current[agentId]?.currentTaskTitle ??
+            null,
           lastWorkingAt: lastEvent.timestamp,
           stickyStatus: null,
         },
@@ -371,9 +415,11 @@ export default function OrgChartPage() {
 
     if (lastEvent.event === 'agent.thought') {
       const nextThought =
-        typeof lastEvent.data?.message === 'string' && lastEvent.data.message.trim().length > 0
+        typeof lastEvent.data?.message === 'string' &&
+        lastEvent.data.message.trim().length > 0
           ? lastEvent.data.message.trim()
-          : typeof lastEvent.data?.thought === 'string' && lastEvent.data.thought.trim().length > 0
+          : typeof lastEvent.data?.thought === 'string' &&
+              lastEvent.data.thought.trim().length > 0
             ? lastEvent.data.thought.trim()
             : null;
 
@@ -385,9 +431,16 @@ export default function OrgChartPage() {
         ...current,
         [agentId]: {
           ...current[agentId],
-          currentTaskId: lastEvent.data?.taskId ?? lastEvent.data?.task_id ?? current[agentId]?.currentTaskId ?? null,
+          currentTaskId:
+            lastEvent.data?.taskId ??
+            lastEvent.data?.task_id ??
+            current[agentId]?.currentTaskId ??
+            null,
           currentTaskTitle:
-            lastEvent.data?.taskTitle ?? lastEvent.data?.task_title ?? current[agentId]?.currentTaskTitle ?? null,
+            lastEvent.data?.taskTitle ??
+            lastEvent.data?.task_title ??
+            current[agentId]?.currentTaskTitle ??
+            null,
           thought: nextThought,
           lastHeartbeatAt: lastEvent.timestamp,
         },
@@ -418,21 +471,33 @@ export default function OrgChartPage() {
     for (const agent of agents) {
       const activitySnapshot = activityByAgent.get(agent.id);
       const liveSnapshot = liveSnapshots[agent.id];
-      const lastWorkingAt = liveSnapshot?.lastWorkingAt ? new Date(liveSnapshot.lastWorkingAt).getTime() : null;
+      const lastWorkingAt = liveSnapshot?.lastWorkingAt
+        ? new Date(liveSnapshot.lastWorkingAt).getTime()
+        : null;
       const pulseActive =
         agent.status === 'working' ||
         (typeof lastWorkingAt === 'number' && Number.isFinite(lastWorkingAt)
           ? now - lastWorkingAt <= LIVE_PULSE_WINDOW_MS
           : false);
-      const status = liveSnapshot?.stickyStatus ?? (pulseActive ? 'working' : agent.status);
+      const status =
+        liveSnapshot?.stickyStatus ?? (pulseActive ? 'working' : agent.status);
 
       state.set(agent.id, {
         status,
         pulseActive,
-        currentTaskId: liveSnapshot?.currentTaskId ?? activitySnapshot?.currentTaskId ?? null,
-        currentTaskTitle: liveSnapshot?.currentTaskTitle ?? activitySnapshot?.currentTaskTitle ?? null,
+        currentTaskId:
+          liveSnapshot?.currentTaskId ??
+          activitySnapshot?.currentTaskId ??
+          null,
+        currentTaskTitle:
+          liveSnapshot?.currentTaskTitle ??
+          activitySnapshot?.currentTaskTitle ??
+          null,
         thought: liveSnapshot?.thought ?? activitySnapshot?.thought ?? null,
-        lastHeartbeatAt: liveSnapshot?.lastHeartbeatAt ?? activitySnapshot?.lastHeartbeatAt ?? null,
+        lastHeartbeatAt:
+          liveSnapshot?.lastHeartbeatAt ??
+          activitySnapshot?.lastHeartbeatAt ??
+          null,
       });
     }
 
@@ -441,7 +506,10 @@ export default function OrgChartPage() {
 
   const agentTree = useMemo(() => buildAgentTree(agents), [agents]);
   const managerCount = useMemo(
-    () => agents.filter((agent) => agents.some((candidate) => candidate.reports_to === agent.id)).length,
+    () =>
+      agents.filter((agent) =>
+        agents.some((candidate) => candidate.reports_to === agent.id)
+      ).length,
     [agents]
   );
   const contributorCount = useMemo(() => countLeaves(agentTree), [agentTree]);
@@ -452,10 +520,13 @@ export default function OrgChartPage() {
     [agents, selectedAgentId]
   );
   const selectedAgent = selectedAgentDetail ?? selectedAgentRecord;
-  const selectedState = selectedAgentId ? displayStateByAgent.get(selectedAgentId) ?? null : null;
+  const selectedState = selectedAgentId
+    ? (displayStateByAgent.get(selectedAgentId) ?? null)
+    : null;
   const latestHeartbeat = selectedHeartbeats[0] ?? null;
   const budgetUtilization = getBudgetUtilization(selectedBudget);
-  const canManageAgents = selectedCompany?.role === 'owner' || selectedCompany?.role === 'admin';
+  const canManageAgents =
+    selectedCompany?.role === 'owner' || selectedCompany?.role === 'admin';
 
   const handleAgentAction = async (action: 'pause' | 'resume') => {
     if (!selectedAgentId) {
@@ -472,9 +543,15 @@ export default function OrgChartPage() {
 
       const nextStatus = action === 'pause' ? 'paused' : 'idle';
       setAgents((current) =>
-        current.map((agent) => (agent.id === selectedAgentId ? { ...agent, status: nextStatus } : agent))
+        current.map((agent) =>
+          agent.id === selectedAgentId
+            ? { ...agent, status: nextStatus }
+            : agent
+        )
       );
-      setSelectedAgentDetail((current) => (current ? { ...current, status: nextStatus } : current));
+      setSelectedAgentDetail((current) =>
+        current ? { ...current, status: nextStatus } : current
+      );
       setLiveSnapshots((current) => ({
         ...current,
         [selectedAgentId]: {
@@ -483,7 +560,9 @@ export default function OrgChartPage() {
         },
       }));
     } catch (err) {
-      setPanelError(err instanceof Error ? err.message : 'Unable to update agent status.');
+      setPanelError(
+        err instanceof Error ? err.message : 'Unable to update agent status.'
+      );
     } finally {
       setActionLoading(null);
     }
@@ -507,8 +586,9 @@ export default function OrgChartPage() {
           </div>
           <h2 className="text-3xl font-bold tracking-tight">Org Chart</h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Reporting structure for {selectedCompany.name}, now with live pulse, agent drill-down, and direct
-            pause or resume controls from the graph itself.
+            Reporting structure for {selectedCompany.name}, now with live pulse,
+            agent drill-down, and direct pause or resume controls from the graph
+            itself.
           </p>
         </div>
 
@@ -564,8 +644,8 @@ export default function OrgChartPage() {
             <div className="space-y-2">
               <h3 className="text-lg font-semibold">Live Reporting Map</h3>
               <p className="text-sm text-muted-foreground">
-                Active agents pulse from websocket activity. Click any node to inspect its current task, recent thought,
-                and heartbeat posture.
+                Active agents pulse from websocket activity. Click any node to
+                inspect its current task, recent thought, and heartbeat posture.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -577,7 +657,9 @@ export default function OrgChartPage() {
                 Live pulse
               </div>
               <div className="rounded-full border bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
-                {loading ? 'Refreshing structure...' : `${agentTree.length} root ${agentTree.length === 1 ? 'leader' : 'leaders'}`}
+                {loading
+                  ? 'Refreshing structure...'
+                  : `${agentTree.length} root ${agentTree.length === 1 ? 'leader' : 'leaders'}`}
               </div>
             </div>
           </div>
@@ -597,7 +679,8 @@ export default function OrgChartPage() {
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-              No reporting lines yet. Assign managers in the Agents page to turn the team list into a real org chart.
+              No reporting lines yet. Assign managers in the Agents page to turn
+              the team list into a real org chart.
             </div>
           )}
         </section>
@@ -611,7 +694,8 @@ export default function OrgChartPage() {
               </div>
               <h3 className="mt-3 text-lg font-semibold">Command Sidepanel</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Pick an org node to inspect live state and intervene without leaving the map.
+                Pick an org node to inspect live state and intervene without
+                leaving the map.
               </p>
             </div>
             {selectedAgentId && (
@@ -631,7 +715,9 @@ export default function OrgChartPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-lg font-semibold">{selectedAgent.name}</div>
+                      <div className="text-lg font-semibold">
+                        {selectedAgent.name}
+                      </div>
                       {selectedState && (
                         <span
                           className={clsx(
@@ -643,7 +729,9 @@ export default function OrgChartPage() {
                         </span>
                       )}
                     </div>
-                    <div className="text-sm text-muted-foreground">{selectedAgent.title || selectedAgent.role}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {selectedAgent.title || selectedAgent.role}
+                    </div>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       <span>{selectedAgent.runtime ?? 'runtime n/a'}</span>
                       <span>{selectedAgent.model ?? 'model n/a'}</span>
@@ -667,11 +755,20 @@ export default function OrgChartPage() {
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <MetricCard
                   icon={<Activity className="h-4 w-4 text-sky-600" />}
-                  label={selectedState?.status === 'working' ? 'Current task' : 'Latest task'}
-                  value={selectedState?.currentTaskTitle ?? 'No task signal yet'}
+                  label={
+                    selectedState?.status === 'working'
+                      ? 'Current task'
+                      : 'Latest task'
+                  }
+                  value={
+                    selectedState?.currentTaskTitle ?? 'No task signal yet'
+                  }
                   helper={
                     selectedState?.currentTaskId ? (
-                      <Link to={`/tasks/${selectedState.currentTaskId}`} className="text-sky-700 hover:underline">
+                      <Link
+                        to={`/tasks/${selectedState.currentTaskId}`}
+                        className="text-sky-700 hover:underline"
+                      >
                         Open task
                       </Link>
                     ) : (
@@ -682,14 +779,26 @@ export default function OrgChartPage() {
                 <MetricCard
                   icon={<Clock3 className="h-4 w-4 text-emerald-600" />}
                   label="Last heartbeat"
-                  value={formatRelativeTime(latestHeartbeat?.timestamp ?? selectedState?.lastHeartbeatAt, now)}
-                  helper={latestHeartbeat ? latestHeartbeat.status : 'No heartbeat persisted yet'}
+                  value={formatRelativeTime(
+                    latestHeartbeat?.timestamp ??
+                      selectedState?.lastHeartbeatAt,
+                    now
+                  )}
+                  helper={
+                    latestHeartbeat
+                      ? latestHeartbeat.status
+                      : 'No heartbeat persisted yet'
+                  }
                 />
                 <MetricCard
                   icon={<BrainCircuit className="h-4 w-4 text-violet-600" />}
                   label="Latest thought"
                   value={selectedState?.thought ?? 'No thought captured yet'}
-                  helper={selectedState?.pulseActive ? 'Live pulse detected in the last 90 seconds.' : 'Based on recent heartbeats.'}
+                  helper={
+                    selectedState?.pulseActive
+                      ? 'Live pulse detected in the last 90 seconds.'
+                      : 'Based on recent heartbeats.'
+                  }
                 />
                 <MetricCard
                   icon={<Building2 className="h-4 w-4 text-amber-600" />}
@@ -700,7 +809,9 @@ export default function OrgChartPage() {
                       : 'No budget row yet'
                   }
                   helper={
-                    budgetUtilization !== null ? `${budgetUtilization.toFixed(0)}% utilized this month` : 'Set a budget to track utilization.'
+                    budgetUtilization !== null
+                      ? `${budgetUtilization.toFixed(0)}% utilized this month`
+                      : 'Set a budget to track utilization.'
                   }
                 />
               </div>
@@ -709,13 +820,19 @@ export default function OrgChartPage() {
                 <div className="rounded-2xl border p-4">
                   <div className="mb-2 flex items-center justify-between text-sm">
                     <span className="font-medium">Budget utilization</span>
-                    <span className="text-muted-foreground">{budgetUtilization.toFixed(0)}%</span>
+                    <span className="text-muted-foreground">
+                      {budgetUtilization.toFixed(0)}%
+                    </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted">
                     <div
                       className={clsx(
                         'h-full rounded-full transition-all',
-                        budgetUtilization >= 90 ? 'bg-rose-500' : budgetUtilization >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                        budgetUtilization >= 90
+                          ? 'bg-rose-500'
+                          : budgetUtilization >= 70
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
                       )}
                       style={{ width: `${budgetUtilization}%` }}
                     />
@@ -727,7 +844,9 @@ export default function OrgChartPage() {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <h4 className="font-medium">Direct control</h4>
-                    <p className="text-sm text-muted-foreground">Pause or resume this agent directly from the org graph.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Pause or resume this agent directly from the org graph.
+                    </p>
                   </div>
                 </div>
 
@@ -736,7 +855,10 @@ export default function OrgChartPage() {
                     <button
                       type="button"
                       onClick={() => void handleAgentAction('pause')}
-                      disabled={actionLoading !== null || selectedState?.status === 'paused'}
+                      disabled={
+                        actionLoading !== null ||
+                        selectedState?.status === 'paused'
+                      }
                       className="inline-flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <PauseCircle className="h-4 w-4" />
@@ -745,16 +867,23 @@ export default function OrgChartPage() {
                     <button
                       type="button"
                       onClick={() => void handleAgentAction('resume')}
-                      disabled={actionLoading !== null || selectedState?.status === 'working' || selectedState?.status === 'idle'}
+                      disabled={
+                        actionLoading !== null ||
+                        selectedState?.status === 'working' ||
+                        selectedState?.status === 'idle'
+                      }
                       className="inline-flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <PlayCircle className="h-4 w-4" />
-                      {actionLoading === 'resume' ? 'Resuming...' : 'Resume agent'}
+                      {actionLoading === 'resume'
+                        ? 'Resuming...'
+                        : 'Resume agent'}
                     </button>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed px-3 py-3 text-sm text-muted-foreground">
-                    Only owners and admins can pause or resume agents from the graph.
+                    Only owners and admins can pause or resume agents from the
+                    graph.
                   </div>
                 )}
               </div>
@@ -762,45 +891,61 @@ export default function OrgChartPage() {
               <div className="rounded-2xl border p-4">
                 <h4 className="font-medium">Heartbeat detail</h4>
                 {panelLoading ? (
-                  <p className="mt-3 text-sm text-muted-foreground">Loading live agent detail...</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Loading live agent detail...
+                  </p>
                 ) : latestHeartbeat ? (
                   <div className="mt-3 space-y-3">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span
                         className={clsx(
                           'rounded-full px-2 py-1 text-[11px] uppercase tracking-wide',
-                          getStatusTone((latestHeartbeat.status as AgentRecord['status']) ?? 'idle').badge
+                          getStatusTone(
+                            (latestHeartbeat.status as AgentRecord['status']) ??
+                              'idle'
+                          ).badge
                         )}
                       >
                         {latestHeartbeat.status}
                       </span>
-                      <span className="text-muted-foreground">{new Date(latestHeartbeat.timestamp).toLocaleString()}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(latestHeartbeat.timestamp).toLocaleString()}
+                      </span>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                       <div className="rounded-xl bg-muted/40 px-3 py-2 text-sm">
-                        Duration: <span className="font-medium">{formatDuration(latestHeartbeat.duration_ms)}</span>
+                        Duration:{' '}
+                        <span className="font-medium">
+                          {formatDuration(latestHeartbeat.duration_ms)}
+                        </span>
                       </div>
                       <div className="rounded-xl bg-muted/40 px-3 py-2 text-sm">
-                        Cost: <span className="font-medium">{formatCurrency(latestHeartbeat.cost_usd)}</span>
+                        Cost:{' '}
+                        <span className="font-medium">
+                          {formatCurrency(latestHeartbeat.cost_usd)}
+                        </span>
                       </div>
                     </div>
                     <div className="rounded-xl bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-                      {typeof latestHeartbeat.details?.thought === 'string' && latestHeartbeat.details.thought.trim().length > 0
+                      {typeof latestHeartbeat.details?.thought === 'string' &&
+                      latestHeartbeat.details.thought.trim().length > 0
                         ? latestHeartbeat.details.thought
                         : 'No reasoning note stored on the last heartbeat.'}
                     </div>
                   </div>
                 ) : (
                   <p className="mt-3 text-sm text-muted-foreground">
-                    This agent has not persisted a heartbeat yet. The panel will fill in after the first run.
+                    This agent has not persisted a heartbeat yet. The panel will
+                    fill in after the first run.
                   </p>
                 )}
               </div>
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">
-              Click an org node to open the live sidepanel. You will see the latest task, recent thought, heartbeat
-              timing, budget posture, and direct pause or resume controls.
+              Click an org node to open the live sidepanel. You will see the
+              latest task, recent thought, heartbeat timing, budget posture, and
+              direct pause or resume controls.
             </div>
           )}
         </aside>
@@ -884,7 +1029,12 @@ function OrgChartBranch({
   return (
     <div className="space-y-4">
       <div className="relative">
-        {depth > 0 && <div className="absolute left-5 top-[-18px] h-[18px] w-px bg-border" aria-hidden="true" />}
+        {depth > 0 && (
+          <div
+            className="absolute left-5 top-[-18px] h-[18px] w-px bg-border"
+            aria-hidden="true"
+          />
+        )}
 
         <div
           className={clsx(
@@ -904,12 +1054,29 @@ function OrgChartBranch({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="relative flex h-3 w-3 items-center justify-center">
                   {displayState.pulseActive && (
-                    <span className={clsx('absolute inline-flex h-3 w-3 animate-ping rounded-full opacity-75', tone.dot)} />
+                    <span
+                      className={clsx(
+                        'absolute inline-flex h-3 w-3 animate-ping rounded-full opacity-75',
+                        tone.dot
+                      )}
+                    />
                   )}
-                  <span className={clsx('relative inline-flex h-3 w-3 rounded-full', tone.dot)} />
+                  <span
+                    className={clsx(
+                      'relative inline-flex h-3 w-3 rounded-full',
+                      tone.dot
+                    )}
+                  />
                 </span>
-                <span className="font-semibold text-foreground transition-colors hover:text-primary">{node.name}</span>
-                <span className={clsx('rounded-full px-2 py-1 text-[11px] uppercase tracking-wide', tone.badge)}>
+                <span className="font-semibold text-foreground transition-colors hover:text-primary">
+                  {node.name}
+                </span>
+                <span
+                  className={clsx(
+                    'rounded-full px-2 py-1 text-[11px] uppercase tracking-wide',
+                    tone.badge
+                  )}
+                >
                   {tone.label}
                 </span>
                 {depth === 0 && (
@@ -918,19 +1085,30 @@ function OrgChartBranch({
                   </span>
                 )}
               </div>
-              <div className="text-sm text-muted-foreground">{node.title || node.role}</div>
+              <div className="text-sm text-muted-foreground">
+                {node.title || node.role}
+              </div>
               {displayState.currentTaskTitle && (
                 <div className="text-sm text-foreground">
-                  <span className="font-medium">{displayState.status === 'working' ? 'Current task:' : 'Latest task:'}</span>{' '}
+                  <span className="font-medium">
+                    {displayState.status === 'working'
+                      ? 'Current task:'
+                      : 'Latest task:'}
+                  </span>{' '}
                   {displayState.currentTaskTitle}
                 </div>
               )}
-              {displayState.thought && <div className="line-clamp-2 text-sm text-muted-foreground">{displayState.thought}</div>}
+              {displayState.thought && (
+                <div className="line-clamp-2 text-sm text-muted-foreground">
+                  {displayState.thought}
+                </div>
+              )}
             </button>
 
             <div className="flex flex-col items-end gap-2">
               <div className="rounded-full border bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
-                {node.children.length} direct report{node.children.length === 1 ? '' : 's'}
+                {node.children.length} direct report
+                {node.children.length === 1 ? '' : 's'}
               </div>
               <Link
                 to={`/agents/${node.id}`}

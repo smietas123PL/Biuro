@@ -30,7 +30,8 @@ type MarketplaceManifest = {
   templates: MarketplaceTemplateManifestEntry[];
 };
 
-let cachedManifest: { value: MarketplaceManifest; fetchedAt: number } | null = null;
+let cachedManifest: { value: MarketplaceManifest; fetchedAt: number } | null =
+  null;
 
 function summarizeTemplate(template: CompanyTemplate) {
   return {
@@ -68,7 +69,10 @@ function buildBundledMarketplaceManifest(): MarketplaceManifest {
   };
 }
 
-function normalizeManifest(raw: unknown, sourceUrl: string): MarketplaceManifest {
+function normalizeManifest(
+  raw: unknown,
+  sourceUrl: string
+): MarketplaceManifest {
   const parsed = raw as {
     catalog?: {
       name?: unknown;
@@ -79,30 +83,61 @@ function normalizeManifest(raw: unknown, sourceUrl: string): MarketplaceManifest
   };
 
   const templates = Array.isArray(parsed.templates) ? parsed.templates : [];
-  const normalizedTemplates: MarketplaceTemplateManifestEntry[] = templates.map((entry, index) => {
-    const item = entry as Record<string, unknown>;
-    const parsedTemplate = item.template ? CompanyTemplateSchema.safeParse(item.template) : null;
+  const normalizedTemplates: MarketplaceTemplateManifestEntry[] = templates.map(
+    (entry, index) => {
+      const item = entry as Record<string, unknown>;
+      const parsedTemplate = item.template
+        ? CompanyTemplateSchema.safeParse(item.template)
+        : null;
 
-    return {
-      id: typeof item.id === 'string' && item.id.trim().length > 0 ? item.id : `marketplace-template-${index + 1}`,
-      name: typeof item.name === 'string' && item.name.trim().length > 0 ? item.name : `Marketplace Template ${index + 1}`,
-      description: typeof item.description === 'string' ? item.description : 'No description provided.',
-      recommended_for: typeof item.recommended_for === 'string' ? item.recommended_for : 'General-purpose teams.',
-      vendor: typeof item.vendor === 'string' && item.vendor.trim().length > 0 ? item.vendor : 'Marketplace creator',
-      categories: Array.isArray(item.categories)
-        ? item.categories.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-        : [],
-      featured: item.featured === true,
-      badge: typeof item.badge === 'string' && item.badge.trim().length > 0 ? item.badge : null,
-      source_url: typeof item.source_url === 'string' ? item.source_url : null,
-      template_url: typeof item.template_url === 'string' ? item.template_url : null,
-      template: parsedTemplate?.success ? parsedTemplate.data : undefined,
-    };
-  });
+      return {
+        id:
+          typeof item.id === 'string' && item.id.trim().length > 0
+            ? item.id
+            : `marketplace-template-${index + 1}`,
+        name:
+          typeof item.name === 'string' && item.name.trim().length > 0
+            ? item.name
+            : `Marketplace Template ${index + 1}`,
+        description:
+          typeof item.description === 'string'
+            ? item.description
+            : 'No description provided.',
+        recommended_for:
+          typeof item.recommended_for === 'string'
+            ? item.recommended_for
+            : 'General-purpose teams.',
+        vendor:
+          typeof item.vendor === 'string' && item.vendor.trim().length > 0
+            ? item.vendor
+            : 'Marketplace creator',
+        categories: Array.isArray(item.categories)
+          ? item.categories.filter(
+              (value): value is string =>
+                typeof value === 'string' && value.trim().length > 0
+            )
+          : [],
+        featured: item.featured === true,
+        badge:
+          typeof item.badge === 'string' && item.badge.trim().length > 0
+            ? item.badge
+            : null,
+        source_url:
+          typeof item.source_url === 'string' ? item.source_url : null,
+        template_url:
+          typeof item.template_url === 'string' ? item.template_url : null,
+        template: parsedTemplate?.success ? parsedTemplate.data : undefined,
+      };
+    }
+  );
 
   return {
     catalog: {
-      name: typeof parsed.catalog?.name === 'string' && parsed.catalog.name.trim().length > 0 ? parsed.catalog.name : 'Biuro Marketplace',
+      name:
+        typeof parsed.catalog?.name === 'string' &&
+        parsed.catalog.name.trim().length > 0
+          ? parsed.catalog.name
+          : 'Biuro Marketplace',
       source_type: 'remote',
       source_url: sourceUrl,
     },
@@ -112,7 +147,10 @@ function normalizeManifest(raw: unknown, sourceUrl: string): MarketplaceManifest
 
 async function loadMarketplaceManifest(): Promise<MarketplaceManifest> {
   const now = Date.now();
-  if (cachedManifest && now - cachedManifest.fetchedAt < env.TEMPLATE_MARKETPLACE_CACHE_TTL_MS) {
+  if (
+    cachedManifest &&
+    now - cachedManifest.fetchedAt < env.TEMPLATE_MARKETPLACE_CACHE_TTL_MS
+  ) {
     return cachedManifest.value;
   }
 
@@ -125,7 +163,9 @@ async function loadMarketplaceManifest(): Promise<MarketplaceManifest> {
   try {
     const response = await fetch(env.TEMPLATE_MARKETPLACE_URL);
     if (!response.ok) {
-      throw new Error(`Marketplace manifest request failed with ${response.status}`);
+      throw new Error(
+        `Marketplace manifest request failed with ${response.status}`
+      );
     }
 
     const payload = await response.json();
@@ -139,18 +179,24 @@ async function loadMarketplaceManifest(): Promise<MarketplaceManifest> {
   }
 }
 
-async function resolveTemplate(entry: MarketplaceTemplateManifestEntry): Promise<CompanyTemplate> {
+async function resolveTemplate(
+  entry: MarketplaceTemplateManifestEntry
+): Promise<CompanyTemplate> {
   if (entry.template) {
     return entry.template;
   }
 
   if (!entry.template_url) {
-    throw new Error('Marketplace template has no inline template or template_url');
+    throw new Error(
+      'Marketplace template has no inline template or template_url'
+    );
   }
 
   const response = await fetch(entry.template_url);
   if (!response.ok) {
-    throw new Error(`Marketplace template request failed with ${response.status}`);
+    throw new Error(
+      `Marketplace template request failed with ${response.status}`
+    );
   }
 
   const payload = await response.json();
@@ -173,21 +219,25 @@ export async function listMarketplaceTemplates(): Promise<TemplateMarketplaceLis
       badge: entry.badge ?? null,
       source_url: entry.source_url ?? entry.template_url ?? null,
       source_type: manifest.catalog.source_type,
-      summary: summarizeTemplate(entry.template ?? {
-        version: '1.1',
-        company: { name: entry.name, mission: entry.description },
-        roles: [],
-        goals: [],
-        policies: [],
-        tools: [],
-        agents: [],
-        budgets: [],
-      }),
+      summary: summarizeTemplate(
+        entry.template ?? {
+          version: '1.1',
+          company: { name: entry.name, mission: entry.description },
+          roles: [],
+          goals: [],
+          policies: [],
+          tools: [],
+          agents: [],
+          budgets: [],
+        }
+      ),
     })),
   };
 }
 
-export async function getMarketplaceTemplateById(id: string): Promise<TemplateMarketplaceDetail | null> {
+export async function getMarketplaceTemplateById(
+  id: string
+): Promise<TemplateMarketplaceDetail | null> {
   const manifest = await loadMarketplaceManifest();
   const entry = manifest.templates.find((template) => template.id === id);
   if (!entry) {

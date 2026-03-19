@@ -11,7 +11,10 @@ interface MCPServerConfig {
 export class MCPService {
   private static clients: Map<string, Client> = new Map();
 
-  static async getClient(name: string, config: MCPServerConfig): Promise<Client> {
+  static async getClient(
+    name: string,
+    config: MCPServerConfig
+  ): Promise<Client> {
     const cachedClient = this.clients.get(name);
     if (cachedClient) return cachedClient;
 
@@ -20,7 +23,7 @@ export class MCPService {
     const transport = new StdioClientTransport({
       command: config.command,
       args: config.args,
-      env: { ...process.env, ...config.env } as Record<string, string>
+      env: { ...process.env, ...config.env } as Record<string, string>,
     });
 
     const client = new Client(
@@ -34,22 +37,33 @@ export class MCPService {
       return client;
     } catch (err) {
       await transport.close().catch((closeErr: unknown) => {
-        logger.warn({ err: closeErr, name }, 'Failed to close MCP transport after connect error');
+        logger.warn(
+          { err: closeErr, name },
+          'Failed to close MCP transport after connect error'
+        );
       });
       throw err;
     }
   }
 
-  static async callTool(serverName: string, config: MCPServerConfig, toolName: string, args: any) {
+  static async callTool(
+    serverName: string,
+    config: MCPServerConfig,
+    toolName: string,
+    args: any
+  ) {
     const client = await this.getClient(serverName, config);
     try {
       const result = await client.callTool({
         name: toolName,
-        arguments: args
+        arguments: args,
       });
       return result;
     } catch (err: any) {
-      logger.error({ err: err.message, serverName, toolName }, 'MCP Tool Call Failed');
+      logger.error(
+        { err: err.message, serverName, toolName },
+        'MCP Tool Call Failed'
+      );
       throw err;
     }
   }

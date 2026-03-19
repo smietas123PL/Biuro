@@ -62,22 +62,37 @@ export default function AuthPage() {
             </div>
             <div>
               <div className="text-lg font-semibold">Autonomiczne Biuro</div>
-              <div className="text-sm text-slate-500">Secure control plane for your AI company</div>
+              <div className="text-sm text-slate-500">
+                Secure control plane for your AI company
+              </div>
             </div>
           </div>
 
           <div className="mt-12 space-y-6">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight text-slate-950">Sign in to run the company.</h1>
+              <h1 className="text-4xl font-bold tracking-tight text-slate-950">
+                Sign in to run the company.
+              </h1>
               <p className="mt-3 max-w-xl text-base text-slate-600">
-                Log in to manage agents, budgets, approvals and tasks from one dashboard. New teams can create an owner account and their first company in one step.
+                Log in to manage agents, budgets, approvals and tasks from one
+                dashboard. New teams can create an owner account and their first
+                company in one step.
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
-              <FeatureCard title="Live operations" body="Watch agents, costs and approvals move in real time." />
-              <FeatureCard title="Company isolation" body="Every request stays scoped to the companies you belong to." />
-              <FeatureCard title="Safer runtime" body="Authenticated sessions and company-aware API headers are now required." />
+              <FeatureCard
+                title="Live operations"
+                body="Watch agents, costs and approvals move in real time."
+              />
+              <FeatureCard
+                title="Company isolation"
+                body="Every request stays scoped to the companies you belong to."
+              />
+              <FeatureCard
+                title="Safer runtime"
+                body="Authenticated sessions and company-aware API headers are now required."
+              />
             </div>
           </div>
         </section>
@@ -111,7 +126,12 @@ export default function AuthPage() {
                   id="login-email"
                   name="email"
                   value={loginForm.email}
-                  onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
+                  onChange={(event) =>
+                    setLoginForm((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
+                  }
                   type="email"
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
                   placeholder="you@example.com"
@@ -122,7 +142,12 @@ export default function AuthPage() {
                   id="login-password"
                   name="password"
                   value={loginForm.password}
-                  onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
+                  onChange={(event) =>
+                    setLoginForm((current) => ({
+                      ...current,
+                      password: event.target.value,
+                    }))
+                  }
                   type="password"
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
                   placeholder="Minimum 8 characters"
@@ -143,7 +168,12 @@ export default function AuthPage() {
                   id="register-full-name"
                   name="fullName"
                   value={registerForm.fullName}
-                  onChange={(event) => setRegisterForm((current) => ({ ...current, fullName: event.target.value }))}
+                  onChange={(event) =>
+                    setRegisterForm((current) => ({
+                      ...current,
+                      fullName: event.target.value,
+                    }))
+                  }
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
                   placeholder="Optional"
                 />
@@ -153,7 +183,12 @@ export default function AuthPage() {
                   id="register-email"
                   name="email"
                   value={registerForm.email}
-                  onChange={(event) => setRegisterForm((current) => ({ ...current, email: event.target.value }))}
+                  onChange={(event) =>
+                    setRegisterForm((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
+                  }
                   type="email"
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
                   placeholder="founder@example.com"
@@ -164,7 +199,12 @@ export default function AuthPage() {
                   id="register-password"
                   name="password"
                   value={registerForm.password}
-                  onChange={(event) => setRegisterForm((current) => ({ ...current, password: event.target.value }))}
+                  onChange={(event) =>
+                    setRegisterForm((current) => ({
+                      ...current,
+                      password: event.target.value,
+                    }))
+                  }
                   type="password"
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
                   placeholder="Minimum 8 characters"
@@ -175,7 +215,12 @@ export default function AuthPage() {
                   id="register-company-name"
                   name="companyName"
                   value={registerForm.companyName}
-                  onChange={(event) => setRegisterForm((current) => ({ ...current, companyName: event.target.value }))}
+                  onChange={(event) =>
+                    setRegisterForm((current) => ({
+                      ...current,
+                      companyName: event.target.value,
+                    }))
+                  }
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
                   placeholder="Acme AI Labs"
                 />
@@ -185,7 +230,12 @@ export default function AuthPage() {
                   id="register-company-mission"
                   name="companyMission"
                   value={registerForm.companyMission}
-                  onChange={(event) => setRegisterForm((current) => ({ ...current, companyMission: event.target.value }))}
+                  onChange={(event) =>
+                    setRegisterForm((current) => ({
+                      ...current,
+                      companyMission: event.target.value,
+                    }))
+                  }
                   rows={4}
                   className="w-full rounded-xl border bg-white px-4 py-3 text-sm"
                   placeholder="Optional mission statement for the first company"
@@ -193,7 +243,12 @@ export default function AuthPage() {
               </Field>
               <button
                 onClick={() => void handleRegister()}
-                disabled={loading || !registerForm.email || !registerForm.password || !registerForm.companyName}
+                disabled={
+                  loading ||
+                  !registerForm.email ||
+                  !registerForm.password ||
+                  !registerForm.companyName
+                }
                 className="mt-2 w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? 'Creating account...' : 'Create account'}

@@ -16,7 +16,9 @@ describe('migration runner utilities', () => {
   const tempDirs: string[] = [];
 
   afterEach(async () => {
-    await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+    await Promise.all(
+      tempDirs.map((dir) => rm(dir, { recursive: true, force: true }))
+    );
     tempDirs.length = 0;
   });
 
@@ -39,14 +41,47 @@ describe('migration runner utilities', () => {
   it('marks pending, applied, drifted, and missing migrations distinctly', () => {
     const statuses = computeMigrationStatus(
       [
-        { version: 1, filename: 'schema.sql', filepath: 'schema.sql', checksum: 'aaa' },
-        { version: 2, filename: 'schema_v2_add_users.sql', filepath: 'schema_v2_add_users.sql', checksum: 'bbb' },
-        { version: 3, filename: 'schema_v3.sql', filepath: 'schema_v3.sql', checksum: 'ccc' },
+        {
+          version: 1,
+          filename: 'schema.sql',
+          filepath: 'schema.sql',
+          checksum: 'aaa',
+        },
+        {
+          version: 2,
+          filename: 'schema_v2_add_users.sql',
+          filepath: 'schema_v2_add_users.sql',
+          checksum: 'bbb',
+        },
+        {
+          version: 3,
+          filename: 'schema_v3.sql',
+          filepath: 'schema_v3.sql',
+          checksum: 'ccc',
+        },
       ],
       [
-        { version: 1, filename: 'schema.sql', checksum: 'aaa', applied_at: '2026-03-19T10:00:00.000Z', execution_time_ms: 12 },
-        { version: 2, filename: 'schema_v2.sql', checksum: 'old', applied_at: '2026-03-19T10:01:00.000Z', execution_time_ms: 13 },
-        { version: 99, filename: 'schema_v99.sql', checksum: 'zzz', applied_at: '2026-03-19T10:02:00.000Z', execution_time_ms: 14 },
+        {
+          version: 1,
+          filename: 'schema.sql',
+          checksum: 'aaa',
+          applied_at: '2026-03-19T10:00:00.000Z',
+          execution_time_ms: 12,
+        },
+        {
+          version: 2,
+          filename: 'schema_v2.sql',
+          checksum: 'old',
+          applied_at: '2026-03-19T10:01:00.000Z',
+          execution_time_ms: 13,
+        },
+        {
+          version: 99,
+          filename: 'schema_v99.sql',
+          checksum: 'zzz',
+          applied_at: '2026-03-19T10:02:00.000Z',
+          execution_time_ms: 14,
+        },
       ]
     );
 
@@ -56,24 +91,55 @@ describe('migration runner utilities', () => {
       '3:pending',
       '99:missing_file',
     ]);
-    expect(statuses.find((item) => item.version === 2)?.reason).toContain('Recorded filename');
+    expect(statuses.find((item) => item.version === 2)?.reason).toContain(
+      'Recorded filename'
+    );
   });
 
   it('creates standardized filenames and templates for new migrations', async () => {
     expect(getMigrationVersion('schema_v14_add_budget_indexes.sql')).toBe(14);
-    expect(slugifyMigrationName('Add Budget Indexes!')).toBe('add_budget_indexes');
-    expect(buildMigrationFilename(14, 'Add Budget Indexes!')).toBe('schema_v14_add_budget_indexes.sql');
+    expect(slugifyMigrationName('Add Budget Indexes!')).toBe(
+      'add_budget_indexes'
+    );
+    expect(buildMigrationFilename(14, 'Add Budget Indexes!')).toBe(
+      'schema_v14_add_budget_indexes.sql'
+    );
 
     const template = createMigrationTemplate(14, 'Add Budget Indexes');
     expect(template).toContain('Schema v14 (Add Budget Indexes)');
     expect(template).toContain('BEGIN;');
     expect(template).toContain('COMMIT;');
 
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'biuro-migration-template-'));
+    const dir = await mkdtemp(
+      path.join(os.tmpdir(), 'biuro-migration-template-')
+    );
     tempDirs.push(dir);
-    const target = path.join(dir, buildMigrationFilename(14, 'Add Budget Indexes'));
+    const target = path.join(
+      dir,
+      buildMigrationFilename(14, 'Add Budget Indexes')
+    );
     fs.writeFileSync(target, template, 'utf8');
     const persisted = await readFile(target, 'utf8');
     expect(persisted).toContain('-- Write migration here');
+  });
+
+  it('ships the named RLS refresh migration for sprint 3', async () => {
+    const repoMigration = path.resolve(
+      import.meta.dirname,
+      '../src/db/schema_v14_refresh_rls_policies.sql'
+    );
+
+    const sql = await readFile(repoMigration, 'utf8');
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION biuro_current_user_id()');
+    expect(sql).toContain('CREATE POLICY companies_select_policy ON companies');
+    expect(sql).toContain(
+      'CREATE POLICY budgets_company_scope_policy ON budgets'
+    );
+    expect(sql).toContain(
+      'CREATE POLICY tool_calls_company_scope_policy ON tool_calls'
+    );
+    expect(sql).toContain(
+      'CREATE POLICY user_roles_scope_policy ON user_roles'
+    );
   });
 });

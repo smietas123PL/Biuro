@@ -27,7 +27,8 @@ const overviewResponse = {
       status: 'Ready for one-click approvals',
       requirements: [
         {
-          label: 'Interactivity endpoint exposed at https://biuro.test/api/integrations/slack/interactions',
+          label:
+            'Interactivity endpoint exposed at https://biuro.test/api/integrations/slack/interactions',
           met: true,
         },
         {
@@ -132,20 +133,18 @@ describe('IntegrationsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenNthCalledWith(
-        2,
-        '/integrations/config',
-        {
-          method: 'PATCH',
-          body: JSON.stringify({
-            slack_webhook_url: 'https://hooks.slack.test/services/updated',
-            discord_webhook_url: 'https://discord.test/api/webhooks/new',
-          }),
-        }
-      );
+      expect(requestMock).toHaveBeenNthCalledWith(2, '/integrations/config', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          slack_webhook_url: 'https://hooks.slack.test/services/updated',
+          discord_webhook_url: 'https://discord.test/api/webhooks/new',
+        }),
+      });
     });
 
-    expect(screen.getByText('Webhook settings saved for this company.')).toBeTruthy();
+    expect(
+      screen.getByText('Webhook settings saved for this company.')
+    ).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Send test' })[1]);
 
@@ -163,12 +162,22 @@ describe('IntegrationsPage', () => {
       );
     });
 
-    expect(screen.getByText('Discord test message sent successfully.')).toBeTruthy();
+    expect(
+      screen.getByText('Discord test message sent successfully.')
+    ).toBeTruthy();
     expect(screen.getByText('https://biuro.test')).toBeTruthy();
-    expect(screen.getAllByText('https://hooks.slack.test/services/original')).toHaveLength(2);
-    expect(screen.getByText('https://biuro.test/api/integrations/slack/interactions')).toBeTruthy();
-    expect(screen.getAllByText('Ready for one-click approvals').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('https://hooks.slack.test/services/original')
+    ).toHaveLength(2);
+    expect(
+      screen.getByText('https://biuro.test/api/integrations/slack/interactions')
+    ).toBeTruthy();
+    expect(
+      screen.getAllByText('Ready for one-click approvals').length
+    ).toBeGreaterThan(0);
     expect(screen.getByText('Slack One-Click Approvals')).toBeTruthy();
-    expect(screen.getByText('Outgoing Slack webhook saved for this company')).toBeTruthy();
+    expect(
+      screen.getByText('Outgoing Slack webhook saved for this company')
+    ).toBeTruthy();
   });
 });

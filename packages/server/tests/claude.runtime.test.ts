@@ -69,7 +69,10 @@ describe('ClaudeRuntime', () => {
   it('maps Anthropic tool_use blocks into agent actions', async () => {
     messagesCreateMock.mockResolvedValue({
       content: [
-        { type: 'text', text: 'I should split this into a research follow-up.' },
+        {
+          type: 'text',
+          text: 'I should split this into a research follow-up.',
+        },
         {
           type: 'tool_use',
           id: 'toolu_1',
@@ -98,7 +101,9 @@ describe('ClaudeRuntime', () => {
     const runtime = new ClaudeRuntime();
     const response = await runtime.execute(createContext());
 
-    expect(anthropicConstructorMock).toHaveBeenCalledWith({ apiKey: 'test-key' });
+    expect(anthropicConstructorMock).toHaveBeenCalledWith({
+      apiKey: 'test-key',
+    });
     expect(messagesCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'claude-sonnet-4-20250514',
@@ -113,7 +118,9 @@ describe('ClaudeRuntime', () => {
         ]),
       })
     );
-    expect(response.thought).toBe('I should split this into a research follow-up.');
+    expect(response.thought).toBe(
+      'I should split this into a research follow-up.'
+    );
     expect(response.actions).toEqual([
       {
         type: 'delegate',
@@ -141,9 +148,7 @@ describe('ClaudeRuntime', () => {
       },
     });
     messagesCreateMock.mockResolvedValue({
-      content: [
-        { type: 'text', text: 'I should wait for teammate input.' },
-      ],
+      content: [{ type: 'text', text: 'I should wait for teammate input.' }],
       usage: {
         input_tokens: 100,
         output_tokens: 25,

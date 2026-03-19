@@ -39,8 +39,8 @@ export function NetworkStatusBanner() {
   if (!isOnline) {
     return (
       <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Network connection lost. We will keep the current screen open and retry safe requests when
-        the connection comes back.
+        Network connection lost. We will keep the current screen open and retry
+        safe requests when the connection comes back.
       </div>
     );
   }

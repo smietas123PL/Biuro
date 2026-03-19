@@ -16,7 +16,14 @@ vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 import tasksRouter from '../src/routes/tasks.js';
@@ -145,7 +152,10 @@ describe('task routes', () => {
             status: 'worked',
             duration_ms: 2200,
             cost_usd: '0.75',
-            details: { thought: 'Ben should challenge the narrative before we lock copy.' },
+            details: {
+              thought:
+                'Ben should challenge the narrative before we lock copy.',
+            },
             created_at: '2026-03-18T10:01:30.000Z',
           },
         ],
@@ -175,13 +185,22 @@ describe('task routes', () => {
       thought_count: 1,
       delegation_count: 1,
     });
-    expect(payload.participants.map((item: any) => item.name)).toEqual(['Ada', 'Ben']);
-    expect(payload.timeline.map((item: any) => item.kind)).toEqual(['thought', 'delegation', 'supervisor']);
+    expect(payload.participants.map((item: any) => item.name)).toEqual([
+      'Ada',
+      'Ben',
+    ]);
+    expect(payload.timeline.map((item: any) => item.kind)).toEqual([
+      'thought',
+      'delegation',
+      'supervisor',
+    ]);
     expect(payload.timeline[0]).toMatchObject({
       agent_name: 'Ada',
       content: 'Ben should challenge the narrative before we lock copy.',
     });
-    expect(payload.tasks.find((item: any) => item.id === 'task-child')).toMatchObject({
+    expect(
+      payload.tasks.find((item: any) => item.id === 'task-child')
+    ).toMatchObject({
       completed_at: '2026-03-18T10:04:00.000Z',
       status: 'done',
     });
@@ -222,9 +241,13 @@ describe('task routes', () => {
       id: 'task-1',
       status: 'assigned',
     });
-    expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 'task_created', {
-      taskId: 'task-1',
-      agentId: 'agent-1',
-    });
+    expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'task_created',
+      {
+        taskId: 'task-1',
+        agentId: 'agent-1',
+      }
+    );
   });
 });

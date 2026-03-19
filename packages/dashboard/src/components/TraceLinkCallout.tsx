@@ -21,11 +21,14 @@ export function TraceLinkCallout({
   body?: string;
   compact?: boolean;
 }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>(
+    'idle'
+  );
+
   if (!trace) {
     return null;
   }
 
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const grafanaUrl = buildGrafanaTraceExploreUrl(trace);
   const traceIdLabel = shortenTraceId(trace.traceId);
 
@@ -47,7 +50,8 @@ export function TraceLinkCallout({
           <div>
             <div className="text-sm font-medium text-foreground">{title}</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              {body || `Latest trace ${traceIdLabel} from ${trace.method} ${trace.path}`}
+              {body ||
+                `Latest trace ${traceIdLabel} from ${trace.method} ${trace.path}`}
             </div>
           </div>
           <a
@@ -61,15 +65,23 @@ export function TraceLinkCallout({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/60 px-3 py-2">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Trace ID</div>
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Trace ID
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <code className="rounded bg-muted px-2 py-1 text-[11px] text-foreground">{traceIdLabel}</code>
+            <code className="rounded bg-muted px-2 py-1 text-[11px] text-foreground">
+              {traceIdLabel}
+            </code>
             <button
               type="button"
               onClick={() => void handleCopy()}
               className="rounded-full border px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent"
             >
-              {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Copy failed' : 'Copy trace ID'}
+              {copyState === 'copied'
+                ? 'Copied'
+                : copyState === 'error'
+                  ? 'Copy failed'
+                  : 'Copy trace ID'}
             </button>
           </div>
         </div>

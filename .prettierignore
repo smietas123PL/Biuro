@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+workspace
+tmp
+Initial docs
+pnpm-lock.yaml

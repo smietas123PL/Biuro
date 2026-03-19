@@ -14,13 +14,15 @@ import { estimateUsageCostUsd } from './pricing.js';
 const ACTION_TOOLS: Anthropic.Tool[] = [
   {
     name: 'complete_task',
-    description: 'Mark the current task as complete and provide the final result or deliverable.',
+    description:
+      'Mark the current task as complete and provide the final result or deliverable.',
     input_schema: {
       type: 'object',
       properties: {
         result: {
           type: 'string',
-          description: 'Final outcome, answer, or artifact for the completed task.',
+          description:
+            'Final outcome, answer, or artifact for the completed task.',
         },
       },
       required: ['result'],
@@ -29,7 +31,8 @@ const ACTION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'delegate',
-    description: 'Delegate a well-scoped subtask to another role when collaboration is needed.',
+    description:
+      'Delegate a well-scoped subtask to another role when collaboration is needed.',
     input_schema: {
       type: 'object',
       properties: {
@@ -43,7 +46,8 @@ const ACTION_TOOLS: Anthropic.Tool[] = [
         },
         description: {
           type: 'string',
-          description: 'Clear description of what the delegated agent should do.',
+          description:
+            'Clear description of what the delegated agent should do.',
         },
       },
       required: ['to_role', 'name', 'description'],
@@ -92,7 +96,8 @@ const ACTION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'request_approval',
-    description: 'Request human approval before taking a sensitive or policy-gated action.',
+    description:
+      'Request human approval before taking a sensitive or policy-gated action.',
     input_schema: {
       type: 'object',
       properties: {
@@ -112,7 +117,8 @@ const ACTION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'continue',
-    description: 'Keep working or wait for collaborators when no terminal action should happen yet.',
+    description:
+      'Keep working or wait for collaborators when no terminal action should happen yet.',
     input_schema: {
       type: 'object',
       properties: {
@@ -169,10 +175,14 @@ function extractThought(blocks: Anthropic.ContentBlock[]): string {
 
 function parseActions(blocks: Anthropic.ContentBlock[]): AgentAction[] {
   const rawActions = blocks
-    .filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use')
+    .filter(
+      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
+    )
     .map((block) => ({
       type: block.name,
-      ...(typeof block.input === 'object' && block.input !== null ? block.input : {}),
+      ...(typeof block.input === 'object' && block.input !== null
+        ? block.input
+        : {}),
     }));
 
   if (rawActions.length === 0) {
@@ -184,7 +194,10 @@ function parseActions(blocks: Anthropic.ContentBlock[]): AgentAction[] {
     return validatedActions.data;
   }
 
-  logger.error({ issues: validatedActions.error.issues, rawActions }, 'Claude tool_use actions failed schema validation');
+  logger.error(
+    { issues: validatedActions.error.issues, rawActions },
+    'Claude tool_use actions failed schema validation'
+  );
   return [];
 }
 
@@ -198,17 +211,28 @@ export class ClaudeRuntime implements IAgentRuntime {
   async execute(context: AgentContext): Promise<AgentResponse> {
     const systemPrompt = buildSystemPrompt(context);
 
-    const messages: Anthropic.MessageParam[] = context.history.map((historyItem) => ({
-      role: historyItem.role,
-      content: historyItem.content,
-    }));
+    const messages: Anthropic.MessageParam[] = context.history.map(
+      (historyItem) => ({
+        role: historyItem.role,
+        content: historyItem.content,
+      })
+    );
 
     try {
-      if (!env.ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY === 'your_key_here' || env.ANTHROPIC_API_KEY === '') {
+      if (
+        !env.ANTHROPIC_API_KEY ||
+        env.ANTHROPIC_API_KEY === 'your_key_here' ||
+        env.ANTHROPIC_API_KEY === ''
+      ) {
         const mockModel = context.agent_model || defaultModelsByRuntime.claude;
         return {
           thought: 'Mock thought for testing',
-          actions: [{ type: 'complete_task', result: 'Mock generated mission statement' }],
+          actions: [
+            {
+              type: 'complete_task',
+              result: 'Mock generated mission statement',
+            },
+          ],
           usage: {
             input_tokens: 10,
             output_tokens: 10,

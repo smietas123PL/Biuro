@@ -7,7 +7,11 @@ function clampLimit(limit: number) {
   return Math.max(1, Math.min(limit, 10));
 }
 
-async function searchMemoriesLexically(companyId: string, query: string, limit: number) {
+async function searchMemoriesLexically(
+  companyId: string,
+  query: string,
+  limit: number
+) {
   const pattern = `%${query.trim().replace(/\s+/g, '%')}%`;
   const res = await db.query(
     `SELECT content, created_at
@@ -22,7 +26,12 @@ async function searchMemoriesLexically(companyId: string, query: string, limit: 
   return res.rows.map((row) => row.content);
 }
 
-export async function storeMemory(companyId: string, agentId: string, taskId: string, content: string) {
+export async function storeMemory(
+  companyId: string,
+  agentId: string,
+  taskId: string,
+  content: string
+) {
   try {
     const embedding = await generateEmbedding(content);
 
@@ -32,7 +41,10 @@ export async function storeMemory(companyId: string, agentId: string, taskId: st
       [companyId, agentId, taskId, content, toPgVector(embedding.vector)]
     );
 
-    logger.info({ agentId, taskId, source: embedding.source }, 'Stored new experience in memory');
+    logger.info(
+      { agentId, taskId, source: embedding.source },
+      'Stored new experience in memory'
+    );
   } catch (err: any) {
     logger.error({ err }, 'Failed to store memory');
   }
@@ -53,7 +65,11 @@ export async function findRelatedMemories(
     }
 
     const embedding = await generateEmbedding(normalizedQuery);
-    const lexicalMatches = await searchMemoriesLexically(companyId, normalizedQuery, safeLimit);
+    const lexicalMatches = await searchMemoriesLexically(
+      companyId,
+      normalizedQuery,
+      safeLimit
+    );
 
     const res = await db.query(
       `SELECT content, metadata, (embedding <=> $1::vector) AS distance
@@ -66,7 +82,9 @@ export async function findRelatedMemories(
     );
     const vectorMatches = res.rows.map((row) => row.content as string);
     const lexicalSet = new Set(lexicalMatches);
-    const overlapCount = vectorMatches.filter((content) => lexicalSet.has(content)).length;
+    const overlapCount = vectorMatches.filter((content) =>
+      lexicalSet.has(content)
+    ).length;
 
     if (res.rows.length > 0) {
       const firstDistance = res.rows[0]?.distance;
@@ -82,7 +100,10 @@ export async function findRelatedMemories(
         lexicalCandidateCount: lexicalMatches.length,
         vectorCandidateCount: vectorMatches.length,
         overlapCount,
-        topDistance: typeof firstDistance === 'number' ? firstDistance : Number(firstDistance ?? 0),
+        topDistance:
+          typeof firstDistance === 'number'
+            ? firstDistance
+            : Number(firstDistance ?? 0),
         embeddingSource: embedding.source,
         embeddingModel: embedding.model,
         latencyMs: Date.now() - startedAt,

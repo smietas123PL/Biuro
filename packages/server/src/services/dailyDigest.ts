@@ -37,7 +37,9 @@ export function getDefaultDailyDigestSettings(): CompanyDigestSettings {
   };
 }
 
-export function extractCompanyDigestSettings(config: unknown): CompanyDigestSettings {
+export function extractCompanyDigestSettings(
+  config: unknown
+): CompanyDigestSettings {
   const defaults = getDefaultDailyDigestSettings();
   if (!config || typeof config !== 'object') {
     return defaults;
@@ -58,18 +60,24 @@ export function extractCompanyDigestSettings(config: unknown): CompanyDigestSett
         ? candidate.daily_digest_enabled
         : defaults.enabled,
     hourUtc:
-      Number.isInteger(hourCandidate) && hourCandidate >= 0 && hourCandidate <= 23
+      Number.isInteger(hourCandidate) &&
+      hourCandidate >= 0 &&
+      hourCandidate <= 23
         ? hourCandidate
         : defaults.hourUtc,
     minuteUtc:
-      Number.isInteger(minuteCandidate) && minuteCandidate >= 0 && minuteCandidate <= 59
+      Number.isInteger(minuteCandidate) &&
+      minuteCandidate >= 0 &&
+      minuteCandidate <= 59
         ? minuteCandidate
         : defaults.minuteUtc,
   };
 }
 
 function startOfUtcDay(value: Date) {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())
+  );
 }
 
 function endOfUtcDay(value: Date) {
@@ -106,7 +114,9 @@ function buildErrorLines(errors: DailyDigestSummary['topErrors']) {
 
   return [
     'Top errors:',
-    ...errors.map((error, index) => `${index + 1}. ${error.message} (${error.count})`),
+    ...errors.map(
+      (error, index) => `${index + 1}. ${error.message} (${error.count})`
+    ),
   ];
 }
 
@@ -122,7 +132,8 @@ export function formatDailyDigestMessage(summary: DailyDigestSummary) {
 
 export function isDailyDigestWindowOpen(now: Date) {
   const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const targetMinutes = env.DAILY_DIGEST_HOUR_UTC * 60 + env.DAILY_DIGEST_MINUTE_UTC;
+  const targetMinutes =
+    env.DAILY_DIGEST_HOUR_UTC * 60 + env.DAILY_DIGEST_MINUTE_UTC;
   return currentMinutes >= targetMinutes;
 }
 
@@ -136,50 +147,54 @@ export function isCompanyDigestDue(settings: CompanyDigestSettings, now: Date) {
   return currentMinutes >= targetMinutes;
 }
 
-export async function generateDailyDigest(companyId: string, now: Date = new Date()): Promise<DailyDigestSummary | null> {
+export async function generateDailyDigest(
+  companyId: string,
+  now: Date = new Date()
+): Promise<DailyDigestSummary | null> {
   const dayStart = startOfUtcDay(now);
   const dayEnd = endOfUtcDay(now);
 
-  const [companyRes, completedRes, blockedRes, costRes, budgetRes, errorsRes] = await Promise.all([
-    db.query<DigestCompany>(
-      'SELECT id, name, slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1',
-      [companyId]
-    ),
-    db.query(
-      `SELECT COUNT(*) AS count
+  const [companyRes, completedRes, blockedRes, costRes, budgetRes, errorsRes] =
+    await Promise.all([
+      db.query<DigestCompany>(
+        'SELECT id, name, slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1',
+        [companyId]
+      ),
+      db.query(
+        `SELECT COUNT(*) AS count
        FROM tasks
        WHERE company_id = $1
          AND completed_at >= $2
          AND completed_at < $3`,
-      [companyId, dayStart, dayEnd]
-    ),
-    db.query(
-      `SELECT COUNT(*) AS count
+        [companyId, dayStart, dayEnd]
+      ),
+      db.query(
+        `SELECT COUNT(*) AS count
        FROM tasks
        WHERE company_id = $1
          AND status = 'blocked'`,
-      [companyId]
-    ),
-    db.query(
-      `SELECT COALESCE(SUM(cost_usd), 0)::float AS total
+        [companyId]
+      ),
+      db.query(
+        `SELECT COALESCE(SUM(cost_usd), 0)::float AS total
        FROM audit_log
        WHERE company_id = $1
          AND created_at >= $2
          AND created_at < $3`,
-      [companyId, dayStart, dayEnd]
-    ),
-    db.query(
-      `SELECT COALESCE(SUM(COALESCE(b.limit_usd, a.monthly_budget_usd, 0)), 0)::float AS total
+        [companyId, dayStart, dayEnd]
+      ),
+      db.query(
+        `SELECT COALESCE(SUM(COALESCE(b.limit_usd, a.monthly_budget_usd, 0)), 0)::float AS total
        FROM agents a
        LEFT JOIN budgets b
          ON b.agent_id = a.id
         AND b.month = date_trunc('month', $2::timestamptz)::date
        WHERE a.company_id = $1
          AND a.status != 'terminated'`,
-      [companyId, dayStart]
-    ),
-    db.query(
-      `SELECT
+        [companyId, dayStart]
+      ),
+      db.query(
+        `SELECT
          COALESCE(NULLIF(h.details->>'error', ''), NULLIF(h.details->>'message', ''), 'Unknown heartbeat error') AS message,
          COUNT(*)::int AS count
        FROM heartbeats h
@@ -191,9 +206,9 @@ export async function generateDailyDigest(companyId: string, now: Date = new Dat
        GROUP BY 1
        ORDER BY count DESC, message ASC
        LIMIT 3`,
-      [companyId, dayStart, dayEnd]
-    ),
-  ]);
+        [companyId, dayStart, dayEnd]
+      ),
+    ]);
 
   const company = companyRes.rows[0];
   if (!company) {
@@ -208,13 +223,18 @@ export async function generateDailyDigest(companyId: string, now: Date = new Dat
     dailyCostUsd: toFloat(costRes.rows[0]?.total),
     dailyBudgetUsd: toFloat(budgetRes.rows[0]?.total),
     topErrors: errorsRes.rows.map((row) => ({
-      message: String((row as { message?: unknown }).message ?? 'Unknown heartbeat error'),
+      message: String(
+        (row as { message?: unknown }).message ?? 'Unknown heartbeat error'
+      ),
       count: toCount((row as { count?: unknown }).count),
     })),
   };
 }
 
-export async function sendDailyDigest(companyId: string, now: Date = new Date()) {
+export async function sendDailyDigest(
+  companyId: string,
+  now: Date = new Date()
+) {
   const summary = await generateDailyDigest(companyId, now);
   if (!summary) {
     return null;
@@ -288,7 +308,9 @@ export async function dispatchDueDailyDigests(now: Date = new Date()) {
 
   const results = [];
   for (const company of companiesRes.rows) {
-    const digestSettings = extractCompanyDigestSettings((company as DigestCompany & { config?: unknown }).config);
+    const digestSettings = extractCompanyDigestSettings(
+      (company as DigestCompany & { config?: unknown }).config
+    );
     if (!isCompanyDigestDue(digestSettings, now)) {
       continue;
     }

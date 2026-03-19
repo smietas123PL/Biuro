@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { db } from '../db/client.js';
 import { env } from '../env.js';
-import { extractCompanyRuntimeSettings, type RuntimeName } from '../runtime/preferences.js';
+import {
+  extractCompanyRuntimeSettings,
+  type RuntimeName,
+} from '../runtime/preferences.js';
 import { runtimeRegistry } from '../runtime/registry.js';
 import type { AgentAction, AgentContext } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
@@ -53,7 +56,10 @@ type PlannerAttempt = {
   reason?: string;
 };
 
-type PlannerFallbackReason = 'llm_unavailable' | 'llm_failed' | 'invalid_llm_plan';
+type PlannerFallbackReason =
+  | 'llm_unavailable'
+  | 'llm_failed'
+  | 'invalid_llm_plan';
 
 export type NLCommandPlannerMetadata = {
   mode: 'llm' | 'rules';
@@ -104,15 +110,51 @@ type PageDestination = {
 };
 
 const PAGE_DESTINATIONS: PageDestination[] = [
-  { path: '/', label: 'Dashboard', keywords: ['dashboard', 'overview', 'home', 'metrics', 'panel glowny'] },
-  { path: '/agents', label: 'Agents', keywords: ['agents', 'agent', 'team', 'zespol', 'org chart'] },
-  { path: '/tasks', label: 'Tasks', keywords: ['tasks', 'task', 'zadania', 'zadanie', 'backlog'] },
-  { path: '/goals', label: 'Goals', keywords: ['goals', 'goal', 'cele', 'cel', 'objectives'] },
-  { path: '/approvals', label: 'Approvals', keywords: ['approvals', 'approval', 'akceptacje', 'zgody', 'governance'] },
-  { path: '/tools', label: 'Tools', keywords: ['tools', 'tool', 'narzedzia', 'narzedzie'] },
-  { path: '/integrations', label: 'Integrations', keywords: ['integrations', 'integration', 'slack', 'discord'] },
-  { path: '/budgets', label: 'Budgets', keywords: ['budgets', 'budget', 'costs', 'koszty', 'budzet'] },
-  { path: '/observability', label: 'Observability', keywords: ['observability', 'trace', 'traces', 'logs', 'logi'] },
+  {
+    path: '/',
+    label: 'Dashboard',
+    keywords: ['dashboard', 'overview', 'home', 'metrics', 'panel glowny'],
+  },
+  {
+    path: '/agents',
+    label: 'Agents',
+    keywords: ['agents', 'agent', 'team', 'zespol', 'org chart'],
+  },
+  {
+    path: '/tasks',
+    label: 'Tasks',
+    keywords: ['tasks', 'task', 'zadania', 'zadanie', 'backlog'],
+  },
+  {
+    path: '/goals',
+    label: 'Goals',
+    keywords: ['goals', 'goal', 'cele', 'cel', 'objectives'],
+  },
+  {
+    path: '/approvals',
+    label: 'Approvals',
+    keywords: ['approvals', 'approval', 'akceptacje', 'zgody', 'governance'],
+  },
+  {
+    path: '/tools',
+    label: 'Tools',
+    keywords: ['tools', 'tool', 'narzedzia', 'narzedzie'],
+  },
+  {
+    path: '/integrations',
+    label: 'Integrations',
+    keywords: ['integrations', 'integration', 'slack', 'discord'],
+  },
+  {
+    path: '/budgets',
+    label: 'Budgets',
+    keywords: ['budgets', 'budget', 'costs', 'koszty', 'budzet'],
+  },
+  {
+    path: '/observability',
+    label: 'Observability',
+    keywords: ['observability', 'trace', 'traces', 'logs', 'logi'],
+  },
 ];
 
 const stopWords = new Set([
@@ -202,7 +244,10 @@ function canContribute(role?: PlannerRole) {
   return role === 'owner' || role === 'admin' || role === 'member';
 }
 
-async function loadPlannerResources(companyId: string, role?: PlannerRole): Promise<PlannerResources> {
+async function loadPlannerResources(
+  companyId: string,
+  role?: PlannerRole
+): Promise<PlannerResources> {
   const companyPromise = db.query(
     `SELECT id, name, mission, config
      FROM companies
@@ -228,7 +273,11 @@ async function loadPlannerResources(companyId: string, role?: PlannerRole): Prom
       )
     : Promise.resolve({ rows: [] as PlannerApproval[] });
 
-  const [companyRes, agentsRes, approvalsRes] = await Promise.all([companyPromise, agentsPromise, approvalsPromise]);
+  const [companyRes, agentsRes, approvalsRes] = await Promise.all([
+    companyPromise,
+    agentsPromise,
+    approvalsPromise,
+  ]);
   if (companyRes.rows.length === 0) {
     throw new Error(`Company ${companyId} not found`);
   }
@@ -240,7 +289,12 @@ async function loadPlannerResources(companyId: string, role?: PlannerRole): Prom
   };
 }
 
-function toNavigateAction(id: string, label: string, description: string, path: string): NLCommandPlanAction {
+function toNavigateAction(
+  id: string,
+  label: string,
+  description: string,
+  path: string
+): NLCommandPlanAction {
   return {
     id,
     type: 'navigate',
@@ -277,7 +331,11 @@ function scoreMatch(query: string, candidate: string) {
   return score;
 }
 
-function findBestMatch<T>(query: string, items: T[], getText: (item: T) => string) {
+function findBestMatch<T>(
+  query: string,
+  items: T[],
+  getText: (item: T) => string
+) {
   let bestScore = 0;
   let bestMatch: T | null = null;
 
@@ -295,14 +353,20 @@ function findBestMatch<T>(query: string, items: T[], getText: (item: T) => strin
 function findPageDestination(input: string) {
   const normalizedInput = normalizeText(input);
   const isNavigationIntent =
-    /^(open|show|go to|navigate|otworz|pokaz|przejdz do|idz do)\b/.test(normalizedInput) ||
+    /^(open|show|go to|navigate|otworz|pokaz|przejdz do|idz do)\b/.test(
+      normalizedInput
+    ) ||
     PAGE_DESTINATIONS.some((page) => page.keywords.includes(normalizedInput));
 
   if (!isNavigationIntent) {
     return null;
   }
 
-  return findBestMatch(normalizedInput, PAGE_DESTINATIONS, (page) => `${page.label} ${page.keywords.join(' ')}`);
+  return findBestMatch(
+    normalizedInput,
+    PAGE_DESTINATIONS,
+    (page) => `${page.label} ${page.keywords.join(' ')}`
+  );
 }
 
 function extractTail(input: string, patterns: RegExp[]) {
@@ -316,7 +380,9 @@ function extractTail(input: string, patterns: RegExp[]) {
 }
 
 function extractAssignee(input: string) {
-  const match = input.match(/\s+(?:and\s+assign\s+to|assign\s+to|i\s+przypisz\s+do|przypisz\s+do)\s+(.+)$/i);
+  const match = input.match(
+    /\s+(?:and\s+assign\s+to|assign\s+to|i\s+przypisz\s+do|przypisz\s+do)\s+(.+)$/i
+  );
   if (!match?.[1]) {
     return { title: input.trim(), assigneeQuery: null as string | null };
   }
@@ -328,7 +394,11 @@ function extractAssignee(input: string) {
   };
 }
 
-function selectAgentFromIntent(input: string, agents: PlannerAgent[], preferredStatuses?: string[]) {
+function selectAgentFromIntent(
+  input: string,
+  agents: PlannerAgent[],
+  preferredStatuses?: string[]
+) {
   const filteredAgents = preferredStatuses?.length
     ? agents.filter((agent) => preferredStatuses.includes(agent.status))
     : agents;
@@ -338,7 +408,11 @@ function selectAgentFromIntent(input: string, agents: PlannerAgent[], preferredS
   ]);
 
   if (nameTail) {
-    const matchedAgent = findBestMatch(nameTail, filteredAgents, (agent) => `${agent.name} ${agent.role} ${agent.title || ''}`);
+    const matchedAgent = findBestMatch(
+      nameTail,
+      filteredAgents,
+      (agent) => `${agent.name} ${agent.role} ${agent.title || ''}`
+    );
     if (matchedAgent) {
       return matchedAgent;
     }
@@ -357,7 +431,10 @@ function selectApprovalFromIntent(input: string, approvals: PlannerApproval[]) {
   }
 
   const normalizedInput = normalizeText(input);
-  if (normalizedInput.includes('latest') || normalizedInput.includes('ostatn')) {
+  if (
+    normalizedInput.includes('latest') ||
+    normalizedInput.includes('ostatn')
+  ) {
     return approvals[0];
   }
 
@@ -366,7 +443,11 @@ function selectApprovalFromIntent(input: string, approvals: PlannerApproval[]) {
   ]);
 
   if (tail) {
-    const matchedApproval = findBestMatch(tail, approvals, (approval) => approval.reason);
+    const matchedApproval = findBestMatch(
+      tail,
+      approvals,
+      (approval) => approval.reason
+    );
     if (matchedApproval) {
       return matchedApproval;
     }
@@ -412,7 +493,9 @@ function resolvePlannerRuntimeSelection(config: unknown) {
     }
   }
 
-  const availableOrder = desiredOrder.filter((runtime) => configuredRuntimes.includes(runtime));
+  const availableOrder = desiredOrder.filter((runtime) =>
+    configuredRuntimes.includes(runtime)
+  );
   if (availableOrder.length === 0) {
     return null;
   }
@@ -428,17 +511,27 @@ function buildPlannerContext(
   input: string,
   resources: PlannerResources
 ): AgentContext {
-  const availablePages = PAGE_DESTINATIONS.map((page) => `- ${page.path}: ${page.label}`).join('\n');
-  const availableAgents = resources.agents.length > 0
-    ? resources.agents
-        .map((agent) => `- ${agent.id}: ${agent.name} (${agent.role}${agent.title ? `, ${agent.title}` : ''}) [${agent.status}]`)
-        .join('\n')
-    : '- none';
-  const pendingApprovals = resources.approvals.length > 0
-    ? resources.approvals
-        .map((approval) => `- ${approval.id}: ${approval.reason} [${approval.status}]`)
-        .join('\n')
-    : '- none';
+  const availablePages = PAGE_DESTINATIONS.map(
+    (page) => `- ${page.path}: ${page.label}`
+  ).join('\n');
+  const availableAgents =
+    resources.agents.length > 0
+      ? resources.agents
+          .map(
+            (agent) =>
+              `- ${agent.id}: ${agent.name} (${agent.role}${agent.title ? `, ${agent.title}` : ''}) [${agent.status}]`
+          )
+          .join('\n')
+      : '- none';
+  const pendingApprovals =
+    resources.approvals.length > 0
+      ? resources.approvals
+          .map(
+            (approval) =>
+              `- ${approval.id}: ${approval.reason} [${approval.status}]`
+          )
+          .join('\n')
+      : '- none';
 
   const rolePolicy = canManageCompany(context.role)
     ? 'You may plan navigation, create_task, create_goal, pause_agent, resume_agent, and resolve_approval.'
@@ -448,7 +541,9 @@ function buildPlannerContext(
 
   return {
     company_name: resources.company.name,
-    company_mission: resources.company.mission || 'Operate the company safely and efficiently.',
+    company_mission:
+      resources.company.mission ||
+      'Operate the company safely and efficiently.',
     agent_name: 'Biuro Control Panel',
     agent_role: 'Operations Planner',
     agent_system_prompt: `
@@ -521,7 +616,9 @@ function transformUseToolAction(
       return null;
     }
 
-    const destination = PAGE_DESTINATIONS.find((page) => page.path === parsed.data.path);
+    const destination = PAGE_DESTINATIONS.find(
+      (page) => page.path === parsed.data.path
+    );
     if (!destination) {
       return null;
     }
@@ -544,7 +641,9 @@ function transformUseToolAction(
       return null;
     }
 
-    const agent = resources.agents.find((item) => item.id === parsed.data.agent_id);
+    const agent = resources.agents.find(
+      (item) => item.id === parsed.data.agent_id
+    );
     if (!agent) {
       return null;
     }
@@ -571,7 +670,9 @@ function transformUseToolAction(
       return null;
     }
 
-    const agent = resources.agents.find((item) => item.id === parsed.data.agent_id);
+    const agent = resources.agents.find(
+      (item) => item.id === parsed.data.agent_id
+    );
     if (!agent) {
       return null;
     }
@@ -598,7 +699,9 @@ function transformUseToolAction(
       return null;
     }
 
-    const approval = resources.approvals.find((item) => item.id === parsed.data.approval_id);
+    const approval = resources.approvals.find(
+      (item) => item.id === parsed.data.approval_id
+    );
     if (!approval) {
       return null;
     }
@@ -630,7 +733,9 @@ function transformUseToolAction(
     }
 
     if (parsed.data.assigned_to) {
-      const assignedAgent = resources.agents.find((item) => item.id === parsed.data.assigned_to);
+      const assignedAgent = resources.agents.find(
+        (item) => item.id === parsed.data.assigned_to
+      );
       if (!assignedAgent) {
         return null;
       }
@@ -709,7 +814,9 @@ async function tryPlanNaturalLanguageCommandWithLLM(
       planner: NLCommandPlannerMetadata;
     }
 > {
-  const runtimeSelection = resolvePlannerRuntimeSelection(resources.company.config);
+  const runtimeSelection = resolvePlannerRuntimeSelection(
+    resources.company.config
+  );
   if (!runtimeSelection) {
     return {
       status: 'fallback',
@@ -722,10 +829,15 @@ async function tryPlanNaturalLanguageCommandWithLLM(
   }
 
   try {
-    const runtime = runtimeRegistry.getRuntime(runtimeSelection.preferredRuntime, {
-      fallbackOrder: runtimeSelection.fallbackOrder,
-    });
-    const response = await runtime.execute(buildPlannerContext(context, input, resources));
+    const runtime = runtimeRegistry.getRuntime(
+      runtimeSelection.preferredRuntime,
+      {
+        fallbackOrder: runtimeSelection.fallbackOrder,
+      }
+    );
+    const response = await runtime.execute(
+      buildPlannerContext(context, input, resources)
+    );
 
     const actions = response.actions
       .filter(isUseToolAction)
@@ -822,9 +934,16 @@ function buildRuleBasedPlan(
     if (!canManageCompany(context.role)) {
       warnings.push('Pausing agents requires owner or admin access.');
     } else {
-      const agent = selectAgentFromIntent(trimmedInput, resources.agents, ['idle', 'working', 'running', 'in_progress']);
+      const agent = selectAgentFromIntent(trimmedInput, resources.agents, [
+        'idle',
+        'working',
+        'running',
+        'in_progress',
+      ]);
       if (!agent) {
-        warnings.push('I could not match that pause request to a single active agent.');
+        warnings.push(
+          'I could not match that pause request to a single active agent.'
+        );
       } else {
         actions.push({
           id: `pause-agent-${agent.id}`,
@@ -837,7 +956,12 @@ function buildRuleBasedPlan(
           success_message: `${agent.name} was paused.`,
         });
         actions.push(
-          toNavigateAction('navigate-agents', 'Open Agents', 'Navigate to the agents roster after the update.', '/agents')
+          toNavigateAction(
+            'navigate-agents',
+            'Open Agents',
+            'Navigate to the agents roster after the update.',
+            '/agents'
+          )
         );
       }
     }
@@ -845,9 +969,13 @@ function buildRuleBasedPlan(
     if (!canManageCompany(context.role)) {
       warnings.push('Resuming agents requires owner or admin access.');
     } else {
-      const agent = selectAgentFromIntent(trimmedInput, resources.agents, ['paused']);
+      const agent = selectAgentFromIntent(trimmedInput, resources.agents, [
+        'paused',
+      ]);
       if (!agent) {
-        warnings.push('I could not match that resume request to a paused agent.');
+        warnings.push(
+          'I could not match that resume request to a paused agent.'
+        );
       } else {
         actions.push({
           id: `resume-agent-${agent.id}`,
@@ -860,7 +988,12 @@ function buildRuleBasedPlan(
           success_message: `${agent.name} was resumed.`,
         });
         actions.push(
-          toNavigateAction('navigate-agents', 'Open Agents', 'Navigate to the agents roster after the update.', '/agents')
+          toNavigateAction(
+            'navigate-agents',
+            'Open Agents',
+            'Navigate to the agents roster after the update.',
+            '/agents'
+          )
         );
       }
     }
@@ -868,9 +1001,14 @@ function buildRuleBasedPlan(
     if (!canManageCompany(context.role)) {
       warnings.push('Approvals can only be resolved by owners or admins.');
     } else {
-      const approval = selectApprovalFromIntent(trimmedInput, resources.approvals);
+      const approval = selectApprovalFromIntent(
+        trimmedInput,
+        resources.approvals
+      );
       if (!approval) {
-        warnings.push('I could not match that approval request to a single pending item.');
+        warnings.push(
+          'I could not match that approval request to a single pending item.'
+        );
       } else {
         actions.push({
           id: `approve-${approval.id}`,
@@ -887,7 +1025,12 @@ function buildRuleBasedPlan(
           success_message: 'Approval marked as approved.',
         });
         actions.push(
-          toNavigateAction('navigate-approvals', 'Open Approvals', 'Navigate to the approvals page after the update.', '/approvals')
+          toNavigateAction(
+            'navigate-approvals',
+            'Open Approvals',
+            'Navigate to the approvals page after the update.',
+            '/approvals'
+          )
         );
       }
     }
@@ -895,9 +1038,14 @@ function buildRuleBasedPlan(
     if (!canManageCompany(context.role)) {
       warnings.push('Approvals can only be resolved by owners or admins.');
     } else {
-      const approval = selectApprovalFromIntent(trimmedInput, resources.approvals);
+      const approval = selectApprovalFromIntent(
+        trimmedInput,
+        resources.approvals
+      );
       if (!approval) {
-        warnings.push('I could not match that rejection request to a single pending item.');
+        warnings.push(
+          'I could not match that rejection request to a single pending item.'
+        );
       } else {
         actions.push({
           id: `reject-${approval.id}`,
@@ -914,11 +1062,18 @@ function buildRuleBasedPlan(
           success_message: 'Approval marked as rejected.',
         });
         actions.push(
-          toNavigateAction('navigate-approvals', 'Open Approvals', 'Navigate to the approvals page after the update.', '/approvals')
+          toNavigateAction(
+            'navigate-approvals',
+            'Open Approvals',
+            'Navigate to the approvals page after the update.',
+            '/approvals'
+          )
         );
       }
     }
-  } else if (/(create|add|new|utworz|dodaj)\s+(task|zadanie)\b/.test(normalizedInput)) {
+  } else if (
+    /(create|add|new|utworz|dodaj)\s+(task|zadanie)\b/.test(normalizedInput)
+  ) {
     if (!canContribute(context.role)) {
       warnings.push('Creating tasks requires owner, admin, or member access.');
     } else {
@@ -931,11 +1086,17 @@ function buildRuleBasedPlan(
       } else {
         const { title, assigneeQuery } = extractAssignee(rawTitle);
         const assignedAgent = assigneeQuery
-          ? findBestMatch(assigneeQuery, resources.agents, (agent) => `${agent.name} ${agent.role} ${agent.title || ''}`)
+          ? findBestMatch(
+              assigneeQuery,
+              resources.agents,
+              (agent) => `${agent.name} ${agent.role} ${agent.title || ''}`
+            )
           : null;
 
         if (assigneeQuery && !assignedAgent) {
-          warnings.push(`I could not find an agent matching "${assigneeQuery}". The task will stay unassigned.`);
+          warnings.push(
+            `I could not find an agent matching "${assigneeQuery}". The task will stay unassigned.`
+          );
         }
 
         actions.push({
@@ -955,11 +1116,18 @@ function buildRuleBasedPlan(
           success_message: `Task "${title}" created.`,
         });
         actions.push(
-          toNavigateAction('navigate-tasks', 'Open Tasks', 'Navigate to the tasks page after creation.', '/tasks')
+          toNavigateAction(
+            'navigate-tasks',
+            'Open Tasks',
+            'Navigate to the tasks page after creation.',
+            '/tasks'
+          )
         );
       }
     }
-  } else if (/(create|add|new|utworz|dodaj)\s+(goal|cel)\b/.test(normalizedInput)) {
+  } else if (
+    /(create|add|new|utworz|dodaj)\s+(goal|cel)\b/.test(normalizedInput)
+  ) {
     if (!canContribute(context.role)) {
       warnings.push('Creating goals requires owner, admin, or member access.');
     } else {
@@ -984,21 +1152,33 @@ function buildRuleBasedPlan(
           success_message: `Goal "${title}" created.`,
         });
         actions.push(
-          toNavigateAction('navigate-goals', 'Open Goals', 'Navigate to the goals page after creation.', '/goals')
+          toNavigateAction(
+            'navigate-goals',
+            'Open Goals',
+            'Navigate to the goals page after creation.',
+            '/goals'
+          )
         );
       }
     }
   }
 
   if (actions.length === 0) {
-    warnings.push('I could not turn that request into a safe execution plan yet.');
-    warnings.push('Try a direct command such as "pause Ada", "create task Prepare launch doc", or "open approvals".');
+    warnings.push(
+      'I could not turn that request into a safe execution plan yet.'
+    );
+    warnings.push(
+      'Try a direct command such as "pause Ada", "create task Prepare launch doc", or "open approvals".'
+    );
   }
 
   return {
     source: 'rules',
     original_input: trimmedInput,
-    summary: actions.length > 0 ? `Prepared a ${actions.length}-step execution plan.` : 'No executable plan found.',
+    summary:
+      actions.length > 0
+        ? `Prepared a ${actions.length}-step execution plan.`
+        : 'No executable plan found.',
     reasoning:
       actions.length > 0
         ? 'Matched the request against safe dashboard actions and existing company records.'
@@ -1015,7 +1195,11 @@ export async function planNaturalLanguageCommand(
   input: string
 ): Promise<NLCommandPlan> {
   const resources = await loadPlannerResources(context.companyId, context.role);
-  const llmAttempt = await tryPlanNaturalLanguageCommandWithLLM(context, input, resources);
+  const llmAttempt = await tryPlanNaturalLanguageCommandWithLLM(
+    context,
+    input,
+    resources
+  );
   if (llmAttempt.status === 'success') {
     return llmAttempt.plan;
   }

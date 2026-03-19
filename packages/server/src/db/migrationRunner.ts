@@ -50,7 +50,11 @@ export function createMigrationChecksum(contents: string) {
 export function listMigrationFiles(migrationsDir: string): MigrationFile[] {
   return fs
     .readdirSync(migrationsDir)
-    .filter((filename) => filename === 'schema.sql' || /^schema_v\d+(?:_[a-z0-9_]+)?\.sql$/i.test(filename))
+    .filter(
+      (filename) =>
+        filename === 'schema.sql' ||
+        /^schema_v\d+(?:_[a-z0-9_]+)?\.sql$/i.test(filename)
+    )
     .sort((left, right) => {
       const leftVersion = getMigrationVersion(left);
       const rightVersion = getMigrationVersion(right);
@@ -96,9 +100,13 @@ export function computeMigrationStatus(
   migrationFiles: MigrationFile[],
   appliedMigrations: AppliedMigrationRecord[]
 ): MigrationStatusItem[] {
-  const filesByVersion = new Map(migrationFiles.map((file) => [file.version, file]));
+  const filesByVersion = new Map(
+    migrationFiles.map((file) => [file.version, file])
+  );
   const statuses: MigrationStatusItem[] = migrationFiles.map((file) => {
-    const applied = appliedMigrations.find((item) => item.version === file.version);
+    const applied = appliedMigrations.find(
+      (item) => item.version === file.version
+    );
     if (!applied) {
       return {
         version: file.version,
@@ -172,11 +180,17 @@ export async function ensureSchemaMigrationsTable(client: pg.PoolClient) {
     )
   `);
 
-  await client.query(`ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT`);
-  await client.query(`ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS execution_time_ms INT`);
+  await client.query(
+    `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT`
+  );
+  await client.query(
+    `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS execution_time_ms INT`
+  );
 }
 
-export async function readAppliedMigrations(client: pg.PoolClient): Promise<AppliedMigrationRecord[]> {
+export async function readAppliedMigrations(
+  client: pg.PoolClient
+): Promise<AppliedMigrationRecord[]> {
   const result = await client.query<AppliedMigrationRecord>(
     `SELECT version, filename, checksum, applied_at, execution_time_ms
      FROM schema_migrations
@@ -186,7 +200,10 @@ export async function readAppliedMigrations(client: pg.PoolClient): Promise<Appl
   return result.rows;
 }
 
-export async function getMigrationStatus(client: pg.PoolClient, migrationsDir: string) {
+export async function getMigrationStatus(
+  client: pg.PoolClient,
+  migrationsDir: string
+) {
   await ensureSchemaMigrationsTable(client);
   const [migrationFiles, appliedMigrations] = await Promise.all([
     Promise.resolve(listMigrationFiles(migrationsDir)),
@@ -196,13 +213,21 @@ export async function getMigrationStatus(client: pg.PoolClient, migrationsDir: s
   return computeMigrationStatus(migrationFiles, appliedMigrations);
 }
 
-export async function verifyMigrations(client: pg.PoolClient, migrationsDir: string) {
+export async function verifyMigrations(
+  client: pg.PoolClient,
+  migrationsDir: string
+) {
   const statuses = await getMigrationStatus(client, migrationsDir);
-  const driftItems = statuses.filter((item) => item.status === 'drifted' || item.status === 'missing_file');
+  const driftItems = statuses.filter(
+    (item) => item.status === 'drifted' || item.status === 'missing_file'
+  );
 
   if (driftItems.length > 0) {
     const summary = driftItems
-      .map((item) => `${item.version}:${item.filename}:${item.reason ?? item.status}`)
+      .map(
+        (item) =>
+          `${item.version}:${item.filename}:${item.reason ?? item.status}`
+      )
       .join(', ');
     throw new Error(`Migration verification failed: ${summary}`);
   }
@@ -213,7 +238,10 @@ export async function verifyMigrations(client: pg.PoolClient, migrationsDir: str
 export async function applyPendingMigrations(
   client: pg.PoolClient,
   migrationsDir: string,
-  logger: { info: (details: unknown, message: string) => void; error: (details: unknown, message: string) => void }
+  logger: {
+    info: (details: unknown, message: string) => void;
+    error: (details: unknown, message: string) => void;
+  }
 ) {
   const statuses = await verifyMigrations(client, migrationsDir);
   const pending = statuses.filter((item) => item.status === 'pending');
@@ -229,10 +257,18 @@ export async function applyPendingMigrations(
       await client.query(
         `INSERT INTO schema_migrations (version, filename, checksum, execution_time_ms)
          VALUES ($1, $2, $3, $4)`,
-        [migration.version, migration.filename, migration.checksum, Date.now() - startedAt]
+        [
+          migration.version,
+          migration.filename,
+          migration.checksum,
+          Date.now() - startedAt,
+        ]
       );
       await client.query('COMMIT');
-      logger.info({ version: migration.version, filename: migration.filename }, 'Migration applied successfully');
+      logger.info(
+        { version: migration.version, filename: migration.filename },
+        'Migration applied successfully'
+      );
     } catch (err: any) {
       await client.query('ROLLBACK');
 
@@ -242,16 +278,28 @@ export async function applyPendingMigrations(
            VALUES ($1, $2, $3, $4)
            ON CONFLICT (version)
            DO UPDATE SET filename = EXCLUDED.filename, checksum = EXCLUDED.checksum, execution_time_ms = EXCLUDED.execution_time_ms`,
-          [migration.version, migration.filename, migration.checksum, Date.now() - startedAt]
+          [
+            migration.version,
+            migration.filename,
+            migration.checksum,
+            Date.now() - startedAt,
+          ]
         );
         logger.info(
-          { version: migration.version, filename: migration.filename, code: err.code },
+          {
+            version: migration.version,
+            filename: migration.filename,
+            code: err.code,
+          },
           'Migration objects already existed, recorded migration metadata'
         );
         continue;
       }
 
-      logger.error({ version: migration.version, filename: migration.filename, err }, 'Migration failed');
+      logger.error(
+        { version: migration.version, filename: migration.filename, err },
+        'Migration failed'
+      );
       throw err;
     }
   }

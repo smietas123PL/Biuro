@@ -28,7 +28,10 @@ vi.mock('../context/CompanyContext', () => ({
 }));
 
 vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  const actual =
+    await vi.importActual<typeof import('react-router-dom')>(
+      'react-router-dom'
+    );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -40,79 +43,82 @@ describe('CommandPalette natural language plan', () => {
     requestMock.mockReset();
     navigateMock.mockReset();
 
-    requestMock.mockImplementation(async (path: string, options?: RequestInit) => {
-      if (path === '/companies/company-1/agents') {
-        return [];
-      }
-
-      if (path === '/companies/company-1/tasks') {
-        if (options?.method === 'POST') {
-          return { id: 'task-1' };
+    requestMock.mockImplementation(
+      async (path: string, options?: RequestInit) => {
+        if (path === '/companies/company-1/agents') {
+          return [];
         }
-        return [];
-      }
 
-      if (path === '/companies/company-1/goals') {
-        return [];
-      }
+        if (path === '/companies/company-1/tasks') {
+          if (options?.method === 'POST') {
+            return { id: 'task-1' };
+          }
+          return [];
+        }
 
-      if (path === '/companies/company-1/tools') {
-        return [];
-      }
+        if (path === '/companies/company-1/goals') {
+          return [];
+        }
 
-      if (path === '/companies/company-1/approvals') {
-        return [];
-      }
+        if (path === '/companies/company-1/tools') {
+          return [];
+        }
 
-      if (path === '/nl-command') {
-        return {
-          source: 'rules',
-          original_input: 'create task Prepare launch notes',
-          summary: 'Prepared a 2-step execution plan.',
-          reasoning: 'Matched the request against safe dashboard actions and existing company records.',
-          warnings: [],
-          can_execute: true,
-          planner: {
-            mode: 'llm',
-            runtime: 'claude',
-            model: 'claude-sonnet-4',
-            attempts: [
+        if (path === '/companies/company-1/approvals') {
+          return [];
+        }
+
+        if (path === '/nl-command') {
+          return {
+            source: 'rules',
+            original_input: 'create task Prepare launch notes',
+            summary: 'Prepared a 2-step execution plan.',
+            reasoning:
+              'Matched the request against safe dashboard actions and existing company records.',
+            warnings: [],
+            can_execute: true,
+            planner: {
+              mode: 'llm',
+              runtime: 'claude',
+              model: 'claude-sonnet-4',
+              attempts: [
+                {
+                  runtime: 'claude',
+                  model: 'claude-sonnet-4',
+                  status: 'success',
+                },
+              ],
+              fallback_reason: null,
+            },
+            actions: [
               {
-                runtime: 'claude',
-                model: 'claude-sonnet-4',
-                status: 'success',
+                id: 'create-task',
+                type: 'api_request',
+                label: 'Create task: Prepare launch notes',
+                description: 'Create a new task in the backlog.',
+                endpoint: '/companies/company-1/tasks',
+                method: 'POST',
+                body: {
+                  title: 'Prepare launch notes',
+                },
+                requires_confirmation: true,
+                success_message: 'Task "Prepare launch notes" created.',
+              },
+              {
+                id: 'navigate-tasks',
+                type: 'navigate',
+                label: 'Open Tasks',
+                description: 'Navigate to the tasks page after creation.',
+                path: '/tasks',
+                requires_confirmation: false,
               },
             ],
-            fallback_reason: null,
-          },
-          actions: [
-            {
-              id: 'create-task',
-              type: 'api_request',
-              label: 'Create task: Prepare launch notes',
-              description: 'Create a new task in the backlog.',
-              endpoint: '/companies/company-1/tasks',
-              method: 'POST',
-              body: {
-                title: 'Prepare launch notes',
-              },
-              requires_confirmation: true,
-              success_message: 'Task "Prepare launch notes" created.',
-            },
-            {
-              id: 'navigate-tasks',
-              type: 'navigate',
-              label: 'Open Tasks',
-              description: 'Navigate to the tasks page after creation.',
-              path: '/tasks',
-              requires_confirmation: false,
-            },
-          ],
-        };
-      }
+          };
+        }
 
-      throw new Error(`Unhandled request ${path}`);
-    });
+        throw new Error(`Unhandled request ${path}`);
+      }
+    );
   });
 
   it('interprets a natural language command and executes the returned plan', async () => {
@@ -125,11 +131,16 @@ describe('CommandPalette natural language plan', () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByPlaceholderText('Search Acme Labs or type a command...'), 'create task Prepare launch notes');
+    await user.type(
+      screen.getByPlaceholderText('Search Acme Labs or type a command...'),
+      'create task Prepare launch notes'
+    );
     await user.click(screen.getByRole('button', { name: 'Plan' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Prepared a 2-step execution plan.')).toBeTruthy();
+      expect(
+        screen.getByText('Prepared a 2-step execution plan.')
+      ).toBeTruthy();
     });
     expect(screen.getByText('Planned by Claude')).toBeTruthy();
 

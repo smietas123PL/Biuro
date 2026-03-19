@@ -3,7 +3,11 @@ import { Server } from 'http';
 import { db } from './db/client.js';
 import { env } from './env.js';
 import { logger } from './utils/logger.js';
-import { setWsSnapshot, wsBroadcastEventsTotal, wsConnectionAttemptsTotal } from './observability/metrics.js';
+import {
+  setWsSnapshot,
+  wsBroadcastEventsTotal,
+  wsConnectionAttemptsTotal,
+} from './observability/metrics.js';
 
 export class WSHub {
   private wss: WebSocketServer;
@@ -73,7 +77,10 @@ export class WSHub {
           return;
         }
 
-        logger.info({ companyId, userId, role: roleRes.rows[0].role }, 'Authorized WS connection');
+        logger.info(
+          { companyId, userId, role: roleRes.rows[0].role },
+          'Authorized WS connection'
+        );
       } else {
         logger.info({ companyId }, 'New WS connection');
       }
@@ -101,7 +108,10 @@ export class WSHub {
   }
 
   private closeClient(ws: WebSocket, code: number, reason: string) {
-    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+    if (
+      ws.readyState === WebSocket.OPEN ||
+      ws.readyState === WebSocket.CONNECTING
+    ) {
       ws.close(code, reason);
     }
   }
@@ -146,9 +156,13 @@ export class WSHub {
     const targets = this.clients.get(companyId);
     if (!targets) return;
 
-    const payload = JSON.stringify({ event, data, timestamp: new Date().toISOString() });
+    const payload = JSON.stringify({
+      event,
+      data,
+      timestamp: new Date().toISOString(),
+    });
     wsBroadcastEventsTotal.inc({ event });
-    
+
     for (const ws of targets) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(payload);

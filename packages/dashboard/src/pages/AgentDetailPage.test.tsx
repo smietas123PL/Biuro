@@ -212,7 +212,10 @@ describe('AgentDetailPage', () => {
         };
       }
 
-      if (path === '/agents/agent-1/replay?limit=120&task_id=task-1&types=heartbeat') {
+      if (
+        path ===
+        '/agents/agent-1/replay?limit=120&task_id=task-1&types=heartbeat'
+      ) {
         return {
           items: [
             {
@@ -250,7 +253,10 @@ describe('AgentDetailPage', () => {
         };
       }
 
-      if (path === '/agents/agent-1/replay?limit=120&task_id=task-2&types=heartbeat') {
+      if (
+        path ===
+        '/agents/agent-1/replay?limit=120&task_id=task-2&types=heartbeat'
+      ) {
         return {
           items: [
             {
@@ -291,7 +297,10 @@ describe('AgentDetailPage', () => {
         };
       }
 
-      if (path === '/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120') {
+      if (
+        path ===
+        '/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120'
+      ) {
         return {
           left: {
             task_id: 'task-1',
@@ -327,7 +336,10 @@ describe('AgentDetailPage', () => {
         };
       }
 
-      if (path === '/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120&types=heartbeat') {
+      if (
+        path ===
+        '/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120&types=heartbeat'
+      ) {
         return {
           left: {
             task_id: 'task-1',
@@ -384,8 +396,10 @@ describe('AgentDetailPage', () => {
           },
           explanation: {
             headline: 'Provider timeout during launch note generation',
-            summary: 'The run failed because both provider attempts timed out during the drafting step.',
-            likely_cause: 'Fallback routing exhausted both providers before a response completed.',
+            summary:
+              'The run failed because both provider attempts timed out during the drafting step.',
+            likely_cause:
+              'Fallback routing exhausted both providers before a response completed.',
             evidence: [
               'heartbeat.error fired on Prepare launch notes',
               'openai/gpt-4o and claude/claude-sonnet-4-20250514 both timed out',
@@ -409,7 +423,8 @@ describe('AgentDetailPage', () => {
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      blob: async () => new Blob(['<html>report</html>'], { type: 'text/html' }),
+      blob: async () =>
+        new Blob(['<html>report</html>'], { type: 'text/html' }),
     });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('URL', {
@@ -433,7 +448,10 @@ describe('AgentDetailPage', () => {
 
   it('supports task-scoped session replay and event-type filters', async () => {
     render(
-      <MemoryRouter initialEntries={['/agents/agent-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/agents/agent-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/agents/:id" element={<AgentDetailPage />} />
         </Routes>
@@ -443,12 +461,18 @@ describe('AgentDetailPage', () => {
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith('/agents/agent-1');
       expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/budgets');
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay?limit=120');
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120');
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/replay?limit=120'
+      );
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120'
+      );
     });
 
     expect(screen.getByRole('heading', { name: 'Ada' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Live Agent Replay' })).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: 'Live Agent Replay' })
+    ).toBeTruthy();
     expect(screen.getByLabelText('Replay task filter')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'heartbeat' })).toBeTruthy();
     expect(screen.getByText('Prepare launch notes (1)')).toBeTruthy();
@@ -460,32 +484,55 @@ describe('AgentDetailPage', () => {
     });
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay?limit=120&task_id=task-1');
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/replay?limit=120&task_id=task-1'
+      );
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'heartbeat' }));
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay?limit=120&task_id=task-1&types=heartbeat');
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120&types=heartbeat');
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/replay?limit=120&task_id=task-1&types=heartbeat'
+      );
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120&types=heartbeat'
+      );
     });
 
     expect(screen.getByText(/Provider:\s*claude/)).toBeTruthy();
     expect(screen.getByText(/Model:\s*claude-sonnet-4-20250514/)).toBeTruthy();
     expect(screen.getByText(/Fallbacks:\s*1/)).toBeTruthy();
     expect(screen.getByText('openai / gpt-4o')).toBeTruthy();
-    expect(screen.getAllByText('Summarized five interview transcripts.').length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryAllByText('Shared the draft findings with the PM.')).toHaveLength(0);
-    expect(screen.getByText('LLM route: claude / claude-sonnet-4-20250514 • fallbacks 1')).toBeTruthy();
+    expect(
+      screen.getAllByText('Summarized five interview transcripts.').length
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.queryAllByText('Shared the draft findings with the PM.')
+    ).toHaveLength(0);
+    expect(
+      screen.getByText(
+        'LLM route: claude / claude-sonnet-4-20250514 • fallbacks 1'
+      )
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Clear filters' })).toBeTruthy();
-    expect(screen.getByText('Research customer pain points vs Prepare launch notes')).toBeTruthy();
+    expect(
+      screen.getByText('Research customer pain points vs Prepare launch notes')
+    ).toBeTruthy();
     expect(screen.getByText('Time-travel fork')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open in Grafana' }).getAttribute('href')).toContain('agent-trace-1234abcd');
+    expect(
+      screen.getByRole('link', { name: 'Open in Grafana' }).getAttribute('href')
+    ).toContain('agent-trace-1234abcd');
 
     fireEvent.change(screen.getByLabelText('Fork prompt override'), {
-      target: { value: 'Re-run this branch, but optimize for concise launch-ready findings.' },
+      target: {
+        value:
+          'Re-run this branch, but optimize for concise launch-ready findings.',
+      },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Fork from this point' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fork from this point' })
+    );
 
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay/fork', {
@@ -494,16 +541,25 @@ describe('AgentDetailPage', () => {
           replay_event_id: 'event-2',
           task_id: 'task-1',
           types: ['heartbeat'],
-          prompt_override: 'Re-run this branch, but optimize for concise launch-ready findings.',
+          prompt_override:
+            'Re-run this branch, but optimize for concise launch-ready findings.',
         }),
       });
     });
 
-    expect(screen.getByText('Fork created as Research customer pain points (Fork).')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open forked task' }).getAttribute('href')).toBe('/tasks/task-fork-1');
+    expect(
+      screen.getByText('Fork created as Research customer pain points (Fork).')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Open forked task' })
+        .getAttribute('href')
+    ).toBe('/tasks/task-fork-1');
     expect(screen.getByText(/Restored 2 messages/)).toBeTruthy();
 
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
     fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
 
     await waitFor(() => {
@@ -524,7 +580,10 @@ describe('AgentDetailPage', () => {
 
   it('deep-links into the source replay event from URL params', async () => {
     render(
-      <MemoryRouter initialEntries={['/agents/agent-1?task_id=task-1&event_id=event-2']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/agents/agent-1?task_id=task-1&event_id=event-2']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/agents/:id" element={<AgentDetailPage />} />
         </Routes>
@@ -532,21 +591,32 @@ describe('AgentDetailPage', () => {
     );
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay?limit=120&task_id=task-1');
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/replay?limit=120&task_id=task-1'
+      );
     });
 
     await waitFor(() => {
       expect(screen.getByText('Source fork event')).toBeTruthy();
     });
 
-    expect((screen.getByLabelText('Replay task filter') as HTMLSelectElement).value).toBe('task-1');
-    expect(screen.getAllByText('Summarized five interview transcripts.').length).toBeGreaterThanOrEqual(1);
+    expect(
+      (screen.getByLabelText('Replay task filter') as HTMLSelectElement).value
+    ).toBe('task-1');
+    expect(
+      screen.getAllByText('Summarized five interview transcripts.').length
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/heartbeat\.completed \|/)).toBeTruthy();
   });
 
   it('explains a failure event in plain language', async () => {
     render(
-      <MemoryRouter initialEntries={['/agents/agent-1?task_id=task-2&types=heartbeat&event_id=event-5']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={[
+          '/agents/agent-1?task_id=task-2&types=heartbeat&event_id=event-5',
+        ]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/agents/:id" element={<AgentDetailPage />} />
         </Routes>
@@ -554,29 +624,44 @@ describe('AgentDetailPage', () => {
     );
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/replay?limit=120&task_id=task-2&types=heartbeat');
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/replay?limit=120&task_id=task-2&types=heartbeat'
+      );
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Explain failure' })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Explain failure' })
+      ).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Explain failure' }));
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-1/failure-explanation', {
-        method: 'POST',
-        body: JSON.stringify({
-          task_id: 'task-2',
-          event_id: 'event-5',
-          types: ['heartbeat'],
-        }),
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-1/failure-explanation',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            task_id: 'task-2',
+            event_id: 'event-5',
+            types: ['heartbeat'],
+          }),
+        }
+      );
     });
 
-    expect(screen.getByText('Provider timeout during launch note generation')).toBeTruthy();
-    expect(screen.getByText('Fallback routing exhausted both providers before a response completed.')).toBeTruthy();
-    expect(screen.getByText('Retry with a smaller prompt or faster model.')).toBeTruthy();
+    expect(
+      screen.getByText('Provider timeout during launch note generation')
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Fallback routing exhausted both providers before a response completed.'
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Retry with a smaller prompt or faster model.')
+    ).toBeTruthy();
     expect(screen.getByText(/high severity/i)).toBeTruthy();
   });
 });

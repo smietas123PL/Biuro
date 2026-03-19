@@ -32,14 +32,16 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
 }));
 
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
-  StdioClientTransport: vi.fn().mockImplementation((config: Record<string, unknown>) => {
-    const transport = {
-      config,
-      close: vi.fn(async () => undefined),
-    };
-    sdkState.transports.push(transport);
-    return transport;
-  }),
+  StdioClientTransport: vi
+    .fn()
+    .mockImplementation((config: Record<string, unknown>) => {
+      const transport = {
+        config,
+        close: vi.fn(async () => undefined),
+      };
+      sdkState.transports.push(transport);
+      return transport;
+    }),
 }));
 
 vi.mock('../src/utils/logger.js', () => ({

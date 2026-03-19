@@ -6,10 +6,16 @@ import { recordHttpRequestMetric } from './metrics.js';
 function normalizeRoute(req: express.Request) {
   const routePath = typeof req.route?.path === 'string' ? req.route.path : '';
   const baseUrl = req.baseUrl || '';
-  return routePath ? `${baseUrl}${routePath}` || routePath : req.path || req.originalUrl || 'unknown';
+  return routePath
+    ? `${baseUrl}${routePath}` || routePath
+    : req.path || req.originalUrl || 'unknown';
 }
 
-export function observabilityMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+export function observabilityMiddleware(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) {
   const startedAt = performance.now();
 
   void startActiveSpan(
@@ -31,10 +37,15 @@ export function observabilityMiddleware(req: express.Request, res: express.Respo
 
           span.setAttribute('http.route', route);
           span.setAttribute('http.status_code', res.statusCode);
-          span.setAttribute('http.response_content_length', Number(res.getHeader('content-length') || 0));
+          span.setAttribute(
+            'http.response_content_length',
+            Number(res.getHeader('content-length') || 0)
+          );
           span.setStatus({
-            code: res.statusCode >= 500 ? SpanStatusCode.ERROR : SpanStatusCode.OK,
-            message: res.statusCode >= 500 ? `HTTP ${res.statusCode}` : undefined,
+            code:
+              res.statusCode >= 500 ? SpanStatusCode.ERROR : SpanStatusCode.OK,
+            message:
+              res.statusCode >= 500 ? `HTTP ${res.statusCode}` : undefined,
           });
 
           recordHttpRequestMetric({
@@ -53,10 +64,12 @@ export function observabilityMiddleware(req: express.Request, res: express.Respo
 }
 
 export function metricsHandler(_req: express.Request, res: express.Response) {
-  void import('./metrics.js').then(async ({ metricsRegistry, renderMetrics }) => {
-    res.setHeader('Content-Type', metricsRegistry.contentType);
-    res.send(await renderMetrics());
-  });
+  void import('./metrics.js').then(
+    async ({ metricsRegistry, renderMetrics }) => {
+      res.setHeader('Content-Type', metricsRegistry.contentType);
+      res.send(await renderMetrics());
+    }
+  );
 }
 
 export function traceIdHandler(_req: express.Request, res: express.Response) {

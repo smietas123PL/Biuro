@@ -7,14 +7,23 @@ const dbMock = vi.hoisted(() => ({
   transaction: vi.fn(),
 }));
 const runtimeExecuteMock = vi.hoisted(() => vi.fn());
-const getRuntimeMock = vi.hoisted(() => vi.fn(() => ({ execute: runtimeExecuteMock })));
+const getRuntimeMock = vi.hoisted(() =>
+  vi.fn(() => ({ execute: runtimeExecuteMock }))
+);
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 vi.mock('../src/runtime/registry.js', () => ({
@@ -72,8 +81,14 @@ describe('template routes', () => {
         };
       }
 
-      if (text === 'UPDATE companies SET name = $1, mission = $2 WHERE id = $3') {
-        expect(params).toEqual(['Future Corp', 'Import templates safely', 'company-1']);
+      if (
+        text === 'UPDATE companies SET name = $1, mission = $2 WHERE id = $3'
+      ) {
+        expect(params).toEqual([
+          'Future Corp',
+          'Import templates safely',
+          'company-1',
+        ]);
         return { rows: [], rowCount: 1 };
       }
 
@@ -102,10 +117,13 @@ describe('template routes', () => {
       throw new Error(`Unexpected transaction query: ${text}`);
     });
 
-    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof clientQueryMock }) => Promise<unknown>) =>
-      fn({
-        query: clientQueryMock,
-      } as never)
+    dbMock.transaction.mockImplementation(
+      async (
+        fn: (client: { query: typeof clientQueryMock }) => Promise<unknown>
+      ) =>
+        fn({
+          query: clientQueryMock,
+        } as never)
     );
     dbMock.query.mockResolvedValue({ rows: [], rowCount: 1 });
 
@@ -152,8 +170,12 @@ describe('template routes', () => {
     expect(dbMock.transaction).toHaveBeenCalledTimes(1);
     expect(clientQueryMock).toHaveBeenCalled();
     expect(dbMock.query).toHaveBeenCalledTimes(1);
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('template.imported');
-    expect(JSON.parse(String(dbMock.query.mock.calls[0]?.[1]?.[1]))).toMatchObject({
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'template.imported'
+    );
+    expect(
+      JSON.parse(String(dbMock.query.mock.calls[0]?.[1]?.[1]))
+    ).toMatchObject({
       source: 'custom',
       template_version: '1.1',
       preserve_company_identity: false,
@@ -169,7 +191,8 @@ describe('template routes', () => {
     runtimeExecuteMock.mockResolvedValue({
       thought: JSON.stringify({
         title: 'Review competitor pricing changes',
-        description: 'Inspect recent competitor pricing updates and summarize any meaningful shifts for the team.',
+        description:
+          'Inspect recent competitor pricing updates and summarize any meaningful shifts for the team.',
         priority: 72,
         default_role: 'researcher',
         suggested_agent_id: '11111111-1111-4111-8111-111111111111',
@@ -205,7 +228,10 @@ describe('template routes', () => {
               id: 'company-1',
               name: 'QA Test Corp',
               mission: 'Ship reliable software',
-              config: { llm_primary_runtime: 'claude', llm_fallback_order: ['openai', 'gemini'] },
+              config: {
+                llm_primary_runtime: 'claude',
+                llm_fallback_order: ['openai', 'gemini'],
+              },
             },
           ],
         };
@@ -252,7 +278,8 @@ describe('template routes', () => {
         'x-company-id': 'company-1',
       },
       body: JSON.stringify({
-        prompt: 'sprawdz czy konkurencja obniżyła ceny i przygotuj krótkie podsumowanie',
+        prompt:
+          'sprawdz czy konkurencja obniżyła ceny i przygotuj krótkie podsumowanie',
       }),
     });
 

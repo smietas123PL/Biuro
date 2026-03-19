@@ -6,7 +6,10 @@ export type MetricsServerHandle = {
   close: () => Promise<void>;
 };
 
-export function startMetricsServer(port: number, serviceName: string): MetricsServerHandle | null {
+export function startMetricsServer(
+  port: number,
+  serviceName: string
+): MetricsServerHandle | null {
   if (port <= 0) {
     logger.info({ serviceName }, 'Dedicated metrics server disabled');
     return null;

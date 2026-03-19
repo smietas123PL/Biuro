@@ -1,12 +1,33 @@
 import express from 'express';
 import { createServer, type Server } from 'http';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { metricsHandler, observabilityMiddleware } from '../src/observability/http.js';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
+  metricsHandler,
+  observabilityMiddleware,
+} from '../src/observability/http.js';
 import observabilityRouter from '../src/routes/observability.js';
-import { initializeTracing, startActiveSpan } from '../src/observability/tracing.js';
+import {
+  initializeTracing,
+  startActiveSpan,
+} from '../src/observability/tracing.js';
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 describe('observability routes', () => {
@@ -70,26 +91,40 @@ describe('observability routes', () => {
 
   it('returns recent spans from the in-memory OpenTelemetry exporter', async () => {
     const spanName = `test.operation.${Date.now()}`;
-    await startActiveSpan(spanName, { 'test.case': 'recent-traces' }, async () => 'ok');
+    await startActiveSpan(
+      spanName,
+      { 'test.case': 'recent-traces' },
+      async () => 'ok'
+    );
 
-    const response = await fetch(`${baseUrl}/api/observability/traces/recent?limit=10`);
+    const response = await fetch(
+      `${baseUrl}/api/observability/traces/recent?limit=10`
+    );
     const payload = await response.json();
 
     expect(response.status).toBe(200);
     expect(payload.service).toBeTruthy();
     expect(Array.isArray(payload.items)).toBe(true);
-    expect(payload.items.some((item: { name: string }) => item.name === spanName)).toBe(true);
+    expect(
+      payload.items.some((item: { name: string }) => item.name === spanName)
+    ).toBe(true);
   });
 
   it('returns a trace drilldown grouped by trace id', async () => {
     let traceId = '';
-    await startActiveSpan(`trace.parent.${Date.now()}`, { 'test.case': 'trace-detail' }, async (span) => {
-      traceId = span.spanContext().traceId;
-      span.addEvent('parent-started');
-      return 'ok';
-    });
+    await startActiveSpan(
+      `trace.parent.${Date.now()}`,
+      { 'test.case': 'trace-detail' },
+      async (span) => {
+        traceId = span.spanContext().traceId;
+        span.addEvent('parent-started');
+        return 'ok';
+      }
+    );
 
-    const response = await fetch(`${baseUrl}/api/observability/traces/${traceId}`);
+    const response = await fetch(
+      `${baseUrl}/api/observability/traces/${traceId}`
+    );
     const payload = await response.json();
 
     expect(response.status).toBe(200);

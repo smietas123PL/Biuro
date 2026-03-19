@@ -123,6 +123,10 @@ export async function enqueueCompanyWakeup(
     agentId?: string | null;
   }
 ) {
+  if ((!queueReady || !queueClient) && env.REDIS_URL) {
+    await initializeSchedulerQueue();
+  }
+
   if (!queueReady || !queueClient) {
     return false;
   }

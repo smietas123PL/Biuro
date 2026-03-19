@@ -222,9 +222,7 @@
       "id": 4,
       "options": {
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -272,9 +270,7 @@
       "id": 5,
       "options": {
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -402,10 +398,7 @@
   "refresh": "15s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": [
-    "biuro",
-    "observability"
-  ],
+  "tags": ["biuro", "observability"],
   "templating": {
     "list": []
   },

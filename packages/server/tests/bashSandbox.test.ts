@@ -1,6 +1,9 @@
 import path from 'path';
 import { describe, expect, it } from 'vitest';
-import { buildDockerSandboxArgs, validateSandboxedCommand } from '../src/tools/bashSandbox.js';
+import {
+  buildDockerSandboxArgs,
+  validateSandboxedCommand,
+} from '../src/tools/bashSandbox.js';
 
 describe('bash sandbox', () => {
   it('builds a locked-down docker run command with disabled network and readonly mounts', () => {
@@ -21,11 +24,19 @@ describe('bash sandbox', () => {
     expect(args).toContain('/tmp:rw,noexec,nosuid,size=64m');
     expect(args).toContain('--workdir');
     expect(args).toContain('/workspace/packages/server');
-    expect(args.some((value) => value.includes(`dst=/workspace,readonly`))).toBe(true);
-    expect(args.some((value) => value.includes('dst=/workspace/tmp-test-artifacts'))).toBe(true);
+    expect(
+      args.some((value) => value.includes(`dst=/workspace,readonly`))
+    ).toBe(true);
+    expect(
+      args.some((value) => value.includes('dst=/workspace/tmp-test-artifacts'))
+    ).toBe(true);
     expect(args).toContain('--entrypoint');
     expect(args).toContain('sh');
-    expect(args.slice(-3)).toEqual(['alpine/git:2.47.2', '-lc', 'git status --short']);
+    expect(args.slice(-3)).toEqual([
+      'alpine/git:2.47.2',
+      '-lc',
+      'git status --short',
+    ]);
   });
 
   it('rejects shell control operators that could break command isolation', () => {
@@ -34,6 +45,18 @@ describe('bash sandbox', () => {
     );
     expect(() => validateSandboxedCommand('pwd; cat /etc/passwd')).toThrow(
       'Unsafe shell control operators are not allowed'
+    );
+  });
+
+  it('rejects commands outside the sandbox allowlist or direct script execution paths', () => {
+    expect(() => validateSandboxedCommand('curl https://example.com')).toThrow(
+      'Command "curl" is not in the sandbox allowlist'
+    );
+    expect(() => validateSandboxedCommand('./scripts/run.sh')).toThrow(
+      'Direct script execution paths are not allowed in sandboxed commands'
+    );
+    expect(() => validateSandboxedCommand('NODE_ENV=test git status')).toThrow(
+      'Inline environment overrides are not allowed in sandboxed commands'
     );
   });
 });

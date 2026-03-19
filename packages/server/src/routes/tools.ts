@@ -39,7 +39,10 @@ const testToolSchema = z.object({
   input: z.record(z.any()).optional(),
 });
 
-function getCompanyId(req: { params: Record<string, unknown>; query: Record<string, unknown> }) {
+function getCompanyId(req: {
+  params: Record<string, unknown>;
+  query: Record<string, unknown>;
+}) {
   return (
     (typeof req.params.companyId === 'string' && req.params.companyId) ||
     (typeof req.query.company_id === 'string' && req.query.company_id) ||
@@ -87,7 +90,10 @@ async function listAgentsForTool(toolIds: string[]) {
     [toolIds]
   );
 
-  const assignments = new Map<string, Array<{ agent_id: string; agent_name: string }>>();
+  const assignments = new Map<
+    string,
+    Array<{ agent_id: string; agent_name: string }>
+  >();
   for (const row of result.rows) {
     const items = assignments.get(row.tool_id as string) ?? [];
     items.push({
@@ -110,7 +116,13 @@ router.post('/', requireRole(['owner', 'admin']), async (req, res, next) => {
       `INSERT INTO tools (company_id, name, description, type, config)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [company_id, name, description ?? null, type, JSON.stringify(config || {})]
+      [
+        company_id,
+        name,
+        description ?? null,
+        type,
+        JSON.stringify(config || {}),
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -118,42 +130,53 @@ router.post('/', requireRole(['owner', 'admin']), async (req, res, next) => {
   }
 });
 
-router.post('/seed', requireRole(['owner', 'admin']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
+router.post(
+  '/seed',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
 
-    const summary = await db.transaction((client) => seedDefaultTools(client, companyId));
-    res.status(201).json(summary);
-  } catch (err) {
-    next(err);
+      const summary = await db.transaction((client) =>
+        seedDefaultTools(client, companyId)
+      );
+      res.status(201).json(summary);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 // List tools for company
-router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
+router.get(
+  '/',
+  requireRole(['owner', 'admin', 'member', 'viewer']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
 
-    const result = await db.query(
-      `SELECT t.*, COUNT(at.agent_id)::int AS agent_count
+      const result = await db.query(
+        `SELECT t.*, COUNT(at.agent_id)::int AS agent_count
        FROM tools t
        LEFT JOIN agent_tools at ON at.tool_id = t.id
        WHERE t.company_id = $1
        GROUP BY t.id
        ORDER BY t.created_at ASC`,
-      [companyId]
-    );
+        [companyId]
+      );
 
-    const toolIds = result.rows.map((row) => row.id as string);
-    if (toolIds.length === 0) {
-      return res.json([]);
-    }
+      const toolIds = result.rows.map((row) => row.id as string);
+      if (toolIds.length === 0) {
+        return res.json([]);
+      }
 
-    const [callResult, assignmentMap] = await Promise.all([
-      db.query(
-        `SELECT
+      const [callResult, assignmentMap] = await Promise.all([
+        db.query(
+          `SELECT
            tc.id,
            tc.tool_id,
            tc.task_id,
@@ -171,257 +194,318 @@ router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req,
          LEFT JOIN agents a ON a.id = tc.agent_id
          WHERE t.company_id = $1
          ORDER BY tc.created_at DESC`,
-        [companyId]
-      ),
-      listAgentsForTool(toolIds),
-    ]);
+          [companyId]
+        ),
+        listAgentsForTool(toolIds),
+      ]);
 
-    const callsByToolId = new Map<string, Array<ReturnType<typeof mapToolCallRow>>>();
+      const callsByToolId = new Map<
+        string,
+        Array<ReturnType<typeof mapToolCallRow>>
+      >();
 
-    for (const row of callResult.rows) {
-      const toolId = row.tool_id as string;
-      const entries = callsByToolId.get(toolId) ?? [];
-      entries.push(mapToolCallRow(row));
-      callsByToolId.set(toolId, entries);
+      for (const row of callResult.rows) {
+        const toolId = row.tool_id as string;
+        const entries = callsByToolId.get(toolId) ?? [];
+        entries.push(mapToolCallRow(row));
+        callsByToolId.set(toolId, entries);
+      }
+
+      const payload = result.rows.map((tool) => {
+        const toolCalls = callsByToolId.get(tool.id as string) ?? [];
+        const successCount = toolCalls.filter(
+          (entry) => entry.status === 'success'
+        ).length;
+        const errorCount = toolCalls.filter(
+          (entry) => entry.status === 'error'
+        ).length;
+        const lastCall = toolCalls[0] ?? null;
+
+        return {
+          ...tool,
+          assigned_agents: assignmentMap.get(tool.id as string) ?? [],
+          usage: {
+            total_calls: toolCalls.length,
+            success_count: successCount,
+            error_count: errorCount,
+            last_called_at: lastCall?.created_at ?? null,
+            last_status: lastCall?.status ?? null,
+          },
+          recent_calls: toolCalls.slice(0, 5),
+        };
+      });
+
+      res.json(payload);
+    } catch (err) {
+      next(err);
     }
-
-    const payload = result.rows.map((tool) => {
-      const toolCalls = callsByToolId.get(tool.id as string) ?? [];
-      const successCount = toolCalls.filter((entry) => entry.status === 'success').length;
-      const errorCount = toolCalls.filter((entry) => entry.status === 'error').length;
-      const lastCall = toolCalls[0] ?? null;
-
-      return {
-        ...tool,
-        assigned_agents: assignmentMap.get(tool.id as string) ?? [],
-        usage: {
-          total_calls: toolCalls.length,
-          success_count: successCount,
-          error_count: errorCount,
-          last_called_at: lastCall?.created_at ?? null,
-          last_status: lastCall?.status ?? null,
-        },
-        recent_calls: toolCalls.slice(0, 5),
-      };
-    });
-
-    res.json(payload);
-  } catch (err) {
-    next(err);
   }
-});
+);
 
-router.patch('/:toolId', requireRole(['owner', 'admin']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
+router.patch(
+  '/:toolId',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
 
-    const parsed = updateToolSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const parsed = updateToolSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
-    const toolId = typeof req.params.toolId === 'string' ? req.params.toolId : '';
-    const current = await getToolOr404(toolId, companyId);
-    if (!current) return res.status(404).json({ error: 'Tool not found' });
+      const toolId =
+        typeof req.params.toolId === 'string' ? req.params.toolId : '';
+      const current = await getToolOr404(toolId, companyId);
+      if (!current) return res.status(404).json({ error: 'Tool not found' });
 
-    const nextValues = parsed.data;
-    const result = await db.query(
-      `UPDATE tools
+      const nextValues = parsed.data;
+      const result = await db.query(
+        `UPDATE tools
        SET name = $3,
            description = $4,
            type = $5,
            config = $6
        WHERE id = $1 AND company_id = $2
        RETURNING *`,
-      [
-        toolId,
-        companyId,
-        nextValues.name ?? current.name,
-        nextValues.description === undefined ? (current.description ?? null) : nextValues.description,
-        nextValues.type ?? current.type,
-        JSON.stringify(nextValues.config ?? current.config ?? {}),
-      ]
-    );
+        [
+          toolId,
+          companyId,
+          nextValues.name ?? current.name,
+          nextValues.description === undefined
+            ? (current.description ?? null)
+            : nextValues.description,
+          nextValues.type ?? current.type,
+          JSON.stringify(nextValues.config ?? current.config ?? {}),
+        ]
+      );
 
-    res.json(result.rows[0]);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.delete('/:toolId', requireRole(['owner', 'admin']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
-
-    const toolId = typeof req.params.toolId === 'string' ? req.params.toolId : '';
-    const current = await getToolOr404(toolId, companyId);
-    if (!current) return res.status(404).json({ error: 'Tool not found' });
-
-    await db.transaction(async (client) => {
-      await client.query('DELETE FROM agent_tools WHERE tool_id = $1', [toolId]);
-      await client.query('DELETE FROM tool_calls WHERE tool_id = $1', [toolId]);
-      await client.query('DELETE FROM tools WHERE id = $1 AND company_id = $2', [toolId, companyId]);
-    });
-
-    res.json({ ok: true, deleted_tool_id: toolId });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post('/:toolId/test', requireRole(['owner', 'admin']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
-
-    const parsed = testToolSchema.safeParse(req.body ?? {});
-    if (!parsed.success) return res.status(400).json({ error: parsed.error });
-
-    const toolId = typeof req.params.toolId === 'string' ? req.params.toolId : '';
-    const tool = await getToolOr404(toolId, companyId);
-    if (!tool) return res.status(404).json({ error: 'Tool not found' });
-
-    const startedAt = Date.now();
-
-    try {
-      const output = await executeStandaloneTool(tool, parsed.data.input ?? {});
-      res.json({
-        ok: true,
-        tool_id: toolId,
-        duration_ms: Date.now() - startedAt,
-        output,
-      });
-    } catch (err: any) {
-      res.status(502).json({
-        ok: false,
-        tool_id: toolId,
-        duration_ms: Date.now() - startedAt,
-        error: err.message || 'Tool test failed',
-        output: err.output ?? null,
-        status: err.status ?? null,
-      });
+      res.json(result.rows[0]);
+    } catch (err) {
+      next(err);
     }
-  } catch (err) {
-    next(err);
   }
-});
+);
 
-router.post('/:toolId/assign', requireRole(['owner', 'admin']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
+router.delete(
+  '/:toolId',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
 
-    const parsed = assignToolSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const toolId =
+        typeof req.params.toolId === 'string' ? req.params.toolId : '';
+      const current = await getToolOr404(toolId, companyId);
+      if (!current) return res.status(404).json({ error: 'Tool not found' });
 
-    const toolId = typeof req.params.toolId === 'string' ? req.params.toolId : '';
-    const tool = await getToolOr404(toolId, companyId);
-    if (!tool) return res.status(404).json({ error: 'Tool not found' });
+      await db.transaction(async (client) => {
+        await client.query('DELETE FROM agent_tools WHERE tool_id = $1', [
+          toolId,
+        ]);
+        await client.query('DELETE FROM tool_calls WHERE tool_id = $1', [
+          toolId,
+        ]);
+        await client.query(
+          'DELETE FROM tools WHERE id = $1 AND company_id = $2',
+          [toolId, companyId]
+        );
+      });
 
-    const agentResult = await db.query(
-      'SELECT id, name FROM agents WHERE id = $1 AND company_id = $2',
-      [parsed.data.agent_id, companyId]
-    );
-    if (agentResult.rows.length === 0) return res.status(404).json({ error: 'Agent not found' });
+      res.json({ ok: true, deleted_tool_id: toolId });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
-    await db.query(
-      `INSERT INTO agent_tools (agent_id, tool_id, can_execute, config)
+router.post(
+  '/:toolId/test',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
+
+      const parsed = testToolSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      const toolId =
+        typeof req.params.toolId === 'string' ? req.params.toolId : '';
+      const tool = await getToolOr404(toolId, companyId);
+      if (!tool) return res.status(404).json({ error: 'Tool not found' });
+
+      const startedAt = Date.now();
+
+      try {
+        const output = await executeStandaloneTool(
+          tool,
+          parsed.data.input ?? {}
+        );
+        res.json({
+          ok: true,
+          tool_id: toolId,
+          duration_ms: Date.now() - startedAt,
+          output,
+        });
+      } catch (err: any) {
+        res.status(502).json({
+          ok: false,
+          tool_id: toolId,
+          duration_ms: Date.now() - startedAt,
+          error: err.message || 'Tool test failed',
+          output: err.output ?? null,
+          status: err.status ?? null,
+        });
+      }
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
+  '/:toolId/assign',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
+
+      const parsed = assignToolSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      const toolId =
+        typeof req.params.toolId === 'string' ? req.params.toolId : '';
+      const tool = await getToolOr404(toolId, companyId);
+      if (!tool) return res.status(404).json({ error: 'Tool not found' });
+
+      const agentResult = await db.query(
+        'SELECT id, name FROM agents WHERE id = $1 AND company_id = $2',
+        [parsed.data.agent_id, companyId]
+      );
+      if (agentResult.rows.length === 0)
+        return res.status(404).json({ error: 'Agent not found' });
+
+      await db.query(
+        `INSERT INTO agent_tools (agent_id, tool_id, can_execute, config)
        VALUES ($1, $2, true, '{}'::jsonb)
        ON CONFLICT (agent_id, tool_id) DO NOTHING`,
-      [parsed.data.agent_id, toolId]
-    );
+        [parsed.data.agent_id, toolId]
+      );
 
-    res.status(201).json({
-      ok: true,
-      tool_id: toolId,
-      agent: agentResult.rows[0],
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.delete('/:toolId/assign/:agentId', requireRole(['owner', 'admin']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
-
-    const toolId = typeof req.params.toolId === 'string' ? req.params.toolId : '';
-    const agentId = typeof req.params.agentId === 'string' ? req.params.agentId : '';
-
-    const tool = await getToolOr404(toolId, companyId);
-    if (!tool) return res.status(404).json({ error: 'Tool not found' });
-
-    const agentResult = await db.query(
-      'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
-      [agentId, companyId]
-    );
-    if (agentResult.rows.length === 0) return res.status(404).json({ error: 'Agent not found' });
-
-    await db.query('DELETE FROM agent_tools WHERE tool_id = $1 AND agent_id = $2', [toolId, agentId]);
-    res.json({ ok: true, tool_id: toolId, agent_id: agentId });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get('/:toolId/calls', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req);
-    if (!companyId) return res.status(400).json({ error: 'Missing company_id' });
-
-    const parsedQuery = toolCallsQuerySchema.safeParse(req.query);
-    if (!parsedQuery.success) {
-      return res.status(400).json({ error: parsedQuery.error });
+      res.status(201).json({
+        ok: true,
+        tool_id: toolId,
+        agent: agentResult.rows[0],
+      });
+    } catch (err) {
+      next(err);
     }
+  }
+);
 
-    const toolId = typeof req.params.toolId === 'string' ? req.params.toolId : '';
-    if (!toolId) {
-      return res.status(400).json({ error: 'Missing tool_id' });
+router.delete(
+  '/:toolId/assign/:agentId',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
+
+      const toolId =
+        typeof req.params.toolId === 'string' ? req.params.toolId : '';
+      const agentId =
+        typeof req.params.agentId === 'string' ? req.params.agentId : '';
+
+      const tool = await getToolOr404(toolId, companyId);
+      if (!tool) return res.status(404).json({ error: 'Tool not found' });
+
+      const agentResult = await db.query(
+        'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+        [agentId, companyId]
+      );
+      if (agentResult.rows.length === 0)
+        return res.status(404).json({ error: 'Agent not found' });
+
+      await db.query(
+        'DELETE FROM agent_tools WHERE tool_id = $1 AND agent_id = $2',
+        [toolId, agentId]
+      );
+      res.json({ ok: true, tool_id: toolId, agent_id: agentId });
+    } catch (err) {
+      next(err);
     }
+  }
+);
 
-    const toolResult = await db.query(
-      `SELECT id, company_id, name, description, type, created_at
+router.get(
+  '/:toolId/calls',
+  requireRole(['owner', 'admin', 'member', 'viewer']),
+  async (req, res, next) => {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId)
+        return res.status(400).json({ error: 'Missing company_id' });
+
+      const parsedQuery = toolCallsQuerySchema.safeParse(req.query);
+      if (!parsedQuery.success) {
+        return res.status(400).json({ error: parsedQuery.error });
+      }
+
+      const toolId =
+        typeof req.params.toolId === 'string' ? req.params.toolId : '';
+      if (!toolId) {
+        return res.status(400).json({ error: 'Missing tool_id' });
+      }
+
+      const toolResult = await db.query(
+        `SELECT id, company_id, name, description, type, created_at
        FROM tools
        WHERE id = $1 AND company_id = $2`,
-      [toolId, companyId]
-    );
+        [toolId, companyId]
+      );
 
-    if (toolResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Tool not found' });
-    }
+      if (toolResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Tool not found' });
+      }
 
-    const { status, agent_id, page, limit } = parsedQuery.data;
-    const filters: string[] = ['tc.tool_id = $1'];
-    const params: any[] = [toolId];
+      const { status, agent_id, page, limit } = parsedQuery.data;
+      const filters: string[] = ['tc.tool_id = $1'];
+      const params: any[] = [toolId];
 
-    if (status) {
-      params.push(status);
-      filters.push(`tc.status = $${params.length}`);
-    }
+      if (status) {
+        params.push(status);
+        filters.push(`tc.status = $${params.length}`);
+      }
 
-    if (agent_id) {
-      params.push(agent_id);
-      filters.push(`tc.agent_id = $${params.length}`);
-    }
+      if (agent_id) {
+        params.push(agent_id);
+        filters.push(`tc.agent_id = $${params.length}`);
+      }
 
-    const whereClause = filters.join(' AND ');
+      const whereClause = filters.join(' AND ');
 
-    const countResult = await db.query(
-      `SELECT
+      const countResult = await db.query(
+        `SELECT
          COUNT(*)::int AS total,
          COUNT(*) FILTER (WHERE tc.status = 'success')::int AS success_count,
          COUNT(*) FILTER (WHERE tc.status = 'error')::int AS error_count,
          MAX(tc.created_at) AS last_called_at
        FROM tool_calls tc
        WHERE ${whereClause}`,
-      params
-    );
+        params
+      );
 
-    const offset = (page - 1) * limit;
-    const listParams = [...params, limit, offset];
-    const callResult = await db.query(
-      `SELECT
+      const offset = (page - 1) * limit;
+      const listParams = [...params, limit, offset];
+      const callResult = await db.query(
+        `SELECT
          tc.id,
          tc.task_id,
          tc.agent_id,
@@ -438,41 +522,42 @@ router.get('/:toolId/calls', requireRole(['owner', 'admin', 'member', 'viewer'])
        WHERE ${whereClause}
        ORDER BY tc.created_at DESC
        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
-      listParams
-    );
+        listParams
+      );
 
-    const summaryRow = countResult.rows[0] ?? {
-      total: 0,
-      success_count: 0,
-      error_count: 0,
-      last_called_at: null,
-    };
-    const total = Number(summaryRow.total ?? 0);
+      const summaryRow = countResult.rows[0] ?? {
+        total: 0,
+        success_count: 0,
+        error_count: 0,
+        last_called_at: null,
+      };
+      const total = Number(summaryRow.total ?? 0);
 
-    res.json({
-      tool: toolResult.rows[0],
-      filters: {
-        status: status ?? null,
-        agent_id: agent_id ?? null,
-      },
-      pagination: {
-        page,
-        limit,
-        total,
-        total_pages: total === 0 ? 0 : Math.ceil(total / limit),
-        has_more: offset + callResult.rows.length < total,
-      },
-      summary: {
-        total_calls: total,
-        success_count: Number(summaryRow.success_count ?? 0),
-        error_count: Number(summaryRow.error_count ?? 0),
-        last_called_at: summaryRow.last_called_at ?? null,
-      },
-      items: callResult.rows.map((row) => mapToolCallRow(row)),
-    });
-  } catch (err) {
-    next(err);
+      res.json({
+        tool: toolResult.rows[0],
+        filters: {
+          status: status ?? null,
+          agent_id: agent_id ?? null,
+        },
+        pagination: {
+          page,
+          limit,
+          total,
+          total_pages: total === 0 ? 0 : Math.ceil(total / limit),
+          has_more: offset + callResult.rows.length < total,
+        },
+        summary: {
+          total_calls: total,
+          success_count: Number(summaryRow.success_count ?? 0),
+          error_count: Number(summaryRow.error_count ?? 0),
+          last_called_at: summaryRow.last_called_at ?? null,
+        },
+        items: callResult.rows.map((row) => mapToolCallRow(row)),
+      });
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 export default router;

@@ -53,7 +53,9 @@ describe('evaluatePolicy integration flows', () => {
     });
 
     await expect(
-      evaluatePolicy('company-1', 'tool_restriction', { tool_name: 'bash.exec' })
+      evaluatePolicy('company-1', 'tool_restriction', {
+        tool_name: 'bash.exec',
+      })
     ).resolves.toEqual({
       allowed: false,
       requires_approval: false,

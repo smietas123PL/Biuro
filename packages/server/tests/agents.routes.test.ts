@@ -12,7 +12,14 @@ vi.mock('../src/db/client.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
@@ -28,7 +35,15 @@ describe('agent routes', () => {
   function mockReplayQueries() {
     dbMock.query
       .mockResolvedValueOnce({
-        rows: [{ id: 'agent-1', company_id: 'company-1', name: 'Ada', role: 'Research Lead', status: 'active' }],
+        rows: [
+          {
+            id: 'agent-1',
+            company_id: 'company-1',
+            name: 'Ada',
+            role: 'Research Lead',
+            status: 'active',
+          },
+        ],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -97,7 +112,15 @@ describe('agent routes', () => {
   function mockReplayDiffQueries() {
     dbMock.query
       .mockResolvedValueOnce({
-        rows: [{ id: 'agent-1', company_id: 'company-1', name: 'Ada', role: 'Research Lead', status: 'active' }],
+        rows: [
+          {
+            id: 'agent-1',
+            company_id: 'company-1',
+            name: 'Ada',
+            role: 'Research Lead',
+            status: 'active',
+          },
+        ],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -151,7 +174,15 @@ describe('agent routes', () => {
         ],
       })
       .mockResolvedValueOnce({
-        rows: [{ id: 'agent-1', company_id: 'company-1', name: 'Ada', role: 'Research Lead', status: 'active' }],
+        rows: [
+          {
+            id: 'agent-1',
+            company_id: 'company-1',
+            name: 'Ada',
+            role: 'Research Lead',
+            status: 'active',
+          },
+        ],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -302,10 +333,16 @@ describe('agent routes', () => {
     );
 
     expect(dbMock.query).toHaveBeenCalledTimes(5);
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('FROM heartbeats h');
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      'FROM heartbeats h'
+    );
     expect(String(dbMock.query.mock.calls[2]?.[0])).toContain('FROM audit_log');
-    expect(String(dbMock.query.mock.calls[3]?.[0])).toContain('FROM messages m');
-    expect(String(dbMock.query.mock.calls[4]?.[0])).toContain('FROM agent_sessions s');
+    expect(String(dbMock.query.mock.calls[3]?.[0])).toContain(
+      'FROM messages m'
+    );
+    expect(String(dbMock.query.mock.calls[4]?.[0])).toContain(
+      'FROM agent_sessions s'
+    );
   });
 
   it('exports the filtered replay as an HTML attachment', async () => {
@@ -317,7 +354,9 @@ describe('agent routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
-    expect(response.headers.get('content-disposition')).toContain('attachment; filename=');
+    expect(response.headers.get('content-disposition')).toContain(
+      'attachment; filename='
+    );
 
     const html = await response.text();
     expect(html).toContain('Biuro Replay Report');
@@ -387,9 +426,20 @@ describe('agent routes', () => {
 
   it('creates a replay fork task from a historical event and enqueues a rerun', async () => {
     dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
-      if (text === 'SELECT id, company_id, name, role, status FROM agents WHERE id = $1') {
+      if (
+        text ===
+        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1'
+      ) {
         return {
-          rows: [{ id: 'agent-1', company_id: 'company-1', name: 'Ada', role: 'Research Lead', status: 'active' }],
+          rows: [
+            {
+              id: 'agent-1',
+              company_id: 'company-1',
+              name: 'Ada',
+              role: 'Research Lead',
+              status: 'active',
+            },
+          ],
         };
       }
 
@@ -456,7 +506,10 @@ describe('agent routes', () => {
         };
       }
 
-      if (String(text).includes('FROM tasks') && String(text).includes('WHERE id = $1')) {
+      if (
+        String(text).includes('FROM tasks') &&
+        String(text).includes('WHERE id = $1')
+      ) {
         return {
           rows: [
             {
@@ -472,7 +525,10 @@ describe('agent routes', () => {
         };
       }
 
-      if (String(text).includes('FROM messages') && String(text).includes('created_at <=')) {
+      if (
+        String(text).includes('FROM messages') &&
+        String(text).includes('created_at <=')
+      ) {
         return {
           rows: [
             {
@@ -493,7 +549,13 @@ describe('agent routes', () => {
         expect(params?.[3]).toBe('Research customer pain points (Fork)');
         expect(params?.[5]).toBe('agent-1');
         return {
-          rows: [{ id: 'task-fork-1', title: 'Research customer pain points (Fork)', company_id: 'company-1' }],
+          rows: [
+            {
+              id: 'task-fork-1',
+              title: 'Research customer pain points (Fork)',
+              company_id: 'company-1',
+            },
+          ],
         };
       }
 
@@ -503,7 +565,9 @@ describe('agent routes', () => {
 
       if (String(text).includes('INSERT INTO agent_sessions')) {
         expect(String(params?.[2])).toContain('forked_from');
-        expect(String(params?.[2])).toContain('Try a more decisive recommendation');
+        expect(String(params?.[2])).toContain(
+          'Try a more decisive recommendation'
+        );
         return { rows: [] };
       }
 
@@ -538,9 +602,13 @@ describe('agent routes', () => {
       seeded_session: true,
       prompt_override_applied: true,
     });
-    expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith('company-1', 'replay_fork_created', {
-      taskId: 'task-fork-1',
-      agentId: 'agent-1',
-    });
+    expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith(
+      'company-1',
+      'replay_fork_created',
+      {
+        taskId: 'task-fork-1',
+        agentId: 'agent-1',
+      }
+    );
   });
 });

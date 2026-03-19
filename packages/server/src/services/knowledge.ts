@@ -16,7 +16,11 @@ function buildSearchTerms(query: string) {
     .slice(0, 6);
 }
 
-async function searchLexically(companyId: string, normalizedQuery: string, limit: number) {
+async function searchLexically(
+  companyId: string,
+  normalizedQuery: string,
+  limit: number
+) {
   const terms = buildSearchTerms(normalizedQuery);
   const exactPattern = `%${normalizedQuery.replace(/\s+/g, '%')}%`;
   const params: any[] = [companyId, exactPattern];
@@ -29,7 +33,10 @@ async function searchLexically(companyId: string, normalizedQuery: string, limit
   for (const term of terms) {
     params.push(`%${term}%`);
     const paramIndex = params.length;
-    termConditions.push(`title ILIKE $${paramIndex}`, `content ILIKE $${paramIndex}`);
+    termConditions.push(
+      `title ILIKE $${paramIndex}`,
+      `content ILIKE $${paramIndex}`
+    );
     scoreParts.push(
       `CASE WHEN title ILIKE $${paramIndex} THEN 3 ELSE 0 END`,
       `CASE WHEN content ILIKE $${paramIndex} THEN 1 ELSE 0 END`
@@ -54,7 +61,11 @@ async function searchLexically(companyId: string, normalizedQuery: string, limit
   );
 }
 
-async function searchByEmbedding(companyId: string, query: string, limit: number) {
+async function searchByEmbedding(
+  companyId: string,
+  query: string,
+  limit: number
+) {
   const embedding = await generateEmbedding(query);
   const queryResult = await db.query(
     `SELECT id, title, content, metadata, created_at, (embedding <=> $2::vector) AS distance
@@ -83,7 +94,11 @@ type SearchCandidate = {
   distance?: number;
 };
 
-function mergeKnowledgeResults(vectorRows: any[], lexicalRows: any[], limit: number) {
+function mergeKnowledgeResults(
+  vectorRows: any[],
+  lexicalRows: any[],
+  limit: number
+) {
   const candidates = new Map<string, SearchCandidate>();
 
   vectorRows.forEach((row, index) => {
@@ -94,13 +109,19 @@ function mergeKnowledgeResults(vectorRows: any[], lexicalRows: any[], limit: num
       metadata: row.metadata,
       created_at: row.created_at,
       vector_rank: index,
-      distance: typeof row.distance === 'number' ? row.distance : Number(row.distance ?? 1),
+      distance:
+        typeof row.distance === 'number'
+          ? row.distance
+          : Number(row.distance ?? 1),
     });
   });
 
   lexicalRows.forEach((row) => {
     const existing = candidates.get(row.id);
-    const lexicalScore = typeof row.lexical_score === 'number' ? row.lexical_score : Number(row.lexical_score ?? 0);
+    const lexicalScore =
+      typeof row.lexical_score === 'number'
+        ? row.lexical_score
+        : Number(row.lexical_score ?? 0);
     candidates.set(row.id, {
       id: row.id,
       title: row.title,
@@ -117,25 +138,37 @@ function mergeKnowledgeResults(vectorRows: any[], lexicalRows: any[], limit: num
     .sort((left, right) => {
       const leftScore =
         (left.lexical_score ?? 0) * 100 +
-        (left.vector_rank !== undefined ? Math.max(vectorRows.length - left.vector_rank, 0) * 10 : 0) -
-        ((left.distance ?? 1) * 5);
+        (left.vector_rank !== undefined
+          ? Math.max(vectorRows.length - left.vector_rank, 0) * 10
+          : 0) -
+        (left.distance ?? 1) * 5;
       const rightScore =
         (right.lexical_score ?? 0) * 100 +
-        (right.vector_rank !== undefined ? Math.max(vectorRows.length - right.vector_rank, 0) * 10 : 0) -
-        ((right.distance ?? 1) * 5);
+        (right.vector_rank !== undefined
+          ? Math.max(vectorRows.length - right.vector_rank, 0) * 10
+          : 0) -
+        (right.distance ?? 1) * 5;
 
       if (rightScore !== leftScore) {
         return rightScore - leftScore;
       }
 
-      return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+      return (
+        new Date(right.created_at).getTime() -
+        new Date(left.created_at).getTime()
+      );
     })
     .slice(0, limit)
     .map(({ title, content, metadata }) => ({ title, content, metadata }));
 }
 
 export const KnowledgeService = {
-  async addDocument(companyId: string, title: string, content: string, metadata: any = {}) {
+  async addDocument(
+    companyId: string,
+    title: string,
+    content: string,
+    metadata: any = {}
+  ) {
     logger.info({ companyId, title }, 'Adding document to knowledge base');
 
     const embedding = await generateEmbedding(`${title}\n\n${content}`);
@@ -143,7 +176,13 @@ export const KnowledgeService = {
     const res = await db.query(
       `INSERT INTO company_knowledge (company_id, title, content, metadata, embedding)
        VALUES ($1, $2, $3, $4, $5::vector) RETURNING id`,
-      [companyId, title, content, JSON.stringify(metadata), toPgVector(embedding.vector)]
+      [
+        companyId,
+        title,
+        content,
+        JSON.stringify(metadata),
+        toPgVector(embedding.vector),
+      ]
     );
 
     return res.rows[0].id;
@@ -178,8 +217,13 @@ export const KnowledgeService = {
     ]);
     const lexicalIds = new Set(lexicalRes.rows.map((row) => row.id as string));
     const vectorIds = new Set(vectorRes.rows.map((row) => row.id as string));
-    const overlapCount = Array.from(vectorIds).filter((id) => lexicalIds.has(id)).length;
-    const recordMetric = async (resultCount: number, topDistance?: number | null) => {
+    const overlapCount = Array.from(vectorIds).filter((id) =>
+      lexicalIds.has(id)
+    ).length;
+    const recordMetric = async (
+      resultCount: number,
+      topDistance?: number | null
+    ) => {
       await recordRetrievalMetric({
         companyId,
         agentId: options.agentId,
@@ -205,17 +249,25 @@ export const KnowledgeService = {
     }
 
     if (vectorRes.rows.length === 0) {
-      const lexicalResults = lexicalRes.rows.slice(0, safeLimit).map(({ title, content, metadata }) => ({ title, content, metadata }));
+      const lexicalResults = lexicalRes.rows
+        .slice(0, safeLimit)
+        .map(({ title, content, metadata }) => ({ title, content, metadata }));
       await recordMetric(lexicalResults.length, null);
       return lexicalResults;
     }
 
-    const mergedResults = mergeKnowledgeResults(vectorRes.rows, lexicalRes.rows, safeLimit);
+    const mergedResults = mergeKnowledgeResults(
+      vectorRes.rows,
+      lexicalRes.rows,
+      safeLimit
+    );
     const firstDistance = vectorRes.rows[0]?.distance;
     await recordMetric(
       mergedResults.length,
-      typeof firstDistance === 'number' ? firstDistance : Number(firstDistance ?? 0)
+      typeof firstDistance === 'number'
+        ? firstDistance
+        : Number(firstDistance ?? 0)
     );
     return mergedResults;
-  }
+  },
 };

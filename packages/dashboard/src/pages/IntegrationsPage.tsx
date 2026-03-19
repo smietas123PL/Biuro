@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Link2, MessageSquareText, ShieldAlert, Webhook } from 'lucide-react';
+import {
+  CheckCircle2,
+  Link2,
+  MessageSquareText,
+  ShieldAlert,
+  Webhook,
+} from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
 
@@ -65,7 +71,9 @@ export default function IntegrationsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
-  const [testingType, setTestingType] = useState<'slack' | 'discord' | null>(null);
+  const [testingType, setTestingType] = useState<'slack' | 'discord' | null>(
+    null
+  );
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -144,10 +152,15 @@ export default function IntegrationsPage() {
         method: 'POST',
         body: JSON.stringify({
           type,
-          url: type === 'slack' ? slackWebhookUrl.trim() : discordWebhookUrl.trim(),
+          url:
+            type === 'slack'
+              ? slackWebhookUrl.trim()
+              : discordWebhookUrl.trim(),
         }),
       });
-      setTestMessage(`${type === 'slack' ? 'Slack' : 'Discord'} test message sent successfully.`);
+      setTestMessage(
+        `${type === 'slack' ? 'Slack' : 'Discord'} test message sent successfully.`
+      );
     } catch (err: any) {
       setTestMessage(err.message || `Failed to send ${type} test message.`);
     } finally {
@@ -164,7 +177,8 @@ export default function IntegrationsPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Integrations</h2>
         <p className="text-sm text-muted-foreground">
-          Read-only setup overview for Slack and Discord in {selectedCompany.name}.
+          Read-only setup overview for Slack and Discord in{' '}
+          {selectedCompany.name}.
         </p>
       </div>
 
@@ -177,13 +191,17 @@ export default function IntegrationsPage() {
       )}
 
       {saveMessage && (
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${saveMessage.includes('saved') ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${saveMessage.includes('saved') ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}
+        >
           {saveMessage}
         </div>
       )}
 
       {testMessage && (
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${testMessage.includes('successfully') ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${testMessage.includes('successfully') ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}
+        >
           {testMessage}
         </div>
       )}
@@ -199,9 +217,12 @@ export default function IntegrationsPage() {
           <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold">Outgoing Notifications</h3>
+                <h3 className="text-lg font-semibold">
+                  Outgoing Notifications
+                </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Configure per-company webhook destinations for approval requests and safety alerts.
+                  Configure per-company webhook destinations for approval
+                  requests and safety alerts.
                 </p>
               </div>
               <button
@@ -247,11 +268,13 @@ export default function IntegrationsPage() {
               {overview.webhook_tests.last_test ? (
                 <div className="mt-4 rounded-2xl border bg-muted/20 p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
-                      overview.webhook_tests.last_test.status === 'success'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
+                        overview.webhook_tests.last_test.status === 'success'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
                       {overview.webhook_tests.last_test.status}
                     </span>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] uppercase tracking-wide text-slate-700">
@@ -259,10 +282,13 @@ export default function IntegrationsPage() {
                     </span>
                   </div>
                   <div className="mt-3 text-sm text-muted-foreground">
-                    {new Date(overview.webhook_tests.last_test.created_at).toLocaleString()}
+                    {new Date(
+                      overview.webhook_tests.last_test.created_at
+                    ).toLocaleString()}
                   </div>
                   <div className="mt-3 text-sm text-foreground">
-                    {overview.webhook_tests.last_test.target_url || 'No target URL recorded'}
+                    {overview.webhook_tests.last_test.target_url ||
+                      'No target URL recorded'}
                   </div>
                   {overview.webhook_tests.last_test.error && (
                     <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -280,22 +306,28 @@ export default function IntegrationsPage() {
             <div className="rounded-2xl border bg-card p-6 shadow-sm">
               <h3 className="text-lg font-semibold">Recent Test History</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Last 10 Slack and Discord test attempts recorded in the audit log.
+                Last 10 Slack and Discord test attempts recorded in the audit
+                log.
               </p>
 
               <div className="mt-4 space-y-3">
                 {overview.webhook_tests.recent.map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border bg-muted/20 p-4">
+                  <div
+                    key={entry.id}
+                    className="rounded-2xl border bg-muted/20 p-4"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] uppercase tracking-wide text-slate-700">
                           {entry.type}
                         </span>
-                        <span className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
-                          entry.status === 'success'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}>
+                        <span
+                          className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
+                            entry.status === 'success'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}
+                        >
                           {entry.status}
                         </span>
                       </div>
@@ -307,7 +339,9 @@ export default function IntegrationsPage() {
                       {entry.target_url || 'No target URL recorded'}
                     </div>
                     {entry.error && (
-                      <div className="mt-3 text-sm text-red-700">{entry.error}</div>
+                      <div className="mt-3 text-sm text-red-700">
+                        {entry.error}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -327,14 +361,28 @@ export default function IntegrationsPage() {
               title="Slack"
               description="Signed Slack events and slash command ingestion."
               ready={overview.slack.configured}
-              helper={overview.slack.configured ? 'Signing secret detected.' : 'Missing SLACK_SIGNING_SECRET.'}
+              helper={
+                overview.slack.configured
+                  ? 'Signing secret detected.'
+                  : 'Missing SLACK_SIGNING_SECRET.'
+              }
             >
               <StatusRow
                 label="Secret status"
-                value={overview.slack.signing_secret_configured ? 'Configured' : 'Missing'}
+                value={
+                  overview.slack.signing_secret_configured
+                    ? 'Configured'
+                    : 'Missing'
+                }
               />
-              <StatusRow label="Slash command" value={overview.slack.slash_command_name} />
-              <StatusRow label="Approval actions" value={overview.slack.approval_actions.status} />
+              <StatusRow
+                label="Slash command"
+                value={overview.slack.slash_command_name}
+              />
+              <StatusRow
+                label="Approval actions"
+                value={overview.slack.approval_actions.status}
+              />
             </IntegrationCard>
 
             <IntegrationCard
@@ -342,13 +390,24 @@ export default function IntegrationsPage() {
               title="Discord"
               description="Webhook ingestion with shared secret validation."
               ready={overview.discord.configured}
-              helper={overview.discord.configured ? 'Webhook secret detected.' : 'Missing DISCORD_WEBHOOK_SECRET.'}
+              helper={
+                overview.discord.configured
+                  ? 'Webhook secret detected.'
+                  : 'Missing DISCORD_WEBHOOK_SECRET.'
+              }
             >
               <StatusRow
                 label="Secret status"
-                value={overview.discord.webhook_secret_configured ? 'Configured' : 'Missing'}
+                value={
+                  overview.discord.webhook_secret_configured
+                    ? 'Configured'
+                    : 'Missing'
+                }
               />
-              <StatusRow label="Expected header" value={overview.discord.expected_header} />
+              <StatusRow
+                label="Expected header"
+                value={overview.discord.expected_header}
+              />
             </IntegrationCard>
           </div>
 
@@ -358,8 +417,14 @@ export default function IntegrationsPage() {
               description="Use these URLs in your Slack app configuration."
               lines={[
                 { label: 'Events URL', value: overview.slack.events_url },
-                { label: 'Slash Command URL', value: overview.slack.slash_command_url },
-                { label: 'Interactions URL', value: overview.slack.interactions_url },
+                {
+                  label: 'Slash Command URL',
+                  value: overview.slack.slash_command_url,
+                },
+                {
+                  label: 'Interactions URL',
+                  value: overview.slack.interactions_url,
+                },
               ]}
             />
             <ChecklistPanel
@@ -375,7 +440,9 @@ export default function IntegrationsPage() {
             <SetupPanel
               title="Discord Endpoint"
               description="Configure your Discord webhook sender against this endpoint."
-              lines={[{ label: 'Webhook URL', value: overview.discord.webhook_url }]}
+              lines={[
+                { label: 'Webhook URL', value: overview.discord.webhook_url },
+              ]}
             />
             <CodePanel
               title="Slack Example Payload"
@@ -395,7 +462,8 @@ export default function IntegrationsPage() {
               <h3 className="text-lg font-semibold">Current Public Base URL</h3>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              This is the public origin currently seen by the API and used to build webhook URLs.
+              This is the public origin currently seen by the API and used to
+              build webhook URLs.
             </p>
             <pre className="mt-4 overflow-x-auto rounded-2xl border bg-muted/30 px-4 py-3 text-sm text-foreground">
               <code>{overview.base_url}</code>
@@ -485,10 +553,16 @@ function IntegrationCard({
         </div>
         <div
           className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
-            ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+            ready
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-amber-100 text-amber-700'
           }`}
         >
-          {ready ? <CheckCircle2 className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+          {ready ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <ShieldAlert className="h-4 w-4" />
+          )}
           {ready ? 'Ready' : 'Needs setup'}
         </div>
       </div>
@@ -523,7 +597,9 @@ function SetupPanel({
       <div className="mt-4 space-y-4">
         {lines.map((line) => (
           <div key={line.label}>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{line.label}</div>
+            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {line.label}
+            </div>
             <pre className="overflow-x-auto rounded-2xl border bg-muted/30 px-4 py-3 text-sm text-foreground">
               <code>{line.value}</code>
             </pre>
@@ -576,7 +652,9 @@ function ChecklistPanel({
         </div>
         <span
           className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
-            ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+            ready
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-amber-100 text-amber-700'
           }`}
         >
           {ready ? 'Ready' : 'Setup needed'}
@@ -596,7 +674,9 @@ function ChecklistPanel({
             <span className="text-foreground">{item.label}</span>
             <span
               className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
-                item.met ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                item.met
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-amber-100 text-amber-700'
               }`}
             >
               {item.met ? 'Met' : 'Missing'}

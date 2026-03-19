@@ -10,14 +10,30 @@
     "dev:worker": "pnpm --filter @biuro/server dev:worker",
     "dev:dashboard": "pnpm --filter @biuro/dashboard dev",
     "build": "pnpm recursive run build",
+    "lint": "pnpm exec eslint . --max-warnings 0",
+    "lint:fix": "pnpm exec eslint . --fix",
+    "format": "pnpm exec prettier . --write",
+    "format:check": "pnpm exec prettier . --check",
     "start": "pnpm --filter @biuro/server start",
     "worker": "pnpm --filter @biuro/server worker",
+    "test": "pnpm -r --if-present test",
+    "test:coverage": "pnpm --filter @biuro/server test:coverage && pnpm --filter @biuro/dashboard test:coverage && node scripts/checkCoverage.mjs",
     "test:cli": "pnpm --filter @biuro/cli test",
     "test:dashboard": "pnpm --filter @biuro/dashboard test",
+    "test:e2e": "node run_tests.mjs",
     "migrate": "pnpm --filter @biuro/server migrate",
     "migrate:status": "pnpm --filter @biuro/server migrate:status",
     "migrate:verify": "pnpm --filter @biuro/server migrate:verify",
     "migrate:create": "pnpm --filter @biuro/server migrate:create",
-    "test:phase3": "pnpm --filter @biuro/server tsx src/verify3.ts"
+    "test:phase3": "pnpm --filter @biuro/server tsx src/scripts/verify3.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.57.1"
   }
 }

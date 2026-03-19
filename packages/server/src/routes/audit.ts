@@ -8,7 +8,10 @@ router.get('/', async (req, res, next) => {
     const { company_id } = req.query;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
     if (!company_id) {
-      const result = await db.query('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT $1', [limit]);
+      const result = await db.query(
+        'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT $1',
+        [limit]
+      );
       return res.json(result.rows);
     }
     const result = await db.query(
@@ -16,7 +19,9 @@ router.get('/', async (req, res, next) => {
       [company_id, limit]
     );
     res.json(result.rows);
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

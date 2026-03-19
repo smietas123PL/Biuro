@@ -14,7 +14,14 @@ vi.mock('../src/db/client.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 vi.mock('../src/tools/executor.js', () => ({
@@ -31,7 +38,10 @@ describe('tools routes', () => {
     dbMock.query.mockReset();
     dbMock.transaction.mockReset();
     executeStandaloneToolMock.mockReset();
-    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof dbMock.query }) => unknown) => fn({ query: dbMock.query }));
+    dbMock.transaction.mockImplementation(
+      async (fn: (client: { query: typeof dbMock.query }) => unknown) =>
+        fn({ query: dbMock.query })
+    );
 
     const app = express();
     app.use(express.json());
@@ -177,7 +187,10 @@ describe('tools routes', () => {
             name: 'market_search',
             description: 'Updated description',
             type: 'builtin',
-            config: { builtin: 'web_search', example_params: { query: 'market map' } },
+            config: {
+              builtin: 'web_search',
+              example_params: { query: 'market map' },
+            },
           },
         ],
       });
@@ -188,7 +201,10 @@ describe('tools routes', () => {
       body: JSON.stringify({
         name: 'market_search',
         description: 'Updated description',
-        config: { builtin: 'web_search', example_params: { query: 'market map' } },
+        config: {
+          builtin: 'web_search',
+          example_params: { query: 'market map' },
+        },
       }),
     });
 
@@ -214,7 +230,9 @@ describe('tools routes', () => {
         },
       ],
     });
-    executeStandaloneToolMock.mockResolvedValueOnce({ results: [{ title: 'Biuro' }] });
+    executeStandaloneToolMock.mockResolvedValueOnce({
+      results: [{ title: 'Biuro' }],
+    });
 
     const response = await fetch(`${baseUrl}/tool-1/test`, {
       method: 'POST',
@@ -247,10 +265,13 @@ describe('tools routes', () => {
         },
       ],
     });
-    const upstreamError = Object.assign(new Error('HTTP tool responded with status 503'), {
-      output: { error: 'temporarily unavailable' },
-      status: 503,
-    });
+    const upstreamError = Object.assign(
+      new Error('HTTP tool responded with status 503'),
+      {
+        output: { error: 'temporarily unavailable' },
+        status: 503,
+      }
+    );
     executeStandaloneToolMock.mockRejectedValueOnce(upstreamError);
 
     const response = await fetch(`${baseUrl}/tool-2/test`, {
@@ -333,11 +354,20 @@ describe('tools routes', () => {
 
   it('seeds the default tools for a company', async () => {
     dbMock.query
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'tool-1', name: 'web_search' }] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'tool-2', name: 'file_write' }] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'tool-1', name: 'web_search' }],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'tool-2', name: 'file_write' }],
+      })
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'tool-5', name: 'shell_utils' }] });
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 'tool-5', name: 'shell_utils' }],
+      });
 
     const response = await fetch(`${baseUrl}/seed`, { method: 'POST' });
 
@@ -417,7 +447,9 @@ describe('tools routes', () => {
         ],
       });
 
-    const response = await fetch(`${baseUrl}/tool-1/calls?status=error&agent_id=agent-1&page=2&limit=1`);
+    const response = await fetch(
+      `${baseUrl}/tool-1/calls?status=error&agent_id=agent-1&page=2&limit=1`
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({

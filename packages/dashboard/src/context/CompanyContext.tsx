@@ -40,13 +40,21 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { request, error } = useApi();
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(null);
+  const [selectedCompanyId, setSelectedCompanyIdState] = useState<
+    string | null
+  >(null);
   const [loading, setLoading] = useState(true);
 
-  const syncSelectedCompany = (nextCompanies: Company[], preferredId?: string | null) => {
-    const requestedId = preferredId ?? selectedCompanyId ?? localStorage.getItem(COMPANY_STORAGE_KEY);
+  const syncSelectedCompany = (
+    nextCompanies: Company[],
+    preferredId?: string | null
+  ) => {
+    const requestedId =
+      preferredId ??
+      selectedCompanyId ??
+      localStorage.getItem(COMPANY_STORAGE_KEY);
     const matchingCompany = requestedId
-      ? nextCompanies.find((company) => company.id === requestedId) ?? null
+      ? (nextCompanies.find((company) => company.id === requestedId) ?? null)
       : null;
     const nextSelectedId = matchingCompany?.id ?? nextCompanies[0]?.id ?? null;
 

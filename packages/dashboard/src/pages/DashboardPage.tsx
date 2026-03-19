@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, BrainCircuit, Clock3, RadioTower, ShieldAlert, Users } from 'lucide-react';
+import {
+  Activity,
+  BrainCircuit,
+  Clock3,
+  RadioTower,
+  ShieldAlert,
+  Users,
+} from 'lucide-react';
 import { useApi, useWebSocket, type ApiTraceSnapshot } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
 import { buildGrafanaTraceExploreUrl } from '../lib/grafana';
@@ -163,8 +170,11 @@ const emptyBudgetTotals: BudgetTotals = {
   utilization_pct: null,
 };
 
-function normalizeThoughtText(item: Pick<ActivityItem, 'type' | 'summary' | 'thought'>) {
-  const explicitThought = typeof item.thought === 'string' ? item.thought.trim() : '';
+function normalizeThoughtText(
+  item: Pick<ActivityItem, 'type' | 'summary' | 'thought'>
+) {
+  const explicitThought =
+    typeof item.thought === 'string' ? item.thought.trim() : '';
   if (explicitThought) {
     return explicitThought;
   }
@@ -178,7 +188,10 @@ function normalizeThoughtText(item: Pick<ActivityItem, 'type' | 'summary' | 'tho
     return null;
   }
 
-  if (summary === 'Completed a heartbeat cycle.' || summary.startsWith('Heartbeat status:')) {
+  if (
+    summary === 'Completed a heartbeat cycle.' ||
+    summary.startsWith('Heartbeat status:')
+  ) {
     return null;
   }
 
@@ -253,38 +266,39 @@ export default function DashboardPage() {
   const { request, loading, error, lastTrace } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
   const [stats, setStats] = useState<CompanyStats>(emptyStats);
-  const [budgetTotals, setBudgetTotals] = useState<BudgetTotals>(emptyBudgetTotals);
+  const [budgetTotals, setBudgetTotals] =
+    useState<BudgetTotals>(emptyBudgetTotals);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [liveThoughts, setLiveThoughts] = useState<ThoughtStreamItem[]>([]);
-  const [retrievalMetrics, setRetrievalMetrics] = useState<RetrievalMetricsSummary | null>(null);
-  const [memoryInsights, setMemoryInsights] = useState<MemoryInsightsSummary | null>(null);
+  const [retrievalMetrics, setRetrievalMetrics] =
+    useState<RetrievalMetricsSummary | null>(null);
+  const [memoryInsights, setMemoryInsights] =
+    useState<MemoryInsightsSummary | null>(null);
   const [traceDetail, setTraceDetail] = useState<TraceDetail | null>(null);
   const [traceError, setTraceError] = useState<string | null>(null);
   const [costPulse, setCostPulse] = useState<number | null>(null);
   const [budgetToasts, setBudgetToasts] = useState<BudgetToast[]>([]);
-  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as
-    | {
-        event: string;
-        data?: {
-          agentId?: string;
-          agent_id?: string;
-          agentName?: string;
-          agent_name?: string;
-          taskId?: string;
-          task_id?: string;
-          taskTitle?: string;
-          task_title?: string;
-          thought?: string;
-          delta_cost_usd?: number;
-          daily_cost_usd?: number;
-          threshold_pct?: number;
-          utilization_pct?: number;
-          tone?: 'warning' | 'critical';
-          message?: string;
-        };
-        timestamp: string;
-      }
-    | null;
+  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as {
+    event: string;
+    data?: {
+      agentId?: string;
+      agent_id?: string;
+      agentName?: string;
+      agent_name?: string;
+      taskId?: string;
+      task_id?: string;
+      taskTitle?: string;
+      task_title?: string;
+      thought?: string;
+      delta_cost_usd?: number;
+      daily_cost_usd?: number;
+      threshold_pct?: number;
+      utilization_pct?: number;
+      tone?: 'warning' | 'critical';
+      message?: string;
+    };
+    timestamp: string;
+  } | null;
 
   const refreshBudgetTotals = async () => {
     if (!selectedCompanyId) {
@@ -292,10 +306,14 @@ export default function DashboardPage() {
       return;
     }
 
-    const summary = (await request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
-      suppressError: true,
-      trackTrace: false,
-    })) as { totals: BudgetTotals };
+    const summary = (await request(
+      `/companies/${selectedCompanyId}/budgets-summary`,
+      undefined,
+      {
+        suppressError: true,
+        trackTrace: false,
+      }
+    )) as { totals: BudgetTotals };
     setBudgetTotals(summary.totals);
   };
 
@@ -311,22 +329,60 @@ export default function DashboardPage() {
         return;
       }
 
-      const statsData = (await request(`/companies/${selectedCompanyId}/stats`)) as CompanyStats;
-      const [activityResult, retrievalMetricsResult, memoryInsightsResult, budgetResult] = await Promise.allSettled([
-        request(`/companies/${selectedCompanyId}/activity-feed?limit=12`, undefined, { suppressError: true }) as Promise<ActivityItem[]>,
-        request(`/companies/${selectedCompanyId}/retrieval-metrics?days=7`, undefined, { suppressError: true }) as Promise<RetrievalMetricsSummary>,
-        request(`/companies/${selectedCompanyId}/memory-insights?days=30`, undefined, { suppressError: true }) as Promise<MemoryInsightsSummary>,
-        request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, { suppressError: true, trackTrace: false }) as Promise<{ totals: BudgetTotals }>,
+      const statsData = (await request(
+        `/companies/${selectedCompanyId}/stats`
+      )) as CompanyStats;
+      const [
+        activityResult,
+        retrievalMetricsResult,
+        memoryInsightsResult,
+        budgetResult,
+      ] = await Promise.allSettled([
+        request(
+          `/companies/${selectedCompanyId}/activity-feed?limit=12`,
+          undefined,
+          { suppressError: true }
+        ) as Promise<ActivityItem[]>,
+        request(
+          `/companies/${selectedCompanyId}/retrieval-metrics?days=7`,
+          undefined,
+          { suppressError: true }
+        ) as Promise<RetrievalMetricsSummary>,
+        request(
+          `/companies/${selectedCompanyId}/memory-insights?days=30`,
+          undefined,
+          { suppressError: true }
+        ) as Promise<MemoryInsightsSummary>,
+        request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
+          suppressError: true,
+          trackTrace: false,
+        }) as Promise<{ totals: BudgetTotals }>,
       ]);
 
       setStats(statsData);
-      setActivity(activityResult.status === 'fulfilled' ? activityResult.value : []);
-      setLiveThoughts(
-        activityResult.status === 'fulfilled' ? buildThoughtStreamFromActivity(activityResult.value) : []
+      setActivity(
+        activityResult.status === 'fulfilled' ? activityResult.value : []
       );
-      setRetrievalMetrics(retrievalMetricsResult.status === 'fulfilled' ? retrievalMetricsResult.value : null);
-      setMemoryInsights(memoryInsightsResult.status === 'fulfilled' ? memoryInsightsResult.value : null);
-      setBudgetTotals(budgetResult.status === 'fulfilled' ? budgetResult.value.totals : emptyBudgetTotals);
+      setLiveThoughts(
+        activityResult.status === 'fulfilled'
+          ? buildThoughtStreamFromActivity(activityResult.value)
+          : []
+      );
+      setRetrievalMetrics(
+        retrievalMetricsResult.status === 'fulfilled'
+          ? retrievalMetricsResult.value
+          : null
+      );
+      setMemoryInsights(
+        memoryInsightsResult.status === 'fulfilled'
+          ? memoryInsightsResult.value
+          : null
+      );
+      setBudgetTotals(
+        budgetResult.status === 'fulfilled'
+          ? budgetResult.value.totals
+          : emptyBudgetTotals
+      );
     };
 
     void fetchDashboardData();
@@ -341,10 +397,14 @@ export default function DashboardPage() {
 
     const loadTraceDetail = async () => {
       try {
-        const detail = (await request(`/observability/traces/${lastTrace.traceId}`, undefined, {
-          suppressError: true,
-          trackTrace: false,
-        })) as TraceDetail;
+        const detail = (await request(
+          `/observability/traces/${lastTrace.traceId}`,
+          undefined,
+          {
+            suppressError: true,
+            trackTrace: false,
+          }
+        )) as TraceDetail;
         setTraceDetail(detail);
         setTraceError(null);
       } catch (traceDetailError) {
@@ -386,9 +446,11 @@ export default function DashboardPage() {
     }
 
     const thought =
-      typeof lastEvent.data?.message === 'string' && lastEvent.data.message.trim().length > 0
+      typeof lastEvent.data?.message === 'string' &&
+      lastEvent.data.message.trim().length > 0
         ? lastEvent.data.message.trim()
-        : typeof lastEvent.data?.thought === 'string' && lastEvent.data.thought.trim().length > 0
+        : typeof lastEvent.data?.thought === 'string' &&
+            lastEvent.data.thought.trim().length > 0
           ? lastEvent.data.thought.trim()
           : null;
 
@@ -401,8 +463,7 @@ export default function DashboardPage() {
       agent_id: lastEvent.data?.agentId ?? lastEvent.data?.agent_id ?? null,
       agent_name:
         lastEvent.data?.agentName ?? lastEvent.data?.agent_name ?? 'Agent',
-      task_id:
-        lastEvent.data?.taskId ?? lastEvent.data?.task_id ?? null,
+      task_id: lastEvent.data?.taskId ?? lastEvent.data?.task_id ?? null,
       task_title:
         lastEvent.data?.taskTitle ?? lastEvent.data?.task_title ?? null,
       thought,
@@ -411,7 +472,10 @@ export default function DashboardPage() {
     };
 
     setLiveThoughts((current) => {
-      const next = [liveThought, ...current.filter((item) => item.agent_id !== liveThought.agent_id)];
+      const next = [
+        liveThought,
+        ...current.filter((item) => item.agent_id !== liveThought.agent_id),
+      ];
       return next.slice(0, 6);
     });
   }, [lastEvent]);
@@ -427,7 +491,9 @@ export default function DashboardPage() {
           ? lastEvent.data.daily_cost_usd
           : stats.daily_cost_usd;
       const deltaCost =
-        typeof lastEvent.data?.delta_cost_usd === 'number' ? lastEvent.data.delta_cost_usd : null;
+        typeof lastEvent.data?.delta_cost_usd === 'number'
+          ? lastEvent.data.delta_cost_usd
+          : null;
 
       setStats((current) => ({
         ...current,
@@ -478,13 +544,20 @@ export default function DashboardPage() {
   const recentLessons = memoryInsights?.recent_lessons.slice(0, 4) ?? [];
   const thoughtStream = useMemo(
     () =>
-      [...liveThoughts]
-        .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()),
+      [...liveThoughts].sort(
+        (left, right) =>
+          new Date(right.created_at).getTime() -
+          new Date(left.created_at).getTime()
+      ),
     [liveThoughts]
   );
 
   if (!selectedCompany) {
-    return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to see live metrics.</div>;
+    return (
+      <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
+        Choose a company to see live metrics.
+      </div>
+    );
   }
 
   const cards = [
@@ -547,7 +620,9 @@ export default function DashboardPage() {
 
       {error ? (
         <div className="space-y-3">
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
           <TraceLinkCallout
             trace={lastTrace}
             title="Debug This Error"
@@ -561,25 +636,40 @@ export default function DashboardPage() {
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Cost Ticker</div>
-              <div className="mt-2 text-4xl font-semibold tracking-tight">${stats.daily_cost_usd.toFixed(4)} today</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Live Cost Ticker
+              </div>
+              <div className="mt-2 text-4xl font-semibold tracking-tight">
+                ${stats.daily_cost_usd.toFixed(4)} today
+              </div>
               <div className="mt-2 text-sm text-muted-foreground">
-                Streaming directly from heartbeat cost events without a manual refresh.
+                Streaming directly from heartbeat cost events without a manual
+                refresh.
               </div>
             </div>
-            <div className={`rounded-full border px-3 py-1 text-xs font-medium ${
-              costPulse && costPulse > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-muted bg-muted/30 text-muted-foreground'
-            }`}>
-              {costPulse && costPulse > 0 ? `+ $${costPulse.toFixed(4)} latest heartbeat` : 'Waiting for next heartbeat'}
+            <div
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                costPulse && costPulse > 0
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-muted bg-muted/30 text-muted-foreground'
+              }`}
+            >
+              {costPulse && costPulse > 0
+                ? `+ $${costPulse.toFixed(4)} latest heartbeat`
+                : 'Waiting for next heartbeat'}
             </div>
           </div>
         </div>
 
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Budget Gauge</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Budget Gauge
+          </div>
           <div className="mt-2 flex items-end justify-between gap-4">
             <div className="text-4xl font-semibold tracking-tight">
-              {budgetTotals.utilization_pct === null ? 'No cap' : `${budgetTotals.utilization_pct.toFixed(0)}%`}
+              {budgetTotals.utilization_pct === null
+                ? 'No cap'
+                : `${budgetTotals.utilization_pct.toFixed(0)}%`}
             </div>
             <div className="text-right text-sm text-muted-foreground">
               <div>${budgetTotals.spent_usd.toFixed(2)} spent</div>
@@ -589,13 +679,17 @@ export default function DashboardPage() {
           <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted/30">
             <div
               className={`h-full rounded-full transition-all ${
-                budgetTotals.utilization_pct !== null && budgetTotals.utilization_pct >= 95
+                budgetTotals.utilization_pct !== null &&
+                budgetTotals.utilization_pct >= 95
                   ? 'bg-red-500'
-                  : budgetTotals.utilization_pct !== null && budgetTotals.utilization_pct >= 80
+                  : budgetTotals.utilization_pct !== null &&
+                      budgetTotals.utilization_pct >= 80
                     ? 'bg-amber-400'
                     : 'bg-emerald-500'
               }`}
-              style={{ width: `${budgetTotals.utilization_pct === null ? 0 : Math.max(Math.min(budgetTotals.utilization_pct, 100), 4)}%` }}
+              style={{
+                width: `${budgetTotals.utilization_pct === null ? 0 : Math.max(Math.min(budgetTotals.utilization_pct, 100), 4)}%`,
+              }}
             />
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
@@ -607,12 +701,17 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.title} className={`rounded-2xl border p-5 shadow-sm ${card.tone}`}>
+          <div
+            key={card.title}
+            className={`rounded-2xl border p-5 shadow-sm ${card.tone}`}
+          >
             <div className="mb-6 flex items-center justify-between">
               <span className="text-sm font-medium">{card.title}</span>
               <card.icon className="h-5 w-5" />
             </div>
-            <div className="text-3xl font-bold tracking-tight">{card.value}</div>
+            <div className="text-3xl font-bold tracking-tight">
+              {card.value}
+            </div>
             <div className="mt-2 text-sm opacity-80">{card.detail}</div>
           </div>
         ))}
@@ -622,13 +721,33 @@ export default function DashboardPage() {
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold">Operations Snapshot</h3>
-            {loading && <span className="text-xs text-muted-foreground">Refreshing...</span>}
+            {loading && (
+              <span className="text-xs text-muted-foreground">
+                Refreshing...
+              </span>
+            )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Metric label="All Tasks" value={stats.task_count} helper="Open and completed work combined" />
-            <Metric label="Goals" value={stats.goal_count} helper="Strategic objectives in the system" />
-            <Metric label="Paused Agents" value={stats.paused_agents} helper="Requires manual follow-up" />
-            <Metric label="Completed Today" value={stats.completed_tasks} helper="Tasks marked done so far" />
+            <Metric
+              label="All Tasks"
+              value={stats.task_count}
+              helper="Open and completed work combined"
+            />
+            <Metric
+              label="Goals"
+              value={stats.goal_count}
+              helper="Strategic objectives in the system"
+            />
+            <Metric
+              label="Paused Agents"
+              value={stats.paused_agents}
+              helper="Requires manual follow-up"
+            />
+            <Metric
+              label="Completed Today"
+              value={stats.completed_tasks}
+              helper="Tasks marked done so far"
+            />
           </div>
         </div>
 
@@ -637,17 +756,33 @@ export default function DashboardPage() {
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
             <Insight
               title="Task flow"
-              body={stats.pending_tasks > 0 ? `${stats.pending_tasks} tasks are still in motion.` : 'Backlog is clear right now.'}
+              body={
+                stats.pending_tasks > 0
+                  ? `${stats.pending_tasks} tasks are still in motion.`
+                  : 'Backlog is clear right now.'
+              }
             />
             <Insight
               title="Agent utilization"
-              body={stats.active_agents > 0 ? `${stats.active_agents} agents are currently working.` : 'No agents are actively processing work.'}
+              body={
+                stats.active_agents > 0
+                  ? `${stats.active_agents} agents are currently working.`
+                  : 'No agents are actively processing work.'
+              }
             />
             <Insight
               title="Governance"
-              body={stats.pending_approvals > 0 ? `${stats.pending_approvals} approval requests need attention.` : 'No approval bottlenecks at the moment.'}
+              body={
+                stats.pending_approvals > 0
+                  ? `${stats.pending_approvals} approval requests need attention.`
+                  : 'No approval bottlenecks at the moment.'
+              }
             />
-            <TraceInsight trace={lastTrace} detail={traceDetail} error={traceError} />
+            <TraceInsight
+              trace={lastTrace}
+              detail={traceDetail}
+              error={traceError}
+            />
           </div>
         </div>
       </div>
@@ -658,7 +793,8 @@ export default function DashboardPage() {
             <div>
               <h3 className="text-lg font-semibold">Retrieval Quality</h3>
               <p className="text-sm text-muted-foreground">
-                Last {retrievalMetrics?.range_days ?? 7} days of RAG effectiveness across knowledge and memory lookups.
+                Last {retrievalMetrics?.range_days ?? 7} days of RAG
+                effectiveness across knowledge and memory lookups.
               </p>
             </div>
             <span className="rounded-full border bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
@@ -679,12 +815,16 @@ export default function DashboardPage() {
             />
             <Metric
               label="Avg results"
-              value={(retrievalMetrics?.totals.avg_result_count ?? 0).toFixed(1)}
+              value={(retrievalMetrics?.totals.avg_result_count ?? 0).toFixed(
+                1
+              )}
               helper="Average number of returned candidates"
             />
             <Metric
               label="Avg overlap"
-              value={(retrievalMetrics?.totals.avg_overlap_count ?? 0).toFixed(1)}
+              value={(retrievalMetrics?.totals.avg_overlap_count ?? 0).toFixed(
+                1
+              )}
               helper="How often lexical and vector hits agree"
             />
           </div>
@@ -713,23 +853,32 @@ export default function DashboardPage() {
           <h3 className="text-lg font-semibold">Recent Retrievals</h3>
           <div className="mt-4 space-y-3">
             {recentRetrievals.map((item, index) => (
-              <div key={`${item.created_at}-${item.consumer}-${index}`} className="rounded-xl border bg-muted/20 p-4">
+              <div
+                key={`${item.created_at}-${item.consumer}-${index}`}
+                className="rounded-xl border bg-muted/20 p-4"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-medium text-foreground">
                     {item.scope} - {item.consumer.replace(/_/g, ' ')}
                   </div>
-                  <div className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(item.created_at).toLocaleString()}
+                  </div>
                 </div>
                 <div className="mt-2 text-sm text-muted-foreground">
-                  {item.result_count} results, overlap {item.overlap_count}, source {item.embedding_source}
-                  {typeof item.top_distance === 'number' ? `, top distance ${item.top_distance.toFixed(3)}` : ''}
+                  {item.result_count} results, overlap {item.overlap_count},
+                  source {item.embedding_source}
+                  {typeof item.top_distance === 'number'
+                    ? `, top distance ${item.top_distance.toFixed(3)}`
+                    : ''}
                 </div>
               </div>
             ))}
 
             {recentRetrievals.length === 0 && (
               <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                Retrieval metrics will appear after the first knowledge or memory lookups.
+                Retrieval metrics will appear after the first knowledge or
+                memory lookups.
               </div>
             )}
           </div>
@@ -742,7 +891,8 @@ export default function DashboardPage() {
             <div>
               <h3 className="text-lg font-semibold">Memory Insights</h3>
               <p className="text-sm text-muted-foreground">
-                What agents learned from history over the last {memoryInsights?.range_days ?? 30} days.
+                What agents learned from history over the last{' '}
+                {memoryInsights?.range_days ?? 30} days.
               </p>
             </div>
             <span className="rounded-full border bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
@@ -793,18 +943,28 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-5 rounded-xl border bg-muted/20 p-4">
-            <div className="text-sm font-medium text-foreground">Most revisited questions</div>
+            <div className="text-sm font-medium text-foreground">
+              Most revisited questions
+            </div>
             <div className="mt-3 space-y-2">
               {(memoryInsights?.revisited_queries ?? []).length > 0 ? (
                 memoryInsights!.revisited_queries.map((item) => (
-                  <div key={`${item.query}-${item.total}`} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2 text-sm">
-                    <span className="truncate text-muted-foreground">{item.query}</span>
-                    <span className="font-medium text-foreground">{item.total}</span>
+                  <div
+                    key={`${item.query}-${item.total}`}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2 text-sm"
+                  >
+                    <span className="truncate text-muted-foreground">
+                      {item.query}
+                    </span>
+                    <span className="font-medium text-foreground">
+                      {item.total}
+                    </span>
                   </div>
                 ))
               ) : (
                 <div className="text-sm text-muted-foreground">
-                  Memory reuse patterns will show up here after agents start querying history.
+                  Memory reuse patterns will show up here after agents start
+                  querying history.
                 </div>
               )}
             </div>
@@ -826,7 +986,9 @@ export default function DashboardPage() {
               <div key={item.id} className="rounded-xl border bg-muted/20 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="font-medium text-foreground">{item.agent_name}</div>
+                    <div className="font-medium text-foreground">
+                      {item.agent_name}
+                    </div>
                     <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
                       {item.task_title || 'No linked task'}
                     </div>
@@ -840,11 +1002,17 @@ export default function DashboardPage() {
                   {summarizeMemoryLesson(item.content)}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <Link className="text-foreground underline-offset-2 hover:underline" to={`/agents/${item.agent_id}`}>
+                  <Link
+                    className="text-foreground underline-offset-2 hover:underline"
+                    to={`/agents/${item.agent_id}`}
+                  >
                     Open agent
                   </Link>
                   {item.task_id ? (
-                    <Link className="text-foreground underline-offset-2 hover:underline" to={`/tasks/${item.task_id}`}>
+                    <Link
+                      className="text-foreground underline-offset-2 hover:underline"
+                      to={`/tasks/${item.task_id}`}
+                    >
                       Open task
                     </Link>
                   ) : null}
@@ -854,7 +1022,8 @@ export default function DashboardPage() {
 
             {recentLessons.length === 0 && (
               <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                Memory lessons will appear here after agents store their first experience.
+                Memory lessons will appear here after agents store their first
+                experience.
               </div>
             )}
           </div>
@@ -866,23 +1035,35 @@ export default function DashboardPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold">Live Thought Stream</h3>
-              <p className="text-sm text-muted-foreground">What active agents are thinking right now, updated from heartbeats and live worker events.</p>
+              <p className="text-sm text-muted-foreground">
+                What active agents are thinking right now, updated from
+                heartbeats and live worker events.
+              </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border bg-sky-50 px-3 py-1 text-xs text-sky-700">
               <RadioTower className="h-3.5 w-3.5" />
-              {thoughtStream.length > 0 ? `${thoughtStream.length} minds visible` : 'Waiting for the next thought'}
+              {thoughtStream.length > 0
+                ? `${thoughtStream.length} minds visible`
+                : 'Waiting for the next thought'}
             </div>
           </div>
 
           <div className="space-y-3">
             {thoughtStream.map((item) => (
-              <div key={item.id} className="rounded-[24px] border bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-4 shadow-sm">
+              <div
+                key={item.id}
+                className="rounded-[24px] border bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-4 shadow-sm"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-foreground">{item.agent_name}</span>
+                      <span className="font-medium text-foreground">
+                        {item.agent_name}
+                      </span>
                       <span className="rounded-full border bg-white/80 px-2 py-1 text-[11px] uppercase tracking-wide text-sky-700">
-                        {item.source === 'live' ? 'Live now' : 'Recent heartbeat'}
+                        {item.source === 'live'
+                          ? 'Live now'
+                          : 'Recent heartbeat'}
                       </span>
                     </div>
                     <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
@@ -899,15 +1080,23 @@ export default function DashboardPage() {
                     <BrainCircuit className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm leading-7 text-foreground">{item.thought}</p>
+                    <p className="text-sm leading-7 text-foreground">
+                      {item.thought}
+                    </p>
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       {item.task_id ? (
-                        <Link className="text-foreground underline-offset-2 hover:underline" to={`/tasks/${item.task_id}`}>
+                        <Link
+                          className="text-foreground underline-offset-2 hover:underline"
+                          to={`/tasks/${item.task_id}`}
+                        >
                           Open task
                         </Link>
                       ) : null}
                       {item.agent_id ? (
-                        <Link className="text-foreground underline-offset-2 hover:underline" to={`/agents/${item.agent_id}`}>
+                        <Link
+                          className="text-foreground underline-offset-2 hover:underline"
+                          to={`/agents/${item.agent_id}`}
+                        >
                           Open agent
                         </Link>
                       ) : null}
@@ -919,7 +1108,8 @@ export default function DashboardPage() {
 
             {thoughtStream.length === 0 && !loading && (
               <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                No live thoughts yet. The panel will light up after the next heartbeat with a parsed thought.
+                No live thoughts yet. The panel will light up after the next
+                heartbeat with a parsed thought.
               </div>
             )}
           </div>
@@ -929,17 +1119,28 @@ export default function DashboardPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold">Live Activity Feed</h3>
-              <p className="text-sm text-muted-foreground">Recent heartbeats plus real-time task starts from the worker stream.</p>
+              <p className="text-sm text-muted-foreground">
+                Recent heartbeats plus real-time task starts from the worker
+                stream.
+              </p>
             </div>
-            <Link to="/audit" className="text-sm font-medium text-primary transition-colors hover:text-primary/80">
+            <Link
+              to="/audit"
+              className="text-sm font-medium text-primary transition-colors hover:text-primary/80"
+            >
               Open full audit log
             </Link>
           </div>
 
           <div className="space-y-3">
             {activity.map((item) => (
-              <div key={item.id} className="flex gap-4 rounded-2xl border bg-muted/20 p-4">
-                <div className={`mt-1 h-3 w-3 rounded-full ${item.type === 'agent.working' ? 'bg-sky-500' : item.type === 'heartbeat.error' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+              <div
+                key={item.id}
+                className="flex gap-4 rounded-2xl border bg-muted/20 p-4"
+              >
+                <div
+                  className={`mt-1 h-3 w-3 rounded-full ${item.type === 'agent.working' ? 'bg-sky-500' : item.type === 'heartbeat.error' ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                />
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="font-medium text-foreground">
@@ -950,7 +1151,9 @@ export default function DashboardPage() {
                       {new Date(item.created_at).toLocaleString()}
                     </div>
                   </div>
-                  <div className="text-sm text-muted-foreground">{item.summary}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {item.summary}
+                  </div>
                 </div>
                 <div className="text-right text-xs text-muted-foreground">
                   {item.cost_usd > 0 ? `$${item.cost_usd.toFixed(4)}` : 'live'}
@@ -960,7 +1163,8 @@ export default function DashboardPage() {
 
             {activity.length === 0 && !loading && (
               <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                No activity yet. The feed will populate as agents start heartbeats.
+                No activity yet. The feed will populate as agents start
+                heartbeats.
               </div>
             )}
           </div>
@@ -989,7 +1193,9 @@ function TraceInsight({
   }
 
   const traceIdLabel =
-    trace.traceId.length > 16 ? `${trace.traceId.slice(0, 8)}...${trace.traceId.slice(-8)}` : trace.traceId;
+    trace.traceId.length > 16
+      ? `${trace.traceId.slice(0, 8)}...${trace.traceId.slice(-8)}`
+      : trace.traceId;
   const topSpans = detail?.items.slice(0, 3) ?? [];
   const grafanaTraceUrl = buildGrafanaTraceExploreUrl(trace);
 
@@ -1012,18 +1218,26 @@ function TraceInsight({
         </div>
       </div>
       <div className="mt-2 text-sm text-muted-foreground">
-        Latest trace <span className="font-mono text-foreground">{traceIdLabel}</span> for {trace.path}
+        Latest trace{' '}
+        <span className="font-mono text-foreground">{traceIdLabel}</span> for{' '}
+        {trace.path}
       </div>
       {detail && (
         <div className="mt-3 space-y-2">
           <div className="text-xs text-muted-foreground">
-            {detail.summary.span_count} spans across {Math.round(detail.summary.duration_ms)} ms
+            {detail.summary.span_count} spans across{' '}
+            {Math.round(detail.summary.duration_ms)} ms
           </div>
           {topSpans.map((span) => (
-            <div key={span.span_id} className="rounded-lg bg-background/60 px-3 py-2">
+            <div
+              key={span.span_id}
+              className="rounded-lg bg-background/60 px-3 py-2"
+            >
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-medium text-foreground">{span.name}</span>
-                <span className="text-xs text-muted-foreground">{Math.round(span.duration_ms)} ms</span>
+                <span className="text-xs text-muted-foreground">
+                  {Math.round(span.duration_ms)} ms
+                </span>
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {formatSpanHighlight(span.attributes)}
@@ -1032,13 +1246,20 @@ function TraceInsight({
           ))}
         </div>
       )}
-      {!detail && error && <div className="mt-3 text-xs text-amber-700">{error}</div>}
+      {!detail && error && (
+        <div className="mt-3 text-xs text-amber-700">{error}</div>
+      )}
     </div>
   );
 }
 
 function formatSpanHighlight(attributes: Record<string, unknown>) {
-  const interestingEntries = ['http.route', 'task.id', 'tool.name', 'heartbeat.status']
+  const interestingEntries = [
+    'http.route',
+    'task.id',
+    'tool.name',
+    'heartbeat.status',
+  ]
     .map((key) => [key, attributes[key]] as const)
     .filter(([, value]) => typeof value === 'string' && value.length > 0)
     .slice(0, 2);
@@ -1047,10 +1268,20 @@ function formatSpanHighlight(attributes: Record<string, unknown>) {
     return 'Detailed span attributes are available for this trace.';
   }
 
-  return interestingEntries.map(([key, value]) => `${key}: ${value}`).join(' | ');
+  return interestingEntries
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(' | ');
 }
 
-function Metric({ label, value, helper }: { label: string; value: number | string; helper: string }) {
+function Metric({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: number | string;
+  helper: string;
+}) {
   return (
     <div className="rounded-xl border bg-muted/20 p-4">
       <div className="text-sm text-muted-foreground">{label}</div>
@@ -1084,8 +1315,13 @@ function SummaryGroup({
       <div className="mt-3 space-y-2">
         {items.length > 0 ? (
           items.map((item) => (
-            <div key={item.label} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2 text-sm">
-              <span className="truncate text-muted-foreground">{item.label}</span>
+            <div
+              key={item.label}
+              className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2 text-sm"
+            >
+              <span className="truncate text-muted-foreground">
+                {item.label}
+              </span>
               <span className="font-medium text-foreground">{item.value}</span>
             </div>
           ))

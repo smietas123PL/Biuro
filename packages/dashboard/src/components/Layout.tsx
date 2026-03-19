@@ -1,12 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  CheckSquare, 
-  Target, 
-  Wrench, 
-  ShieldCheck, 
-  Activity, 
+import {
+  LayoutDashboard,
+  Users,
+  CheckSquare,
+  Target,
+  Wrench,
+  ShieldCheck,
+  Activity,
   Settings,
   WalletCards,
   Search,
@@ -90,16 +90,20 @@ export function Layout() {
             Biuro
           </h1>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
-              className={({ isActive }) => clsx(
-                "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
-                isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
+              className={({ isActive }) =>
+                clsx(
+                  'flex items-center gap-3 px-3 py-2 rounded-md transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                )
+              }
             >
               <item.icon className="w-5 h-5" />
               <span className="font-medium">{item.label}</span>
@@ -110,10 +114,14 @@ export function Layout() {
         <div className="p-4 border-t">
           <NavLink
             to="/settings"
-            className={({ isActive }) => clsx(
-              "flex items-center gap-3 px-3 py-2 w-full rounded-md transition-colors",
-              isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
+            className={({ isActive }) =>
+              clsx(
+                'flex items-center gap-3 px-3 py-2 w-full rounded-md transition-colors',
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+              )
+            }
           >
             <Settings className="w-5 h-5" />
             <span className="font-medium">Settings</span>
@@ -163,8 +171,12 @@ export function Layout() {
               </span>
             </button>
             <div className="text-right">
-              <div className="text-sm font-medium text-foreground">{user?.full_name || user?.email}</div>
-              <div className="text-xs text-muted-foreground">Authenticated session</div>
+              <div className="text-sm font-medium text-foreground">
+                {user?.full_name || user?.email}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Authenticated session
+              </div>
             </div>
             <button
               onClick={() => void logout()}
@@ -215,7 +227,10 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
-      <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
+      <CommandPalette
+        open={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+      />
     </div>
   );
 }

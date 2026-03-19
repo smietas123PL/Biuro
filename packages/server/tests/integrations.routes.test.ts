@@ -27,7 +27,14 @@ vi.mock('../src/env.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 vi.mock('../src/services/notifications.js', () => ({
@@ -51,13 +58,20 @@ describe('integration routes', () => {
     sendSlackMessageMock.mockReset();
 
     const app = express();
-    const captureRawBody: Parameters<typeof express.json>[0]['verify'] = (req, _res, buffer, encoding) => {
+    const captureRawBody: Parameters<typeof express.json>[0]['verify'] = (
+      req,
+      _res,
+      buffer,
+      encoding
+    ) => {
       if (buffer.length === 0) {
         return;
       }
 
-      const bodyEncoding = typeof encoding === 'string' ? (encoding as BufferEncoding) : 'utf8';
-      (req as express.Request & { rawBody?: string }).rawBody = buffer.toString(bodyEncoding);
+      const bodyEncoding =
+        typeof encoding === 'string' ? (encoding as BufferEncoding) : 'utf8';
+      (req as express.Request & { rawBody?: string }).rawBody =
+        buffer.toString(bodyEncoding);
     };
 
     app.use(express.json({ verify: captureRawBody }));
@@ -137,7 +151,8 @@ describe('integration routes', () => {
     await expect(response.json()).resolves.toMatchObject({
       base_url: 'https://biuro.example.com',
       slack: {
-        interactions_url: 'https://biuro.example.com/api/integrations/slack/interactions',
+        interactions_url:
+          'https://biuro.example.com/api/integrations/slack/interactions',
         approval_actions: {
           ready: true,
           status: 'Ready for one-click approvals',
@@ -192,8 +207,12 @@ describe('integration routes', () => {
     });
 
     expect(dbMock.query).toHaveBeenCalledTimes(2);
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('SELECT slack_webhook_url, discord_webhook_url FROM companies');
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain("action = 'integration.webhook_tested'");
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'SELECT slack_webhook_url, discord_webhook_url FROM companies'
+    );
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      "action = 'integration.webhook_tested'"
+    );
   });
 
   it('updates company integration config and records an audit entry', async () => {
@@ -231,13 +250,17 @@ describe('integration routes', () => {
     });
 
     expect(dbMock.query).toHaveBeenCalledTimes(2);
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('UPDATE companies');
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'UPDATE companies'
+    );
     expect(dbMock.query.mock.calls[0]?.[1]).toEqual([
       'https://hooks.slack.test/services/abc',
       'https://discord.test/api/webhooks/xyz',
       'company-1',
     ]);
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('integration.config_updated');
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      'integration.config_updated'
+    );
   });
 
   it('sends a Slack test webhook using stored company config and records a successful audit event', async () => {
@@ -273,8 +296,12 @@ describe('integration routes', () => {
       expect.stringContaining('QA Test Corp')
     );
     expect(dbMock.query).toHaveBeenCalledTimes(2);
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('integration.webhook_tested');
-    expect(JSON.parse(String(dbMock.query.mock.calls[1]?.[1]?.[1]))).toMatchObject({
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      'integration.webhook_tested'
+    );
+    expect(
+      JSON.parse(String(dbMock.query.mock.calls[1]?.[1]?.[1]))
+    ).toMatchObject({
       type: 'slack',
       status: 'success',
       target_url: 'https://hooks.slack.test/services/stored',
@@ -294,7 +321,10 @@ describe('integration routes', () => {
         ],
       })
       .mockResolvedValueOnce({ rows: [] });
-    alertDiscordMock.mockResolvedValue({ ok: false, error: 'Webhook failed: 500 Internal Server Error' });
+    alertDiscordMock.mockResolvedValue({
+      ok: false,
+      error: 'Webhook failed: 500 Internal Server Error',
+    });
 
     const response = await fetch(`${baseUrl}/test-webhook`, {
       method: 'POST',
@@ -316,8 +346,12 @@ describe('integration routes', () => {
       'https://discord.test/api/webhooks/stored',
       expect.stringContaining('QA Test Corp')
     );
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('integration.webhook_tested');
-    expect(JSON.parse(String(dbMock.query.mock.calls[1]?.[1]?.[1]))).toMatchObject({
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      'integration.webhook_tested'
+    );
+    expect(
+      JSON.parse(String(dbMock.query.mock.calls[1]?.[1]?.[1]))
+    ).toMatchObject({
       type: 'discord',
       status: 'failure',
       target_url: 'https://discord.test/api/webhooks/stored',
@@ -357,17 +391,25 @@ describe('integration routes', () => {
 
     expect(response.status).toBe(200);
     expect(dbMock.query).toHaveBeenCalledTimes(2);
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain("metadata->>$1 = $2");
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'metadata->>$1 = $2'
+    );
     expect(dbMock.query.mock.calls[0]?.[1]).toEqual([
       'discord_channel',
       'discord-channel-42',
       'discord_thread',
     ]);
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('INSERT INTO messages');
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      'INSERT INTO messages'
+    );
     expect(dbMock.query.mock.calls[1]?.[1]?.[0]).toBe('company-1');
     expect(dbMock.query.mock.calls[1]?.[1]?.[1]).toBe('task-1');
-    expect(dbMock.query.mock.calls[1]?.[1]?.[2]).toBe('Customer asked for a Friday status update.');
-    expect(JSON.parse(String(dbMock.query.mock.calls[1]?.[1]?.[3]))).toMatchObject({
+    expect(dbMock.query.mock.calls[1]?.[1]?.[2]).toBe(
+      'Customer asked for a Friday status update.'
+    );
+    expect(
+      JSON.parse(String(dbMock.query.mock.calls[1]?.[1]?.[3]))
+    ).toMatchObject({
       source: 'discord',
       channel_id: 'discord-channel-42',
       discord_message_id: 'discord-message-1',
@@ -479,11 +521,21 @@ describe('integration routes', () => {
       ],
     });
 
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('FROM approvals a');
-    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('UPDATE approvals');
-    expect(String(dbMock.query.mock.calls[2]?.[0])).toContain("SET status = CASE WHEN assigned_to IS NULL THEN 'backlog' ELSE 'assigned' END");
-    expect(String(dbMock.query.mock.calls[3]?.[0])).toContain('INSERT INTO messages');
-    expect(String(dbMock.query.mock.calls[4]?.[0])).toContain('approval.resolved');
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'FROM approvals a'
+    );
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain(
+      'UPDATE approvals'
+    );
+    expect(String(dbMock.query.mock.calls[2]?.[0])).toContain(
+      "SET status = CASE WHEN assigned_to IS NULL THEN 'backlog' ELSE 'assigned' END"
+    );
+    expect(String(dbMock.query.mock.calls[3]?.[0])).toContain(
+      'INSERT INTO messages'
+    );
+    expect(String(dbMock.query.mock.calls[4]?.[0])).toContain(
+      'approval.resolved'
+    );
   });
 
   it('handles Slack reject actions for already resolved approvals without mutating state again', async () => {

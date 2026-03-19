@@ -38,7 +38,11 @@ async function storeInboundTaskMessage(args: {
     ]
   );
 
-  return { matched: true as const, taskId: task.id, companyId: task.company_id };
+  return {
+    matched: true as const,
+    taskId: task.id,
+    companyId: task.company_id,
+  };
 }
 
 function buildSlackApprovalResponse(args: {
@@ -126,7 +130,10 @@ export const IntegrationService = {
       };
     }
 
-    if (action.action_id !== 'approval.approve' && action.action_id !== 'approval.reject') {
+    if (
+      action.action_id !== 'approval.approve' &&
+      action.action_id !== 'approval.reject'
+    ) {
       return {
         response_type: 'ephemeral',
         text: `Unknown action: ${action.action_id}`,
@@ -148,7 +155,8 @@ export const IntegrationService = {
       };
     }
 
-    const status = action.action_id === 'approval.approve' ? 'approved' : 'rejected';
+    const status =
+      action.action_id === 'approval.approve' ? 'approved' : 'rejected';
     const resolvedBy =
       payload.user?.username ??
       payload.user?.name ??
@@ -174,7 +182,9 @@ export const IntegrationService = {
       reason: resolution.reason,
       notes,
       resolvedBy,
-      alreadyResolved: Boolean((resolution as { already_resolved?: boolean }).already_resolved),
+      alreadyResolved: Boolean(
+        (resolution as { already_resolved?: boolean }).already_resolved
+      ),
     });
   },
 
@@ -219,5 +229,5 @@ export const IntegrationService = {
       return `Task created: ${res.rows[0].id}`;
     }
     return `Unknown command: ${command}`;
-  }
+  },
 };

@@ -75,17 +75,13 @@ describe('CompanyProvider', () => {
       });
     });
 
-    expect(requestMock).toHaveBeenNthCalledWith(
-      2,
-      '/companies',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          name: 'Nova',
-          mission: 'Launch fast',
-        }),
-      }
-    );
+    expect(requestMock).toHaveBeenNthCalledWith(2, '/companies', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Nova',
+        mission: 'Launch fast',
+      }),
+    });
     expect(result.current.companies[0]).toMatchObject({
       id: 'company-2',
       name: 'Nova',

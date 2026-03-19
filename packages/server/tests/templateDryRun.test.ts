@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CompanyTemplateSchema, buildTemplateImportDryRun, buildTemplatePreviewAuditDetails } from '../src/services/template.js';
+import {
+  CompanyTemplateSchema,
+  buildTemplateImportDryRun,
+  buildTemplatePreviewAuditDetails,
+} from '../src/services/template.js';
 import { getTemplatePresetById } from '../src/services/templatePresets.js';
 
 describe('buildTemplateImportDryRun', () => {
@@ -43,9 +47,16 @@ describe('buildTemplateImportDryRun', () => {
       tool_names: ['web_search'],
     });
     expect(summary.record_changes).toEqual({
-      goals_to_add: ['Validate the initial offer', 'Interview early users', 'Ship a usable MVP'],
+      goals_to_add: [
+        'Validate the initial offer',
+        'Interview early users',
+        'Ship a usable MVP',
+      ],
       agents_to_add: ['Avery', 'Mika', 'Tess'],
-      policies_to_add: ['Approval for external calls', 'Delegation depth limit'],
+      policies_to_add: [
+        'Approval for external calls',
+        'Delegation depth limit',
+      ],
       tools_to_create: ['founder_notes'],
       tools_to_update: ['web_search'],
       budgets_to_add: [
@@ -57,7 +68,12 @@ describe('buildTemplateImportDryRun', () => {
     expect(summary.projected).toEqual({
       goals: {
         count: 4,
-        names: ['Validate the initial offer', 'Validate the initial offer', 'Interview early users', 'Ship a usable MVP'],
+        names: [
+          'Validate the initial offer',
+          'Validate the initial offer',
+          'Interview early users',
+          'Ship a usable MVP',
+        ],
       },
       agents: {
         count: 4,
@@ -69,15 +85,23 @@ describe('buildTemplateImportDryRun', () => {
       },
       policies: {
         count: 3,
-        names: ['Approval for external calls', 'Approval for external calls', 'Delegation depth limit'],
+        names: [
+          'Approval for external calls',
+          'Approval for external calls',
+          'Delegation depth limit',
+        ],
       },
       budgets: {
         count: 4,
         agent_names: ['Existing Owner', 'Avery', 'Mika', 'Tess'],
       },
     });
-    expect(summary.warnings.some((warning) => warning.includes('tool name match'))).toBe(true);
-    expect(summary.warnings.some((warning) => warning.includes('preserved'))).toBe(true);
+    expect(
+      summary.warnings.some((warning) => warning.includes('tool name match'))
+    ).toBe(true);
+    expect(
+      summary.warnings.some((warning) => warning.includes('preserved'))
+    ).toBe(true);
   });
 
   it('switches resulting company identity when preserve mode is disabled', () => {
@@ -102,9 +126,14 @@ describe('buildTemplateImportDryRun', () => {
     );
 
     expect(summary.company.resulting_name).toBe(preset.template.company.name);
-    expect(summary.company.resulting_mission).toBe(preset.template.company.mission);
+    expect(summary.company.resulting_mission).toBe(
+      preset.template.company.mission
+    );
     expect(summary.changes.tools_to_update).toBe(0);
-    expect(summary.record_changes.tools_to_create).toEqual(['web_search', 'cms_api']);
+    expect(summary.record_changes.tools_to_create).toEqual([
+      'web_search',
+      'cms_api',
+    ]);
     expect(summary.record_changes.tools_to_update).toEqual([]);
     expect(summary.projected.tools).toEqual({
       count: 2,
@@ -114,7 +143,9 @@ describe('buildTemplateImportDryRun', () => {
       count: 3,
       agent_names: ['Rae', 'June', 'Pax'],
     });
-    expect(summary.warnings.some((warning) => warning.includes('replaced'))).toBe(true);
+    expect(
+      summary.warnings.some((warning) => warning.includes('replaced'))
+    ).toBe(true);
   });
 
   it('builds compact audit details for a saved preview snapshot', () => {
@@ -168,9 +199,16 @@ describe('buildTemplateImportDryRun', () => {
         tool_names: 1,
       },
       sample_changes: {
-        goals_to_add: ['Validate the initial offer', 'Interview early users', 'Ship a usable MVP'],
+        goals_to_add: [
+          'Validate the initial offer',
+          'Interview early users',
+          'Ship a usable MVP',
+        ],
         agents_to_add: ['Avery', 'Mika', 'Tess'],
-        policies_to_add: ['Approval for external calls', 'Delegation depth limit'],
+        policies_to_add: [
+          'Approval for external calls',
+          'Delegation depth limit',
+        ],
         tools_to_create: ['founder_notes'],
         tools_to_update: ['web_search'],
       },

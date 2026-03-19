@@ -23,11 +23,17 @@ program
       const token = res.data.token;
       config.set('token', token);
       if (options.company) config.set('companyId', options.company);
-      
+
       console.log(chalk.green('Successfully logged in!'));
-      if (!options.company) console.log(chalk.yellow('Note: Set company ID via -c or biuro set-company <id>'));
+      if (!options.company)
+        console.log(
+          chalk.yellow('Note: Set company ID via -c or biuro set-company <id>')
+        );
     } catch (err: any) {
-       console.error(chalk.red('Login failed:'), err.response?.data?.error || err.message);
+      console.error(
+        chalk.red('Login failed:'),
+        err.response?.data?.error || err.message
+      );
     }
   });
 
@@ -40,7 +46,10 @@ program
       console.log(chalk.cyan('--- Biuro Status ---'));
       console.log(JSON.stringify(res.data, null, 2));
     } catch (err: any) {
-      console.error(chalk.red('Status failed:'), err.response?.data?.error || err.message);
+      console.error(
+        chalk.red('Status failed:'),
+        err.response?.data?.error || err.message
+      );
     }
   });
 
@@ -49,16 +58,24 @@ program
   .description('Stream logs from an agent')
   .argument('[agentId]', 'ID of the agent')
   .action(async (agentId) => {
-    console.log(chalk.yellow(`Streaming logs for agent: ${agentId || 'all'}...`));
+    console.log(
+      chalk.yellow(`Streaming logs for agent: ${agentId || 'all'}...`)
+    );
     // Polling simulation for now
     setInterval(async () => {
-       try {
-         const res = await client.get('/audit', { params: { agentId, limit: 1 } });
-         if (res.data.length > 0) {
-           const log = res.data[0];
-           console.log(chalk.gray(`[${log.created_at}]`), chalk.white(log.action), log.details);
-         }
-       } catch (err) {}
+      try {
+        const res = await client.get('/audit', {
+          params: { agentId, limit: 1 },
+        });
+        if (res.data.length > 0) {
+          const log = res.data[0];
+          console.log(
+            chalk.gray(`[${log.created_at}]`),
+            chalk.white(log.action),
+            log.details
+          );
+        }
+      } catch (err) {}
     }, 5000);
   });
 
@@ -67,14 +84,17 @@ program
   .description('Deploy a company template')
   .argument('<path>', 'Path to template JSON')
   .action(async (path) => {
-     try {
-       const fs = await import('node:fs/promises');
-       const template = JSON.parse(await fs.readFile(path, 'utf8'));
-       const res = await client.post('/templates/import', template);
-       console.log(chalk.green('Successfully deployed template:'), res.data);
-     } catch (err: any) {
-       console.error(chalk.red('Deployment failed:'), err.response?.data?.error || err.message);
-     }
+    try {
+      const fs = await import('node:fs/promises');
+      const template = JSON.parse(await fs.readFile(path, 'utf8'));
+      const res = await client.post('/templates/import', template);
+      console.log(chalk.green('Successfully deployed template:'), res.data);
+    } catch (err: any) {
+      console.error(
+        chalk.red('Deployment failed:'),
+        err.response?.data?.error || err.message
+      );
+    }
   });
 
 await program.parseAsync(process.argv);

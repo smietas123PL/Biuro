@@ -265,7 +265,10 @@ export async function resolveApproval(
       agentId: current.requested_by_agent ?? null,
     });
   } else {
-    await db.query("UPDATE tasks SET status = 'blocked' WHERE id = (SELECT task_id FROM approvals WHERE id = $1)", [approvalId]);
+    await db.query(
+      "UPDATE tasks SET status = 'blocked' WHERE id = (SELECT task_id FROM approvals WHERE id = $1)",
+      [approvalId]
+    );
   }
 
   await db.query(
@@ -300,5 +303,9 @@ export async function resolveApproval(
     ]
   );
 
-  return { ...res.rows[0], task_title: current.task_title ?? null, already_resolved: false as const };
+  return {
+    ...res.rows[0],
+    task_title: current.task_title ?? null,
+    already_resolved: false as const,
+  };
 }

@@ -115,7 +115,10 @@ describe('ToolsPage', () => {
     requestMock.mockReset();
     useApiMock.mockReset();
     useCompanyMock.mockReset();
-    vi.stubGlobal('confirm', vi.fn(() => true));
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true)
+    );
 
     useApiMock.mockReturnValue({
       request: requestMock,
@@ -130,16 +133,39 @@ describe('ToolsPage', () => {
 
   it('supports CRUD, bootstrap, assignment, testing, and history detail', async () => {
     requestMock.mockImplementation((path: string, options?: RequestInit) => {
-      if (path === '/companies/company-1/tools') return Promise.resolve(toolsResponse);
-      if (path === '/companies/company-1/agents') return Promise.resolve(agentsResponse);
-      if (path === '/companies/company-1/tools/tool-1/calls?page=1&limit=10') return Promise.resolve(baseHistoryResponse);
-      if (path === '/companies/company-1/tools/seed') return Promise.resolve({ inserted: ['file_write'], existing: ['web_search'] });
-      if (path === '/companies/company-1/tools' && options?.method === 'POST') return Promise.resolve({ id: 'tool-3', name: 'file_write' });
-      if (path === '/companies/company-1/tools/tool-1' && options?.method === 'PATCH') return Promise.resolve({ ok: true });
-      if (path === '/companies/company-1/tools/tool-1/test') return Promise.resolve({ ok: true, duration_ms: 42, output: { ok: true } });
-      if (path === '/companies/company-1/tools/tool-1/assign') return Promise.resolve({ ok: true });
-      if (path === '/companies/company-1/tools/tool-1/assign/agent-1') return Promise.resolve({ ok: true });
-      if (path === '/companies/company-1/tools/tool-1' && options?.method === 'DELETE') return Promise.resolve({ ok: true });
+      if (path === '/companies/company-1/tools')
+        return Promise.resolve(toolsResponse);
+      if (path === '/companies/company-1/agents')
+        return Promise.resolve(agentsResponse);
+      if (path === '/companies/company-1/tools/tool-1/calls?page=1&limit=10')
+        return Promise.resolve(baseHistoryResponse);
+      if (path === '/companies/company-1/tools/seed')
+        return Promise.resolve({
+          inserted: ['file_write'],
+          existing: ['web_search'],
+        });
+      if (path === '/companies/company-1/tools' && options?.method === 'POST')
+        return Promise.resolve({ id: 'tool-3', name: 'file_write' });
+      if (
+        path === '/companies/company-1/tools/tool-1' &&
+        options?.method === 'PATCH'
+      )
+        return Promise.resolve({ ok: true });
+      if (path === '/companies/company-1/tools/tool-1/test')
+        return Promise.resolve({
+          ok: true,
+          duration_ms: 42,
+          output: { ok: true },
+        });
+      if (path === '/companies/company-1/tools/tool-1/assign')
+        return Promise.resolve({ ok: true });
+      if (path === '/companies/company-1/tools/tool-1/assign/agent-1')
+        return Promise.resolve({ ok: true });
+      if (
+        path === '/companies/company-1/tools/tool-1' &&
+        options?.method === 'DELETE'
+      )
+        return Promise.resolve({ ok: true });
       return Promise.reject(new Error(`Unexpected request path: ${path}`));
     });
 
@@ -164,22 +190,32 @@ describe('ToolsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Seed default tools' }));
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/tools/seed', { method: 'POST' });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/tools/seed',
+        { method: 'POST' }
+      );
     });
-    expect(screen.getByText('Seeded defaults: 1 inserted, 1 already present.')).toBeTruthy();
+    expect(
+      screen.getByText('Seeded defaults: 1 inserted, 1 already present.')
+    ).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText('Edit tool name'), { target: { value: 'web_search_v2' } });
+    fireEvent.change(screen.getByLabelText('Edit tool name'), {
+      target: { value: 'web_search_v2' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save tool changes' }));
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/tools/tool-1', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          name: 'web_search_v2',
-          description: 'Search current public information.',
-          type: 'builtin',
-          config: { builtin: 'web_search' },
-        }),
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/tools/tool-1',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: 'web_search_v2',
+            description: 'Search current public information.',
+            type: 'builtin',
+            config: { builtin: 'web_search' },
+          }),
+        }
+      );
     });
 
     fireEvent.change(screen.getByLabelText('Tool test input'), {
@@ -198,32 +234,48 @@ describe('ToolsPage', () => {
     });
     expect(screen.getByText('42 ms')).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText('Assign tool to agent'), { target: { value: 'agent-2' } });
+    fireEvent.change(screen.getByLabelText('Assign tool to agent'), {
+      target: { value: 'agent-2' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Assign to agent' }));
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/tools/tool-1/assign', {
-        method: 'POST',
-        body: JSON.stringify({ agent_id: 'agent-2' }),
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/tools/tool-1/assign',
+        {
+          method: 'POST',
+          body: JSON.stringify({ agent_id: 'agent-2' }),
+        }
+      );
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/tools/tool-1/assign/agent-1', {
-        method: 'DELETE',
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/tools/tool-1/assign/agent-1',
+        {
+          method: 'DELETE',
+        }
+      );
     });
 
     expect(screen.getByText('Execution history')).toBeTruthy();
     expect(screen.getByText('Selected call payload')).toBeTruthy();
-    expect(screen.getAllByText((content) => content.includes('Provider timeout')).length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText((content) => content.includes('Provider timeout'))
+        .length
+    ).toBeGreaterThanOrEqual(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete tool' }));
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/tools/tool-1', { method: 'DELETE' });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/tools/tool-1',
+        { method: 'DELETE' }
+      );
     });
 
-    fireEvent.change(screen.getByLabelText('Create tool name'), { target: { value: 'file_write' } });
+    fireEvent.change(screen.getByLabelText('Create tool name'), {
+      target: { value: 'file_write' },
+    });
     fireEvent.change(screen.getByLabelText('Create tool config'), {
       target: { value: JSON.stringify({ builtin: 'file_write' }, null, 2) },
     });

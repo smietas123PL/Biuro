@@ -10,7 +10,8 @@ export type DefaultToolBlueprint = {
 export const DEFAULT_TOOL_BLUEPRINTS: DefaultToolBlueprint[] = [
   {
     name: 'web_search',
-    description: 'Search current public information with DuckDuckGo instant answers.',
+    description:
+      'Search current public information with DuckDuckGo instant answers.',
     type: 'builtin',
     config: {
       builtin: 'web_search',
@@ -22,7 +23,8 @@ export const DEFAULT_TOOL_BLUEPRINTS: DefaultToolBlueprint[] = [
   },
   {
     name: 'file_write',
-    description: 'Write text files inside the workspace with path safety checks.',
+    description:
+      'Write text files inside the workspace with path safety checks.',
     type: 'builtin',
     config: {
       builtin: 'file_write',
@@ -58,7 +60,8 @@ export const DEFAULT_TOOL_BLUEPRINTS: DefaultToolBlueprint[] = [
   },
   {
     name: 'shell_utils',
-    description: 'Run a tightly whitelisted shell command inside an isolated sandbox.',
+    description:
+      'Run a tightly whitelisted shell command inside an isolated sandbox.',
     type: 'bash',
     config: {
       allowed_commands: ['git status', 'ls', 'pwd'],

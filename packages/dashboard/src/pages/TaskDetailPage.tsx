@@ -146,14 +146,24 @@ type DelegationHealth = {
   helper: string;
 };
 
-type DelegationHealthFilterId = 'all' | 'risky' | 'stuck' | 'slow-start' | 'fast-handoff';
+type DelegationHealthFilterId =
+  | 'all'
+  | 'risky'
+  | 'stuck'
+  | 'slow-start'
+  | 'fast-handoff';
 
 function getStatusTone(status: string) {
-  if (status === 'working' || status === 'in_progress') return 'bg-sky-100 text-sky-700 border-sky-200';
-  if (status === 'assigned') return 'bg-violet-100 text-violet-700 border-violet-200';
-  if (status === 'done' || status === 'idle') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-  if (status === 'blocked' || status === 'paused') return 'bg-amber-100 text-amber-700 border-amber-200';
-  if (status === 'error' || status === 'terminated') return 'bg-rose-100 text-rose-700 border-rose-200';
+  if (status === 'working' || status === 'in_progress')
+    return 'bg-sky-100 text-sky-700 border-sky-200';
+  if (status === 'assigned')
+    return 'bg-violet-100 text-violet-700 border-violet-200';
+  if (status === 'done' || status === 'idle')
+    return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  if (status === 'blocked' || status === 'paused')
+    return 'bg-amber-100 text-amber-700 border-amber-200';
+  if (status === 'error' || status === 'terminated')
+    return 'bg-rose-100 text-rose-700 border-rose-200';
   return 'bg-slate-100 text-slate-700 border-slate-200';
 }
 
@@ -254,7 +264,10 @@ function formatDurationMs(value: number | null) {
 }
 
 function getDelegationHealth(preview: DelegationPreview): DelegationHealth {
-  if (preview.firstVisibleMoveLatencyMs !== null && preview.firstVisibleMoveLatencyMs <= 60_000) {
+  if (
+    preview.firstVisibleMoveLatencyMs !== null &&
+    preview.firstVisibleMoveLatencyMs <= 60_000
+  ) {
     return {
       label: 'Fast handoff',
       className: 'border-emerald-200 bg-emerald-100 text-emerald-700',
@@ -266,7 +279,8 @@ function getDelegationHealth(preview: DelegationPreview): DelegationHealth {
     return {
       label: 'Slow start',
       className: 'border-amber-200 bg-amber-100 text-amber-700',
-      helper: 'Delegation moved, but the first visible activity came later than expected.',
+      helper:
+        'Delegation moved, but the first visible activity came later than expected.',
     };
   }
 
@@ -300,7 +314,9 @@ function matchesDelegationHealthFilter(
   return health.label === 'Fast handoff';
 }
 
-function parseDelegationHealthFilter(value: string | null): DelegationHealthFilterId {
+function parseDelegationHealthFilter(
+  value: string | null
+): DelegationHealthFilterId {
   if (
     value === 'risky' ||
     value === 'stuck' ||
@@ -321,7 +337,10 @@ function parseTaskDetailViewMode(value: string | null): TaskDetailViewMode {
   return 'task-force';
 }
 
-function parseTaskMapFocusTaskId(value: string | null, tasks: CollaborationTask[]) {
+function parseTaskMapFocusTaskId(
+  value: string | null,
+  tasks: CollaborationTask[]
+) {
   if (!value) {
     return null;
   }
@@ -431,7 +450,8 @@ function buildTimelineWindows(items: CollaborationTimelineItem[]) {
 
   for (const item of items) {
     const eventAt = new Date(item.created_at).getTime();
-    const bucketAt = Math.floor(eventAt / TIMELINE_WINDOW_MS) * TIMELINE_WINDOW_MS;
+    const bucketAt =
+      Math.floor(eventAt / TIMELINE_WINDOW_MS) * TIMELINE_WINDOW_MS;
     const startedAt = new Date(bucketAt).toISOString();
     const endedAt = new Date(bucketAt + TIMELINE_WINDOW_MS).toISOString();
     const lastWindow = windows[windows.length - 1];
@@ -520,40 +540,53 @@ function resolveDelegationPreview(
     return null;
   }
 
-  const childTaskId = typeof item.metadata?.child_task_id === 'string'
-    ? item.metadata.child_task_id
-    : null;
-  const delegatedToAgentId = typeof item.metadata?.delegated_to_agent_id === 'string'
-    ? item.metadata.delegated_to_agent_id
-    : item.to_agent_id;
+  const childTaskId =
+    typeof item.metadata?.child_task_id === 'string'
+      ? item.metadata.child_task_id
+      : null;
+  const delegatedToAgentId =
+    typeof item.metadata?.delegated_to_agent_id === 'string'
+      ? item.metadata.delegated_to_agent_id
+      : item.to_agent_id;
 
   const childTask = childTaskId
-    ? tasks.find((task) => task.id === childTaskId) ?? null
-    : tasks.find((task) =>
-        task.parent_id === parentTask.id &&
-        (!delegatedToAgentId || task.assigned_to === delegatedToAgentId)
-      ) ?? null;
+    ? (tasks.find((task) => task.id === childTaskId) ?? null)
+    : (tasks.find(
+        (task) =>
+          task.parent_id === parentTask.id &&
+          (!delegatedToAgentId || task.assigned_to === delegatedToAgentId)
+      ) ?? null);
   const delegationCreatedAt = new Date(item.created_at).getTime();
   const firstVisibleMove = childTask
-    ? timeline
-      .filter((timelineItem) =>
-        timelineItem.task_id === childTask.id &&
-        timelineItem.created_at >= item.created_at
-      )
-      .sort((left, right) => left.created_at.localeCompare(right.created_at))[0] ?? null
+    ? (timeline
+        .filter(
+          (timelineItem) =>
+            timelineItem.task_id === childTask.id &&
+            timelineItem.created_at >= item.created_at
+        )
+        .sort((left, right) =>
+          left.created_at.localeCompare(right.created_at)
+        )[0] ?? null)
     : null;
   const completedAt = childTask?.completed_at ?? null;
   const completionLatencyMs = completedAt
     ? Math.max(0, new Date(completedAt).getTime() - delegationCreatedAt)
     : null;
   const firstVisibleMoveLatencyMs = firstVisibleMove
-    ? Math.max(0, new Date(firstVisibleMove.created_at).getTime() - delegationCreatedAt)
+    ? Math.max(
+        0,
+        new Date(firstVisibleMove.created_at).getTime() - delegationCreatedAt
+      )
     : null;
 
   return {
     parentTask,
     childTask,
-    ownerName: childTask?.assigned_to_name || item.to_agent_name || item.to_agent_role || 'Awaiting assignment',
+    ownerName:
+      childTask?.assigned_to_name ||
+      item.to_agent_name ||
+      item.to_agent_role ||
+      'Awaiting assignment',
     ownerRole: childTask?.assigned_to_role || item.to_agent_role || null,
     ownerStatus: childTask?.assigned_to_status || null,
     firstVisibleMoveAt: firstVisibleMove?.created_at ?? null,
@@ -568,20 +601,25 @@ export default function TaskDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { request, error, lastTrace } = useApi();
   const { selectedCompanyId } = useCompany();
-  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as
-    | { event: string; data?: { root_task_id?: string; task_id?: string; kind?: string } }
-    | null;
+  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as {
+    event: string;
+    data?: { root_task_id?: string; task_id?: string; kind?: string };
+  } | null;
   const [snapshot, setSnapshot] = useState<CollaborationSnapshot | null>(null);
   const [newMsg, setNewMsg] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [liveLabel, setLiveLabel] = useState<string | null>(null);
   const activeViewMode = parseTaskDetailViewMode(searchParams.get('view'));
-  const activeTimelineFilter = parseTimelineFilter(searchParams.get('timelineFilter'));
+  const activeTimelineFilter = parseTimelineFilter(
+    searchParams.get('timelineFilter')
+  );
   const expandedToolSequenceIds = useMemo(
     () => parseExpandedToolSequenceIds(searchParams.get('expandedTools')),
     [searchParams]
   );
-  const activeDelegationHealthFilter = parseDelegationHealthFilter(searchParams.get('taskMapFilter'));
+  const activeDelegationHealthFilter = parseDelegationHealthFilter(
+    searchParams.get('taskMapFilter')
+  );
 
   const fetchSnapshot = useCallback(
     async (suppressError = false) => {
@@ -591,7 +629,11 @@ export default function TaskDetailPage() {
 
       setIsRefreshing(true);
       try {
-        const data = (await request(`/tasks/${id}/collaboration`, undefined, suppressError ? { suppressError: true } : undefined)) as CollaborationSnapshot;
+        const data = (await request(
+          `/tasks/${id}/collaboration`,
+          undefined,
+          suppressError ? { suppressError: true } : undefined
+        )) as CollaborationSnapshot;
         setSnapshot(data);
       } finally {
         setIsRefreshing(false);
@@ -624,7 +666,9 @@ export default function TaskDetailPage() {
   }, [fetchSnapshot, lastEvent, snapshot]);
 
   const currentTaskEntry = useMemo(
-    () => snapshot?.tasks.find((task) => task.id === snapshot.current_task.id) ?? null,
+    () =>
+      snapshot?.tasks.find((task) => task.id === snapshot.current_task.id) ??
+      null,
     [snapshot]
   );
 
@@ -635,22 +679,53 @@ export default function TaskDetailPage() {
     () =>
       [
         { id: 'all', count: timeline.length },
-        { id: 'thought', count: timeline.filter((item) => item.kind === 'thought').length },
-        { id: 'delegation', count: timeline.filter((item) => item.kind === 'delegation').length },
-        { id: 'tool', count: timeline.filter((item) => item.kind === 'tool').length },
-        { id: 'status', count: timeline.filter((item) => item.kind === 'status').length },
-        { id: 'supervisor', count: timeline.filter((item) => item.kind === 'supervisor').length },
-        { id: 'message', count: timeline.filter((item) => item.kind === 'message').length },
+        {
+          id: 'thought',
+          count: timeline.filter((item) => item.kind === 'thought').length,
+        },
+        {
+          id: 'delegation',
+          count: timeline.filter((item) => item.kind === 'delegation').length,
+        },
+        {
+          id: 'tool',
+          count: timeline.filter((item) => item.kind === 'tool').length,
+        },
+        {
+          id: 'status',
+          count: timeline.filter((item) => item.kind === 'status').length,
+        },
+        {
+          id: 'supervisor',
+          count: timeline.filter((item) => item.kind === 'supervisor').length,
+        },
+        {
+          id: 'message',
+          count: timeline.filter((item) => item.kind === 'message').length,
+        },
       ] satisfies Array<{ id: TimelineFilterId; count: number }>,
     [timeline]
   );
   const filteredTimeline = useMemo(
-    () => timeline.filter((item) => activeTimelineFilter === 'all' || item.kind === activeTimelineFilter),
+    () =>
+      timeline.filter(
+        (item) =>
+          activeTimelineFilter === 'all' || item.kind === activeTimelineFilter
+      ),
     [activeTimelineFilter, timeline]
   );
-  const timelineWindows = useMemo(() => buildTimelineWindows(filteredTimeline), [filteredTimeline]);
+  const timelineWindows = useMemo(
+    () => buildTimelineWindows(filteredTimeline),
+    [filteredTimeline]
+  );
   const recentTimelineItems = useMemo(
-    () => [...timeline].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5),
+    () =>
+      [...timeline]
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+        .slice(0, 5),
     [timeline]
   );
   const delegationHealthByTaskId = useMemo(() => {
@@ -670,15 +745,25 @@ export default function TaskDetailPage() {
           },
         ] as const;
       })
-      .filter((entry): entry is readonly [string, { health: DelegationHealth; preview: DelegationPreview }] => Boolean(entry));
+      .filter(
+        (
+          entry
+        ): entry is readonly [
+          string,
+          { health: DelegationHealth; preview: DelegationPreview },
+        ] => Boolean(entry)
+      );
 
     return new Map(entries);
   }, [tasks, timeline]);
   const delegationHealthSummary = useMemo(() => {
     const values = Array.from(delegationHealthByTaskId.values());
     return {
-      fastHandoff: values.filter((entry) => entry.health.label === 'Fast handoff').length,
-      slowStart: values.filter((entry) => entry.health.label === 'Slow start').length,
+      fastHandoff: values.filter(
+        (entry) => entry.health.label === 'Fast handoff'
+      ).length,
+      slowStart: values.filter((entry) => entry.health.label === 'Slow start')
+        .length,
       stuck: values.filter((entry) => entry.health.label === 'Stuck').length,
     };
   }, [delegationHealthByTaskId]);
@@ -697,7 +782,12 @@ export default function TaskDetailPage() {
     }
 
     const matchingTaskIds = Array.from(delegationHealthByTaskId.entries())
-      .filter(([, value]) => matchesDelegationHealthFilter(value.health, activeDelegationHealthFilter))
+      .filter(([, value]) =>
+        matchesDelegationHealthFilter(
+          value.health,
+          activeDelegationHealthFilter
+        )
+      )
       .map(([taskId]) => taskId);
     const visibleIds = new Set<string>();
     for (const taskId of matchingTaskIds) {
@@ -705,7 +795,7 @@ export default function TaskDetailPage() {
       while (currentTask) {
         visibleIds.add(currentTask.id);
         currentTask = currentTask.parent_id
-          ? tasks.find((task) => task.id === currentTask?.parent_id) ?? null
+          ? (tasks.find((task) => task.id === currentTask?.parent_id) ?? null)
           : null;
       }
     }
@@ -728,13 +818,18 @@ export default function TaskDetailPage() {
     [focusedTaskMapTaskId, tasks]
   );
   const isFocusedTaskVisible = useMemo(
-    () => (focusedTaskMapTaskId ? visibleTasks.some((task) => task.id === focusedTaskMapTaskId) : false),
+    () =>
+      focusedTaskMapTaskId
+        ? visibleTasks.some((task) => task.id === focusedTaskMapTaskId)
+        : false,
     [focusedTaskMapTaskId, visibleTasks]
   );
 
   const toggleToolSequence = (sequenceId: string) => {
     const nextParams = new URLSearchParams(searchParams);
-    const nextExpandedIds = parseExpandedToolSequenceIds(searchParams.get('expandedTools'));
+    const nextExpandedIds = parseExpandedToolSequenceIds(
+      searchParams.get('expandedTools')
+    );
     if (nextExpandedIds.has(sequenceId)) {
       nextExpandedIds.delete(sequenceId);
     } else {
@@ -744,7 +839,10 @@ export default function TaskDetailPage() {
     if (nextExpandedIds.size === 0) {
       nextParams.delete('expandedTools');
     } else {
-      nextParams.set('expandedTools', Array.from(nextExpandedIds).sort().join(','));
+      nextParams.set(
+        'expandedTools',
+        Array.from(nextExpandedIds).sort().join(',')
+      );
     }
 
     setSearchParams(nextParams, { replace: true });
@@ -806,7 +904,11 @@ export default function TaskDetailPage() {
   };
 
   if (!snapshot) {
-    return <div className="rounded-2xl border border-dashed p-10 text-sm text-muted-foreground">Loading collaboration mode...</div>;
+    return (
+      <div className="rounded-2xl border border-dashed p-10 text-sm text-muted-foreground">
+        Loading collaboration mode...
+      </div>
+    );
   }
 
   return (
@@ -821,13 +923,18 @@ export default function TaskDetailPage() {
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 <ClipboardList className="h-7 w-7 text-sky-200" />
-                <h2 className="text-3xl font-semibold tracking-tight">{snapshot.root_task.title}</h2>
-                <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(snapshot.root_task.status)}`}>
+                <h2 className="text-3xl font-semibold tracking-tight">
+                  {snapshot.root_task.title}
+                </h2>
+                <span
+                  className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(snapshot.root_task.status)}`}
+                >
                   {snapshot.root_task.status}
                 </span>
               </div>
               <p className="max-w-3xl text-sm leading-7 text-slate-200">
-                {snapshot.root_task.description || 'This task force is coordinating through delegated subtasks, live reasoning, and internal debate.'}
+                {snapshot.root_task.description ||
+                  'This task force is coordinating through delegated subtasks, live reasoning, and internal debate.'}
               </p>
               {snapshot.current_task.fork_origin ? (
                 <div className="max-w-3xl rounded-2xl border border-sky-200/40 bg-sky-100/10 px-4 py-3 text-sm text-sky-50">
@@ -853,17 +960,33 @@ export default function TaskDetailPage() {
                       </div>
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-sky-100/80">
                         {snapshot.current_task.fork_origin.source_event_id ? (
-                          <span>Replay event: {snapshot.current_task.fork_origin.source_event_id}</span>
+                          <span>
+                            Replay event:{' '}
+                            {snapshot.current_task.fork_origin.source_event_id}
+                          </span>
                         ) : null}
-                        {formatDateTime(snapshot.current_task.fork_origin.source_timestamp) ? (
-                          <span>Fork point: {formatDateTime(snapshot.current_task.fork_origin.source_timestamp)}</span>
+                        {formatDateTime(
+                          snapshot.current_task.fork_origin.source_timestamp
+                        ) ? (
+                          <span>
+                            Fork point:{' '}
+                            {formatDateTime(
+                              snapshot.current_task.fork_origin.source_timestamp
+                            )}
+                          </span>
                         ) : null}
-                        {snapshot.current_task.fork_origin.prompt_override ? <span>Prompt override included</span> : null}
+                        {snapshot.current_task.fork_origin.prompt_override ? (
+                          <span>Prompt override included</span>
+                        ) : null}
                       </div>
                     </div>
                     {getForkReplayLink(snapshot.current_task.fork_origin) ? (
                       <Link
-                        to={getForkReplayLink(snapshot.current_task.fork_origin) || '#'}
+                        to={
+                          getForkReplayLink(
+                            snapshot.current_task.fork_origin
+                          ) || '#'
+                        }
                         className="inline-flex items-center rounded-full border border-sky-200/40 bg-white/10 px-3 py-1.5 text-xs font-medium text-sky-50 transition-colors hover:bg-white/15"
                       >
                         Open source replay
@@ -899,37 +1022,66 @@ export default function TaskDetailPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <MetricBadge label="Agents in formation" value={String(snapshot.summary.participant_count)} helper="Active contributors in this task force" />
-              <MetricBadge label="Subtasks in play" value={String(snapshot.summary.task_count)} helper="Root mission plus delegated workstreams" />
-              <MetricBadge label="Reasoning bursts" value={String(snapshot.summary.thought_count)} helper="Thoughts captured from live heartbeats" />
+              <MetricBadge
+                label="Agents in formation"
+                value={String(snapshot.summary.participant_count)}
+                helper="Active contributors in this task force"
+              />
+              <MetricBadge
+                label="Subtasks in play"
+                value={String(snapshot.summary.task_count)}
+                helper="Root mission plus delegated workstreams"
+              />
+              <MetricBadge
+                label="Reasoning bursts"
+                value={String(snapshot.summary.thought_count)}
+                helper="Thoughts captured from live heartbeats"
+              />
             </div>
           </div>
 
           <div className="rounded-[24px] border border-white/10 bg-white/8 p-5 backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-xs uppercase tracking-[0.16em] text-sky-100/80">Live pulse</div>
+                <div className="text-xs uppercase tracking-[0.16em] text-sky-100/80">
+                  Live pulse
+                </div>
                 <div className="mt-2 text-lg font-semibold">
-                  {liveLabel || 'Watching the team reason together in real time.'}
+                  {liveLabel ||
+                    'Watching the team reason together in real time.'}
                 </div>
               </div>
-              <div className={`mt-1 h-3 w-3 rounded-full ${isRefreshing ? 'animate-pulse bg-emerald-300' : 'bg-sky-300'}`} />
+              <div
+                className={`mt-1 h-3 w-3 rounded-full ${isRefreshing ? 'animate-pulse bg-emerald-300' : 'bg-sky-300'}`}
+              />
             </div>
 
             <div className="mt-5 space-y-3">
               {participants.slice(0, 3).map((participant) => (
-                <div key={participant.agent_id} className="rounded-2xl border border-white/10 bg-black/15 p-4">
+                <div
+                  key={participant.agent_id}
+                  className="rounded-2xl border border-white/10 bg-black/15 p-4"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="font-medium text-white">{participant.name}</div>
-                      <div className="text-xs text-slate-300">{participant.role || 'Task force member'}</div>
+                      <div className="font-medium text-white">
+                        {participant.name}
+                      </div>
+                      <div className="text-xs text-slate-300">
+                        {participant.role || 'Task force member'}
+                      </div>
                     </div>
-                    <span className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(participant.status || 'idle')}`}>
+                    <span
+                      className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(participant.status || 'idle')}`}
+                    >
                       {participant.status || 'idle'}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-300">
-                    <span>{participant.assigned_task_count} assigned task{participant.assigned_task_count === 1 ? '' : 's'}</span>
+                    <span>
+                      {participant.assigned_task_count} assigned task
+                      {participant.assigned_task_count === 1 ? '' : 's'}
+                    </span>
                     <span>{participant.contribution_count} visible moves</span>
                   </div>
                 </div>
@@ -941,7 +1093,9 @@ export default function TaskDetailPage() {
 
       {error ? (
         <div className="space-y-3">
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
           <TraceLinkCallout
             trace={lastTrace}
             title="Debug This Task Error"
@@ -961,7 +1115,9 @@ export default function TaskDetailPage() {
                   Task Timeline
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  A real event timeline grouped into 30-second windows, so delegation, reasoning, and tool activity read like one operation.
+                  A real event timeline grouped into 30-second windows, so
+                  delegation, reasoning, and tool activity read like one
+                  operation.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -969,10 +1125,12 @@ export default function TaskDetailPage() {
                   Focusing task: {snapshot.current_task.title}
                 </div>
                 <div className="rounded-full border bg-sky-50 px-3 py-1 text-xs text-sky-700">
-                  {filteredTimeline.length} event{filteredTimeline.length === 1 ? '' : 's'}
+                  {filteredTimeline.length} event
+                  {filteredTimeline.length === 1 ? '' : 's'}
                 </div>
                 <div className="rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
-                  {timelineWindows.length} timeline window{timelineWindows.length === 1 ? '' : 's'}
+                  {timelineWindows.length} timeline window
+                  {timelineWindows.length === 1 ? '' : 's'}
                 </div>
               </div>
             </div>
@@ -1002,20 +1160,26 @@ export default function TaskDetailPage() {
                     ))}
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Heartbeat thoughts, supervisor nudges, delegations, and tool activity are clustered into short operational windows.
+                  Heartbeat thoughts, supervisor nudges, delegations, and tool
+                  activity are clustered into short operational windows.
                 </p>
               </div>
 
               <div className="space-y-5">
                 {timelineWindows.map((window) => (
-                  <section key={window.id} className="grid gap-4 lg:grid-cols-[148px_1fr]">
+                  <section
+                    key={window.id}
+                    className="grid gap-4 lg:grid-cols-[148px_1fr]"
+                  >
                     <div className="lg:pt-3">
                       <div className="sticky top-24 rounded-[22px] border bg-muted/10 p-4">
                         <div className="inline-flex items-center gap-2 rounded-full border bg-background px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                           <Clock3 className="h-3.5 w-3.5" />
                           Window
                         </div>
-                        <div className="mt-3 text-lg font-semibold text-foreground">{formatTime(window.started_at, true)}</div>
+                        <div className="mt-3 text-lg font-semibold text-foreground">
+                          {formatTime(window.started_at, true)}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           to {formatTime(window.ended_at, true)}
                         </div>
@@ -1027,7 +1191,10 @@ export default function TaskDetailPage() {
                                 key={kind}
                                 className="rounded-full border bg-background px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground"
                               >
-                                {getTimelineFilterLabel(kind as TimelineFilterId)} {count}
+                                {getTimelineFilterLabel(
+                                  kind as TimelineFilterId
+                                )}{' '}
+                                {count}
                               </span>
                             ))}
                         </div>
@@ -1037,7 +1204,9 @@ export default function TaskDetailPage() {
                     <div className="relative space-y-4 border-l border-dashed border-slate-200 pl-6">
                       {buildTimelineSegments(window).map((segment) => {
                         if (segment.type === 'tool-sequence') {
-                          const isExpanded = expandedToolSequenceIds.has(segment.id);
+                          const isExpanded = expandedToolSequenceIds.has(
+                            segment.id
+                          );
                           const firstItem = segment.items[0];
                           const toolNames = Array.from(
                             new Set(
@@ -1051,7 +1220,10 @@ export default function TaskDetailPage() {
                           );
 
                           return (
-                            <article key={segment.id} className="relative rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-stone-50 p-4 shadow-sm">
+                            <article
+                              key={segment.id}
+                              className="relative rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-stone-50 p-4 shadow-sm"
+                            >
                               <div className="absolute -left-[37px] top-6 flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm">
                                 <Wrench className="h-3.5 w-3.5" />
                               </div>
@@ -1062,7 +1234,8 @@ export default function TaskDetailPage() {
                                       Tool sequence
                                     </span>
                                     <span className="text-sm font-semibold text-foreground">
-                                      {segment.items.length} linked tool event{segment.items.length === 1 ? '' : 's'}
+                                      {segment.items.length} linked tool event
+                                      {segment.items.length === 1 ? '' : 's'}
                                     </span>
                                   </div>
                                   <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
@@ -1074,16 +1247,25 @@ export default function TaskDetailPage() {
                                   onClick={() => toggleToolSequence(segment.id)}
                                   className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
                                 >
-                                  {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  )}
                                   {isExpanded ? 'Collapse' : 'Expand'}
                                 </button>
                               </div>
 
                               <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                 <span>{firstItem.agent_name}</span>
-                                <span>{formatTime(firstItem.created_at, true)}</span>
+                                <span>
+                                  {formatTime(firstItem.created_at, true)}
+                                </span>
                                 {toolNames.map((toolName) => (
-                                  <span key={toolName} className="rounded-full border bg-background px-2 py-1">
+                                  <span
+                                    key={toolName}
+                                    className="rounded-full border bg-background px-2 py-1"
+                                  >
                                     {toolName}
                                   </span>
                                 ))}
@@ -1092,7 +1274,13 @@ export default function TaskDetailPage() {
                               {isExpanded && (
                                 <div className="mt-4 space-y-3 border-t pt-4">
                                   {segment.items.map((item) => (
-                                    <TimelineEventCard key={item.id} item={item} tasks={tasks} timeline={timeline} nested />
+                                    <TimelineEventCard
+                                      key={item.id}
+                                      item={item}
+                                      tasks={tasks}
+                                      timeline={timeline}
+                                      nested
+                                    />
                                   ))}
                                 </div>
                               )}
@@ -1160,7 +1348,8 @@ export default function TaskDetailPage() {
                   Mission Overview
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  A lighter readout of the current mission, recent moves, and delegation risk before you dive into the full timeline.
+                  A lighter readout of the current mission, recent moves, and
+                  delegation risk before you dive into the full timeline.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1168,22 +1357,30 @@ export default function TaskDetailPage() {
                   Current focus: {snapshot.current_task.title}
                 </div>
                 <div className="rounded-full border bg-sky-50 px-3 py-1 text-xs text-sky-700">
-                  {timeline.length} total event{timeline.length === 1 ? '' : 's'}
+                  {timeline.length} total event
+                  {timeline.length === 1 ? '' : 's'}
                 </div>
               </div>
             </div>
 
             <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-[24px] border bg-gradient-to-br from-slate-50 via-white to-stone-50 p-5">
-                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current focus</div>
+                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                  Current focus
+                </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <div className="text-lg font-semibold text-foreground">{snapshot.current_task.title}</div>
-                  <span className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(snapshot.current_task.status)}`}>
+                  <div className="text-lg font-semibold text-foreground">
+                    {snapshot.current_task.title}
+                  </div>
+                  <span
+                    className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(snapshot.current_task.status)}`}
+                  >
                     {snapshot.current_task.status}
                   </span>
                 </div>
                 <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                  {snapshot.current_task.description || 'The selected workstream is now part of a larger coordinated push.'}
+                  {snapshot.current_task.description ||
+                    'The selected workstream is now part of a larger coordinated push.'}
                 </p>
                 {currentTaskEntry?.assigned_to_name && (
                   <div className="mt-4 inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
@@ -1209,7 +1406,8 @@ export default function TaskDetailPage() {
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Use Task Force mode when you need per-event detail, filters, and expandable tool sequences.
+                  Use Task Force mode when you need per-event detail, filters,
+                  and expandable tool sequences.
                 </p>
               </div>
             </div>
@@ -1221,11 +1419,16 @@ export default function TaskDetailPage() {
               </div>
               <div className="mt-4 space-y-3">
                 {recentTimelineItems.map((item) => (
-                  <div key={item.id} className="rounded-[20px] border bg-background p-4">
+                  <div
+                    key={item.id}
+                    className="rounded-[20px] border bg-background p-4"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-foreground">{item.summary}</span>
+                          <span className="font-medium text-foreground">
+                            {item.summary}
+                          </span>
                           <span className="rounded-full border bg-muted/20 px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                             {getTimelineFilterLabel(item.kind)}
                           </span>
@@ -1234,9 +1437,13 @@ export default function TaskDetailPage() {
                           {item.task_title}
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(item.created_at).toLocaleString()}
+                      </div>
                     </div>
-                    <p className="mt-3 text-sm text-muted-foreground">{item.content}</p>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {item.content}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -1254,7 +1461,9 @@ export default function TaskDetailPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setDelegationHealthFilter(activeDelegationHealthFilter === 'risky' ? 'all' : 'risky')
+                  setDelegationHealthFilter(
+                    activeDelegationHealthFilter === 'risky' ? 'all' : 'risky'
+                  )
                 }
                 className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
                   activeDelegationHealthFilter === 'risky'
@@ -1351,37 +1560,53 @@ export default function TaskDetailPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-medium text-foreground">{task.title}</div>
+                        <div className="font-medium text-foreground">
+                          {task.title}
+                        </div>
                         {delegationHealthByTaskId.get(task.id) && (
                           <span
                             className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${
-                              delegationHealthByTaskId.get(task.id)?.health.className
+                              delegationHealthByTaskId.get(task.id)?.health
+                                .className
                             }`}
                           >
-                            {delegationHealthByTaskId.get(task.id)?.health.label}
+                            {
+                              delegationHealthByTaskId.get(task.id)?.health
+                                .label
+                            }
                           </span>
                         )}
                       </div>
                       <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        {task.depth === 0 ? 'Root mission' : `Delegation layer ${task.depth}`}
+                        {task.depth === 0
+                          ? 'Root mission'
+                          : `Delegation layer ${task.depth}`}
                       </div>
                     </div>
-                    <span className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(task.status)}`}>
+                    <span
+                      className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(task.status)}`}
+                    >
                       {task.status}
                     </span>
                   </div>
                   <div className="mt-3 text-sm text-muted-foreground">
-                    {task.description || 'No additional context recorded for this workstream.'}
+                    {task.description ||
+                      'No additional context recorded for this workstream.'}
                   </div>
                   {delegationHealthByTaskId.get(task.id) && (
                     <div className="mt-3 text-xs text-muted-foreground">
-                      Delegation health: {delegationHealthByTaskId.get(task.id)?.health.helper}
+                      Delegation health:{' '}
+                      {delegationHealthByTaskId.get(task.id)?.health.helper}
                     </div>
                   )}
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                     <button
                       type="button"
-                      onClick={() => setTaskMapFocus(focusedTaskMapTaskId === task.id ? null : task.id)}
+                      onClick={() =>
+                        setTaskMapFocus(
+                          focusedTaskMapTaskId === task.id ? null : task.id
+                        )
+                      }
                       className={`rounded-full border px-3 py-1 transition-colors ${
                         focusedTaskMapTaskId === task.id
                           ? 'border-sky-300 bg-white text-sky-700'
@@ -1390,14 +1615,24 @@ export default function TaskDetailPage() {
                     >
                       {focusedTaskMapTaskId === task.id ? 'Focused' : 'Focus'}
                     </button>
-                    <span>{task.assigned_to_name || 'Awaiting assignment'}</span>
-                    {task.assigned_to_role ? <span>{task.assigned_to_role}</span> : null}
+                    <span>
+                      {task.assigned_to_name || 'Awaiting assignment'}
+                    </span>
+                    {task.assigned_to_role ? (
+                      <span>{task.assigned_to_role}</span>
+                    ) : null}
                     {task.assigned_to && (
-                      <Link className="text-foreground underline-offset-2 hover:underline" to={`/agents/${task.assigned_to}`}>
+                      <Link
+                        className="text-foreground underline-offset-2 hover:underline"
+                        to={`/agents/${task.assigned_to}`}
+                      >
                         Agent profile
                       </Link>
                     )}
-                    <Link className="text-foreground underline-offset-2 hover:underline" to={`/tasks/${task.id}`}>
+                    <Link
+                      className="text-foreground underline-offset-2 hover:underline"
+                      to={`/tasks/${task.id}`}
+                    >
                       Open task
                     </Link>
                   </div>
@@ -1420,20 +1655,38 @@ export default function TaskDetailPage() {
             </div>
             <div className="mt-5 space-y-3">
               {participants.map((participant) => (
-                <div key={participant.agent_id} className="rounded-[22px] border bg-muted/10 p-4">
+                <div
+                  key={participant.agent_id}
+                  className="rounded-[22px] border bg-muted/10 p-4"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="font-medium text-foreground">{participant.name}</div>
-                      <div className="text-xs text-muted-foreground">{participant.role || 'Task force member'}</div>
+                      <div className="font-medium text-foreground">
+                        {participant.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {participant.role || 'Task force member'}
+                      </div>
                     </div>
-                    <span className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(participant.status || 'idle')}`}>
+                    <span
+                      className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(participant.status || 'idle')}`}
+                    >
                       {participant.status || 'idle'}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                    <span>{participant.assigned_task_count} workstream{participant.assigned_task_count === 1 ? '' : 's'}</span>
+                    <span>
+                      {participant.assigned_task_count} workstream
+                      {participant.assigned_task_count === 1 ? '' : 's'}
+                    </span>
                     <span>{participant.contribution_count} visible moves</span>
-                    {participant.latest_activity_at ? <span>{new Date(participant.latest_activity_at).toLocaleTimeString()}</span> : null}
+                    {participant.latest_activity_at ? (
+                      <span>
+                        {new Date(
+                          participant.latest_activity_at
+                        ).toLocaleTimeString()}
+                      </span>
+                    ) : null}
                   </div>
                   <Link
                     to={`/agents/${participant.agent_id}`}
@@ -1450,13 +1703,18 @@ export default function TaskDetailPage() {
             <div className="text-lg font-semibold">Current Focus</div>
             <div className="mt-4 rounded-[22px] border bg-gradient-to-br from-slate-50 via-white to-stone-50 p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="font-medium text-foreground">{snapshot.current_task.title}</div>
-                <span className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(snapshot.current_task.status)}`}>
+                <div className="font-medium text-foreground">
+                  {snapshot.current_task.title}
+                </div>
+                <span
+                  className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(snapshot.current_task.status)}`}
+                >
                   {snapshot.current_task.status}
                 </span>
               </div>
               <div className="mt-3 text-sm leading-7 text-muted-foreground">
-                {snapshot.current_task.description || 'The selected workstream is now part of a larger coordinated push.'}
+                {snapshot.current_task.description ||
+                  'The selected workstream is now part of a larger coordinated push.'}
               </div>
               {currentTaskEntry?.assigned_to_name && (
                 <div className="mt-4 inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
@@ -1492,12 +1750,18 @@ function TimelineEventCard({
   const Icon = meta.icon;
   const costLabel = formatCurrency(item.cost_usd);
   const delegationPreview = resolveDelegationPreview(item, tasks, timeline);
-  const delegationHealth = delegationPreview ? getDelegationHealth(delegationPreview) : null;
+  const delegationHealth = delegationPreview
+    ? getDelegationHealth(delegationPreview)
+    : null;
 
   return (
-    <article className={`relative rounded-[24px] border p-4 shadow-sm ${nested ? 'bg-background' : getTimelineTone(item.kind)}`}>
+    <article
+      className={`relative rounded-[24px] border p-4 shadow-sm ${nested ? 'bg-background' : getTimelineTone(item.kind)}`}
+    >
       {!nested && (
-        <div className={`absolute -left-[37px] top-6 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm ${meta.markerClassName}`}>
+        <div
+          className={`absolute -left-[37px] top-6 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm ${meta.markerClassName}`}
+        >
           <Icon className="h-3.5 w-3.5" />
         </div>
       )}
@@ -1505,13 +1769,17 @@ function TimelineEventCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-foreground">{item.agent_name}</span>
+            <span className="text-sm font-semibold text-foreground">
+              {item.agent_name}
+            </span>
             {item.agent_role && (
               <span className="rounded-full border bg-background/70 px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                 {item.agent_role}
               </span>
             )}
-            <span className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${meta.chipClassName}`}>
+            <span
+              className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${meta.chipClassName}`}
+            >
               {meta.label}
             </span>
             {item.message_type && (
@@ -1520,7 +1788,9 @@ function TimelineEventCard({
               </span>
             )}
           </div>
-          <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{item.task_title}</div>
+          <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+            {item.task_title}
+          </div>
         </div>
         <div className="text-right text-xs text-muted-foreground">
           <div>{new Date(item.created_at).toLocaleString()}</div>
@@ -1529,8 +1799,12 @@ function TimelineEventCard({
         </div>
       </div>
 
-      <div className="mt-4 text-sm font-medium text-foreground">{item.summary}</div>
-      <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-muted-foreground">{item.content}</div>
+      <div className="mt-4 text-sm font-medium text-foreground">
+        {item.summary}
+      </div>
+      <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-muted-foreground">
+        {item.content}
+      </div>
 
       {(item.to_agent_name || item.to_agent_role) && (
         <div className="mt-4 inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs text-muted-foreground">
@@ -1542,22 +1816,33 @@ function TimelineEventCard({
       {delegationPreview && (
         <div className="mt-4 rounded-[22px] border border-violet-200 bg-white/80 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-violet-700">Delegation diff</div>
+            <div className="text-[11px] uppercase tracking-[0.16em] text-violet-700">
+              Delegation diff
+            </div>
             {delegationHealth && (
               <div className="flex items-center gap-2">
-                <span className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wide ${delegationHealth.className}`}>
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wide ${delegationHealth.className}`}
+                >
                   {delegationHealth.label}
                 </span>
-                <span className="text-xs text-muted-foreground">{delegationHealth.helper}</span>
+                <span className="text-xs text-muted-foreground">
+                  {delegationHealth.helper}
+                </span>
               </div>
             )}
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border bg-violet-50/70 p-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-violet-700">Parent task</div>
-              <div className="mt-2 font-medium text-foreground">{delegationPreview.parentTask.title}</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-violet-700">
+                Parent task
+              </div>
+              <div className="mt-2 font-medium text-foreground">
+                {delegationPreview.parentTask.title}
+              </div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {delegationPreview.parentTask.description || 'No parent task description recorded.'}
+                {delegationPreview.parentTask.description ||
+                  'No parent task description recorded.'}
               </div>
               <div className="mt-3 inline-flex rounded-full border bg-background px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                 {delegationPreview.parentTask.status}
@@ -1565,9 +1850,12 @@ function TimelineEventCard({
             </div>
 
             <div className="rounded-2xl border bg-background p-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Delegated child</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                Delegated child
+              </div>
               <div className="mt-2 font-medium text-foreground">
-                {delegationPreview.childTask?.title || 'Delegated workstream pending'}
+                {delegationPreview.childTask?.title ||
+                  'Delegated workstream pending'}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {delegationPreview.childTask?.description || item.content}
@@ -1580,18 +1868,26 @@ function TimelineEventCard({
                   Open delegated task
                 </Link>
               ) : (
-                <div className="mt-3 text-xs text-muted-foreground">Waiting for a concrete child task record.</div>
+                <div className="mt-3 text-xs text-muted-foreground">
+                  Waiting for a concrete child task record.
+                </div>
               )}
             </div>
 
             <div className="rounded-2xl border bg-emerald-50/60 p-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-700">Assigned owner</div>
-              <div className="mt-2 font-medium text-foreground">{delegationPreview.ownerName}</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-emerald-700">
+                Assigned owner
+              </div>
+              <div className="mt-2 font-medium text-foreground">
+                {delegationPreview.ownerName}
+              </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {delegationPreview.ownerRole || 'Role not specified'}
               </div>
               {delegationPreview.ownerStatus && (
-                <div className={`mt-3 inline-flex rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(delegationPreview.ownerStatus)}`}>
+                <div
+                  className={`mt-3 inline-flex rounded-full border px-2 py-1 text-[11px] uppercase tracking-wide ${getStatusTone(delegationPreview.ownerStatus)}`}
+                >
                   {delegationPreview.ownerStatus}
                 </div>
               )}
@@ -1600,9 +1896,13 @@ function TimelineEventCard({
 
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border bg-background p-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">First visible move</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                First visible move
+              </div>
               <div className="mt-2 font-medium text-foreground">
-                {formatDurationMs(delegationPreview.firstVisibleMoveLatencyMs) || 'Pending'}
+                {formatDurationMs(
+                  delegationPreview.firstVisibleMoveLatencyMs
+                ) || 'Pending'}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {delegationPreview.firstVisibleMoveAt
@@ -1612,9 +1912,12 @@ function TimelineEventCard({
             </div>
 
             <div className="rounded-2xl border bg-background p-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Completed in</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                Completed in
+              </div>
               <div className="mt-2 font-medium text-foreground">
-                {formatDurationMs(delegationPreview.completionLatencyMs) || 'Still open'}
+                {formatDurationMs(delegationPreview.completionLatencyMs) ||
+                  'Still open'}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {delegationPreview.completedAt
@@ -1628,7 +1931,9 @@ function TimelineEventCard({
 
       {item.metadata && Object.keys(item.metadata).length > 0 && (
         <div className="mt-4 rounded-2xl border bg-background/70 p-3">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Metadata</div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            Metadata
+          </div>
           <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all text-xs leading-6 text-muted-foreground">
             {JSON.stringify(item.metadata, null, 2)}
           </pre>
@@ -1638,10 +1943,20 @@ function TimelineEventCard({
   );
 }
 
-function MetricBadge({ label, value, helper }: { label: string; value: string; helper: string }) {
+function MetricBadge({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+}) {
   return (
     <div className="rounded-[22px] border border-white/10 bg-black/15 p-4">
-      <div className="text-xs uppercase tracking-[0.16em] text-sky-100/80">{label}</div>
+      <div className="text-xs uppercase tracking-[0.16em] text-sky-100/80">
+        {label}
+      </div>
       <div className="mt-2 text-2xl font-semibold text-white">{value}</div>
       <div className="mt-1 text-xs text-slate-300">{helper}</div>
     </div>

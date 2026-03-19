@@ -98,50 +98,104 @@ function inferGoalTheme(prompt: string) {
   const normalized = normalizeText(prompt);
   if (/(launch|ship|release|wdro|premier)/.test(normalized)) {
     return {
-      rootDescription: 'Coordinate the launch path, remove blockers, and keep the release path visible.',
+      rootDescription:
+        'Coordinate the launch path, remove blockers, and keep the release path visible.',
       subgoals: [
-        ['goal-scope', 'Lock launch scope', 'Define what must ship now versus what can wait for the next release.'],
-        ['goal-execution', 'Deliver the critical path', 'Move the highest-risk launch workstream from planning into execution.'],
-        ['goal-readiness', 'Confirm launch readiness', 'Review quality, messaging, and ownership before go-live.'],
+        [
+          'goal-scope',
+          'Lock launch scope',
+          'Define what must ship now versus what can wait for the next release.',
+        ],
+        [
+          'goal-execution',
+          'Deliver the critical path',
+          'Move the highest-risk launch workstream from planning into execution.',
+        ],
+        [
+          'goal-readiness',
+          'Confirm launch readiness',
+          'Review quality, messaging, and ownership before go-live.',
+        ],
       ] as const,
     };
   }
 
   if (/(sales|pipeline|partner|revenue|deal)/.test(normalized)) {
     return {
-      rootDescription: 'Turn the broad commercial goal into a short set of visible, owned workstreams.',
+      rootDescription:
+        'Turn the broad commercial goal into a short set of visible, owned workstreams.',
       subgoals: [
-        ['goal-focus', 'Define the target segment', 'Clarify which accounts, partners, or opportunities matter most first.'],
-        ['goal-motion', 'Run the core outreach motion', 'Create a repeatable sequence for outreach, follow-up, and qualification.'],
-        ['goal-review', 'Inspect pipeline quality weekly', 'Review results, blockers, and conversion signals on a steady cadence.'],
+        [
+          'goal-focus',
+          'Define the target segment',
+          'Clarify which accounts, partners, or opportunities matter most first.',
+        ],
+        [
+          'goal-motion',
+          'Run the core outreach motion',
+          'Create a repeatable sequence for outreach, follow-up, and qualification.',
+        ],
+        [
+          'goal-review',
+          'Inspect pipeline quality weekly',
+          'Review results, blockers, and conversion signals on a steady cadence.',
+        ],
       ] as const,
     };
   }
 
   if (/(pricing|compet|research|audit|analysis|analiz)/.test(normalized)) {
     return {
-      rootDescription: 'Break the research goal into a sequence that gathers signal, synthesizes insight, and drives action.',
+      rootDescription:
+        'Break the research goal into a sequence that gathers signal, synthesizes insight, and drives action.',
       subgoals: [
-        ['goal-signal', 'Collect the strongest signals', 'Gather the most relevant evidence, examples, or market inputs first.'],
-        ['goal-synthesis', 'Synthesize the main insight', 'Turn raw findings into a compact explanation of what changed and why it matters.'],
-        ['goal-action', 'Decide the next move', 'Translate the analysis into a recommendation, decision, or follow-up experiment.'],
+        [
+          'goal-signal',
+          'Collect the strongest signals',
+          'Gather the most relevant evidence, examples, or market inputs first.',
+        ],
+        [
+          'goal-synthesis',
+          'Synthesize the main insight',
+          'Turn raw findings into a compact explanation of what changed and why it matters.',
+        ],
+        [
+          'goal-action',
+          'Decide the next move',
+          'Translate the analysis into a recommendation, decision, or follow-up experiment.',
+        ],
       ] as const,
     };
   }
 
   return {
-    rootDescription: 'Turn the broad objective into a small hierarchy with clear sequencing and visible ownership.',
+    rootDescription:
+      'Turn the broad objective into a small hierarchy with clear sequencing and visible ownership.',
     subgoals: [
-      ['goal-clarify', 'Clarify the outcome', 'Define the success condition, scope, and constraints for this objective.'],
-      ['goal-execute', 'Execute the first milestone', 'Focus the team on the highest-leverage first slice of work.'],
-      ['goal-review', 'Review and adapt', 'Inspect progress, capture learnings, and decide the next branch of execution.'],
+      [
+        'goal-clarify',
+        'Clarify the outcome',
+        'Define the success condition, scope, and constraints for this objective.',
+      ],
+      [
+        'goal-execute',
+        'Execute the first milestone',
+        'Focus the team on the highest-leverage first slice of work.',
+      ],
+      [
+        'goal-review',
+        'Review and adapt',
+        'Inspect progress, capture learnings, and decide the next branch of execution.',
+      ],
     ] as const,
   };
 }
 
 function scoreAgent(input: string, agent: GoalSuggestAgent) {
   const query = normalizeText(input);
-  const candidate = normalizeText(`${agent.name} ${agent.role} ${agent.title ?? ''}`);
+  const candidate = normalizeText(
+    `${agent.name} ${agent.role} ${agent.title ?? ''}`
+  );
   if (!query || !candidate) {
     return 0;
   }
@@ -167,7 +221,10 @@ function pickSuggestedAgent(input: string, agents: GoalSuggestAgent[]) {
   return matched && matched.score > 0 ? matched.agent : null;
 }
 
-function buildHeuristicDecomposition(prompt: string, agents: GoalSuggestAgent[]): GoalDecompositionSuggestion {
+function buildHeuristicDecomposition(
+  prompt: string,
+  agents: GoalSuggestAgent[]
+): GoalDecompositionSuggestion {
   const title = buildGoalTitle(prompt);
   const themed = inferGoalTheme(prompt);
   const goals: GoalDecompositionSuggestion['goals'] = [
@@ -196,7 +253,10 @@ function buildHeuristicDecomposition(prompt: string, agents: GoalSuggestAgent[])
       .map((goal, index) => {
         const titleValue = `Starter: ${goal.title}`;
         const description = `Create the first visible execution step for "${goal.title}". ${goal.description}`;
-        const selectedAgent = pickSuggestedAgent(`${prompt} ${goal.title} ${description}`, agents);
+        const selectedAgent = pickSuggestedAgent(
+          `${prompt} ${goal.title} ${description}`,
+          agents
+        );
         return {
           ref: `task-${index + 1}`,
           goal_ref: goal.ref,
@@ -250,7 +310,11 @@ function validateDraftGoals(goals: GoalDraft[]) {
   }
 }
 
-function validateDraftTasks(goals: GoalDraft[], tasks: TaskDraft[], validAgentIds?: Set<string>) {
+function validateDraftTasks(
+  goals: GoalDraft[],
+  tasks: TaskDraft[],
+  validAgentIds?: Set<string>
+) {
   const goalRefs = new Set(goals.map((goal) => goal.ref));
   const taskRefs = new Set<string>();
 
@@ -264,7 +328,11 @@ function validateDraftTasks(goals: GoalDraft[], tasks: TaskDraft[], validAgentId
       throw new Error(`Unknown task goal ref: ${task.goal_ref}`);
     }
 
-    if (task.suggested_agent_id && validAgentIds && !validAgentIds.has(task.suggested_agent_id)) {
+    if (
+      task.suggested_agent_id &&
+      validAgentIds &&
+      !validAgentIds.has(task.suggested_agent_id)
+    ) {
       throw new Error(`Unknown suggested agent id: ${task.suggested_agent_id}`);
     }
   }
@@ -289,7 +357,8 @@ async function generateGoalDecomposition(
       agent_role: 'AI goal decomposition assistant',
       current_task: {
         title: 'Decompose a broad goal into a compact hierarchy',
-        description: 'Return one valid JSON object that breaks a broad goal into a root objective plus subgoals.',
+        description:
+          'Return one valid JSON object that breaks a broad goal into a root objective plus subgoals.',
       },
       goal_hierarchy: [],
       additional_context: [
@@ -309,7 +378,10 @@ async function generateGoalDecomposition(
         '- warnings should call out ambiguity or missing context',
         '',
         'Available agents:',
-        ...agents.map((agent) => `- ${agent.id} | ${agent.name} | role=${agent.role} | title=${agent.title ?? 'n/a'} | status=${agent.status}`),
+        ...agents.map(
+          (agent) =>
+            `- ${agent.id} | ${agent.name} | role=${agent.role} | title=${agent.title ?? 'n/a'} | status=${agent.status}`
+        ),
       ].join('\n'),
       history: [
         {
@@ -324,7 +396,9 @@ async function generateGoalDecomposition(
       throw new Error('Missing JSON object in runtime response');
     }
 
-    const parsed = aiDecompositionSuggestionSchema.safeParse(JSON.parse(rawJson));
+    const parsed = aiDecompositionSuggestionSchema.safeParse(
+      JSON.parse(rawJson)
+    );
     if (!parsed.success) {
       throw new Error(parsed.error.message);
     }
@@ -346,11 +420,13 @@ async function generateGoalDecomposition(
         description: task.description,
         priority: task.priority,
         suggested_agent_id:
-          task.suggested_agent_id && agents.some((agent) => agent.id === task.suggested_agent_id)
+          task.suggested_agent_id &&
+          agents.some((agent) => agent.id === task.suggested_agent_id)
             ? task.suggested_agent_id
             : null,
         suggested_agent_name:
-          task.suggested_agent_id && agents.some((agent) => agent.id === task.suggested_agent_id)
+          task.suggested_agent_id &&
+          agents.some((agent) => agent.id === task.suggested_agent_id)
             ? task.suggested_agent_name
             : null,
       })),
@@ -380,7 +456,8 @@ async function generateGoalDecomposition(
       planner: {
         mode: 'rules',
         fallback_reason:
-          error instanceof Error && /json|duplicate goal ref|root goal|parent ref/i.test(error.message)
+          error instanceof Error &&
+          /json|duplicate goal ref|root goal|parent ref/i.test(error.message)
             ? 'invalid_llm_output'
             : 'llm_failed',
       },
@@ -401,9 +478,13 @@ async function insertGoalHierarchy(
     let remainingGoals = [...suggestion.goals];
 
     while (remainingGoals.length > 0) {
-      const insertableGoals = remainingGoals.filter((goal) => !goal.parent_ref || goalIdByRef.has(goal.parent_ref));
+      const insertableGoals = remainingGoals.filter(
+        (goal) => !goal.parent_ref || goalIdByRef.has(goal.parent_ref)
+      );
       if (insertableGoals.length === 0) {
-        throw new Error('Goal decomposition contains an unresolved parent reference.');
+        throw new Error(
+          'Goal decomposition contains an unresolved parent reference.'
+        );
       }
 
       for (const goal of insertableGoals) {
@@ -413,7 +494,7 @@ async function insertGoalHierarchy(
            RETURNING id`,
           [
             companyId,
-            goal.parent_ref ? goalIdByRef.get(goal.parent_ref) ?? null : null,
+            goal.parent_ref ? (goalIdByRef.get(goal.parent_ref) ?? null) : null,
             goal.title,
             goal.description,
             goal.status,
@@ -423,7 +504,9 @@ async function insertGoalHierarchy(
       }
 
       const insertedRefs = new Set(insertableGoals.map((goal) => goal.ref));
-      remainingGoals = remainingGoals.filter((goal) => !insertedRefs.has(goal.ref));
+      remainingGoals = remainingGoals.filter(
+        (goal) => !insertedRefs.has(goal.ref)
+      );
     }
 
     const createdTaskIds: string[] = [];
@@ -437,16 +520,23 @@ async function insertGoalHierarchy(
           goalIdByRef.get(task.goal_ref) ?? null,
           task.title,
           task.description,
-          task.suggested_agent_id && validAgentIds.has(task.suggested_agent_id) ? task.suggested_agent_id : null,
+          task.suggested_agent_id && validAgentIds.has(task.suggested_agent_id)
+            ? task.suggested_agent_id
+            : null,
           task.priority,
-          task.suggested_agent_id && validAgentIds.has(task.suggested_agent_id) ? 'assigned' : 'backlog',
+          task.suggested_agent_id && validAgentIds.has(task.suggested_agent_id)
+            ? 'assigned'
+            : 'backlog',
         ]
       );
       createdTaskIds.push(result.rows[0].id as string);
     }
 
     return {
-      rootGoalId: goalIdByRef.get(suggestion.goals.find((goal) => !goal.parent_ref)?.ref ?? '') ?? '',
+      rootGoalId:
+        goalIdByRef.get(
+          suggestion.goals.find((goal) => !goal.parent_ref)?.ref ?? ''
+        ) ?? '',
       createdGoalIds: Array.from(goalIdByRef.values()),
       createdTaskIds,
     };
@@ -454,195 +544,223 @@ async function insertGoalHierarchy(
 }
 
 // Create
-router.post('/', requireRole(['owner', 'admin', 'member']), async (req, res, next) => {
-  try {
-    const parsed = createGoalSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error });
+router.post(
+  '/',
+  requireRole(['owner', 'admin', 'member']),
+  async (req, res, next) => {
+    try {
+      const parsed = createGoalSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
-    const { company_id, parent_id, title, description } = parsed.data;
-    const result = await db.query(
-      'INSERT INTO goals (company_id, parent_id, title, description) VALUES ($1, $2, $3, $4) RETURNING *',
-      [company_id, parent_id, title, description]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    next(err);
+      const { company_id, parent_id, title, description } = parsed.data;
+      const result = await db.query(
+        'INSERT INTO goals (company_id, parent_id, title, description) VALUES ($1, $2, $3, $4) RETURNING *',
+        [company_id, parent_id, title, description]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
-router.post('/ai-decompose', requireRole(['owner', 'admin', 'member', 'viewer']), async (req: AuthRequest, res) => {
-  const companyId = getCompanyId(req);
-  if (!companyId) {
-    return res.status(400).json({ error: 'Missing company ID' });
-  }
+router.post(
+  '/ai-decompose',
+  requireRole(['owner', 'admin', 'member', 'viewer']),
+  async (req: AuthRequest, res) => {
+    const companyId = getCompanyId(req);
+    if (!companyId) {
+      return res.status(400).json({ error: 'Missing company ID' });
+    }
 
-  const parsed = aiDecomposeSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error });
-  }
+    const parsed = aiDecomposeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error });
+    }
 
-  try {
-    const companyRes = await db.query(
-      `SELECT id, name, mission, config
+    try {
+      const companyRes = await db.query(
+        `SELECT id, name, mission, config
        FROM companies
        WHERE id = $1`,
-      [companyId]
-    );
-    const agentsRes = await db.query(
-      `SELECT id, name, role, title, status
+        [companyId]
+      );
+      const agentsRes = await db.query(
+        `SELECT id, name, role, title, status
        FROM agents
        WHERE company_id = $1
          AND status != 'terminated'
        ORDER BY created_at ASC`,
-      [companyId]
-    );
+        [companyId]
+      );
 
-    if (companyRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Company not found' });
+      if (companyRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Company not found' });
+      }
+
+      const result = await generateGoalDecomposition(
+        companyRes.rows[0] as {
+          name: string;
+          mission: string | null;
+          config?: unknown;
+        },
+        parsed.data.prompt,
+        agentsRes.rows as GoalSuggestAgent[]
+      );
+
+      await db.query(
+        `INSERT INTO audit_log (company_id, action, entity_type, details)
+       VALUES ($1, 'goal.ai_decomposed', 'goal_decomposition', $2)`,
+        [
+          companyId,
+          JSON.stringify({
+            prompt: parsed.data.prompt,
+            requested_by_user_id: req.user?.id ?? null,
+            requested_by_role: req.user?.role ?? null,
+            planner: result.planner,
+            suggestion: result.suggestion,
+          }),
+        ]
+      );
+
+      res.json(result);
+    } catch (err: any) {
+      res
+        .status(500)
+        .json({ error: err.message || 'AI goal decomposition failed' });
+    }
+  }
+);
+
+router.post(
+  '/ai-decompose/apply',
+  requireRole(['owner', 'admin', 'member']),
+  async (req: AuthRequest, res) => {
+    const companyId = getCompanyId(req);
+    if (!companyId) {
+      return res.status(400).json({ error: 'Missing company ID' });
     }
 
-    const result = await generateGoalDecomposition(
-      companyRes.rows[0] as { name: string; mission: string | null; config?: unknown },
-      parsed.data.prompt,
-      agentsRes.rows as GoalSuggestAgent[]
-    );
+    const parsed = applyDecompositionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error });
+    }
 
-    await db.query(
-      `INSERT INTO audit_log (company_id, action, entity_type, details)
-       VALUES ($1, 'goal.ai_decomposed', 'goal_decomposition', $2)`,
-      [
-        companyId,
-        JSON.stringify({
-          prompt: parsed.data.prompt,
-          requested_by_user_id: req.user?.id ?? null,
-          requested_by_role: req.user?.role ?? null,
-          planner: result.planner,
-          suggestion: result.suggestion,
-        }),
-      ]
-    );
-
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'AI goal decomposition failed' });
-  }
-});
-
-router.post('/ai-decompose/apply', requireRole(['owner', 'admin', 'member']), async (req: AuthRequest, res) => {
-  const companyId = getCompanyId(req);
-  if (!companyId) {
-    return res.status(400).json({ error: 'Missing company ID' });
-  }
-
-  const parsed = applyDecompositionSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error });
-  }
-
-  try {
-    const normalizedSuggestion: GoalDecompositionSuggestion = {
-      title: parsed.data.suggestion.title,
-      description: parsed.data.suggestion.description,
-      goals: parsed.data.suggestion.goals.map((goal) => ({
-        ref: goal.ref,
-        parent_ref: goal.parent_ref ?? null,
-        title: goal.title,
-        description: goal.description,
-        status: goal.status,
-      })),
-      starter_tasks: parsed.data.suggestion.starter_tasks.map((task) => ({
-        ref: task.ref,
-        goal_ref: task.goal_ref,
-        title: task.title,
-        description: task.description,
-        priority: task.priority,
-        suggested_agent_id: task.suggested_agent_id,
-        suggested_agent_name: task.suggested_agent_name,
-      })),
-      confidence: parsed.data.suggestion.confidence,
-      warnings: parsed.data.suggestion.warnings,
-    };
-    const agentsRes = await db.query(
-      `SELECT id
+    try {
+      const normalizedSuggestion: GoalDecompositionSuggestion = {
+        title: parsed.data.suggestion.title,
+        description: parsed.data.suggestion.description,
+        goals: parsed.data.suggestion.goals.map((goal) => ({
+          ref: goal.ref,
+          parent_ref: goal.parent_ref ?? null,
+          title: goal.title,
+          description: goal.description,
+          status: goal.status,
+        })),
+        starter_tasks: parsed.data.suggestion.starter_tasks.map((task) => ({
+          ref: task.ref,
+          goal_ref: task.goal_ref,
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          suggested_agent_id: task.suggested_agent_id,
+          suggested_agent_name: task.suggested_agent_name,
+        })),
+        confidence: parsed.data.suggestion.confidence,
+        warnings: parsed.data.suggestion.warnings,
+      };
+      const agentsRes = await db.query(
+        `SELECT id
        FROM agents
        WHERE company_id = $1`,
-      [companyId]
-    );
-    const inserted = await insertGoalHierarchy(
-      companyId,
-      normalizedSuggestion,
-      new Set(agentsRes.rows.map((row) => String(row.id)))
-    );
-    const response: GoalDecompositionApplyResponse = {
-      ok: true,
-      root_goal_id: inserted.rootGoalId,
-      created_goal_ids: inserted.createdGoalIds,
-      created_goal_count: inserted.createdGoalIds.length,
-      created_task_ids: inserted.createdTaskIds,
-      created_task_count: inserted.createdTaskIds.length,
-    };
-
-    await db.query(
-      `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
-       VALUES ($1, 'goal.decomposition_applied', 'goal_decomposition', $2, $3)`,
-      [
+        [companyId]
+      );
+      const inserted = await insertGoalHierarchy(
         companyId,
-        inserted.rootGoalId,
-        JSON.stringify({
-          requested_by_user_id: req.user?.id ?? null,
-          requested_by_role: req.user?.role ?? null,
-          created_goal_count: response.created_goal_count,
-          created_goal_ids: response.created_goal_ids,
-          created_task_count: response.created_task_count,
-          created_task_ids: response.created_task_ids,
-          suggestion: normalizedSuggestion,
-        }),
-      ]
-    );
+        normalizedSuggestion,
+        new Set(agentsRes.rows.map((row) => String(row.id)))
+      );
+      const response: GoalDecompositionApplyResponse = {
+        ok: true,
+        root_goal_id: inserted.rootGoalId,
+        created_goal_ids: inserted.createdGoalIds,
+        created_goal_count: inserted.createdGoalIds.length,
+        created_task_ids: inserted.createdTaskIds,
+        created_task_count: inserted.createdTaskIds.length,
+      };
 
-    res.status(201).json(response);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Applying goal decomposition failed' });
+      await db.query(
+        `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
+       VALUES ($1, 'goal.decomposition_applied', 'goal_decomposition', $2, $3)`,
+        [
+          companyId,
+          inserted.rootGoalId,
+          JSON.stringify({
+            requested_by_user_id: req.user?.id ?? null,
+            requested_by_role: req.user?.role ?? null,
+            created_goal_count: response.created_goal_count,
+            created_goal_ids: response.created_goal_ids,
+            created_task_count: response.created_task_count,
+            created_task_ids: response.created_task_ids,
+            suggestion: normalizedSuggestion,
+          }),
+        ]
+      );
+
+      res.status(201).json(response);
+    } catch (err: any) {
+      res
+        .status(500)
+        .json({ error: err.message || 'Applying goal decomposition failed' });
+    }
   }
-});
+);
 
 // List
-router.get('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
-  try {
-    const companyId =
-      (typeof req.params.companyId === 'string' && req.params.companyId) ||
-      (typeof req.query.company_id === 'string' && req.query.company_id);
-    if (!companyId) {
-      return res.status(400).json({ error: 'Missing company_id' });
-    }
+router.get(
+  '/',
+  requireRole(['owner', 'admin', 'member', 'viewer']),
+  async (req, res, next) => {
+    try {
+      const companyId =
+        (typeof req.params.companyId === 'string' && req.params.companyId) ||
+        (typeof req.query.company_id === 'string' && req.query.company_id);
+      if (!companyId) {
+        return res.status(400).json({ error: 'Missing company_id' });
+      }
 
-    const result = await db.query(
-      'SELECT * FROM goals WHERE company_id = $1 ORDER BY created_at ASC',
-      [companyId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    next(err);
+      const result = await db.query(
+        'SELECT * FROM goals WHERE company_id = $1 ORDER BY created_at ASC',
+        [companyId]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 // Update
-router.patch('/:id', requireRole(['owner', 'admin', 'member']), async (req, res, next) => {
-  try {
-    const { status, title, description } = req.body;
-    const result = await db.query(
-      `UPDATE goals SET 
+router.patch(
+  '/:id',
+  requireRole(['owner', 'admin', 'member']),
+  async (req, res, next) => {
+    try {
+      const { status, title, description } = req.body;
+      const result = await db.query(
+        `UPDATE goals SET 
         status = COALESCE($1, status),
         title = COALESCE($2, title),
         description = COALESCE($3, description),
         updated_at = now()
        WHERE id = $4 RETURNING *`,
-      [status, title, description, req.params.id]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    next(err);
+        [status, title, description, req.params.id]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 export default router;

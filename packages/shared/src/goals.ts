@@ -29,7 +29,11 @@ export type GoalDecompositionPlanner = {
   mode: 'llm' | 'rules';
   runtime?: string;
   model?: string;
-  fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_output' | null;
+  fallback_reason?:
+    | 'llm_unavailable'
+    | 'llm_failed'
+    | 'invalid_llm_output'
+    | null;
 };
 
 export type GoalDecompositionSuggestResponse = {

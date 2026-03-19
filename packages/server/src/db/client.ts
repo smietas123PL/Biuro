@@ -14,19 +14,38 @@ pool.on('error', (err) => {
   logger.error({ err }, 'Unexpected database pool error');
 });
 
+async function applyRequestContext(client: pg.PoolClient) {
+  const context = contextStore.getStore();
+
+  if (context?.companyId) {
+    await client.query(
+      `SELECT set_config('app.current_company_id', $1, true)`,
+      [context.companyId]
+    );
+  }
+
+  if (context?.userId) {
+    await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [
+      context.userId,
+    ]);
+  }
+
+  return context;
+}
+
 export const db = {
   query: async <T extends pg.QueryResultRow = any>(
     text: string,
     params?: any[]
   ) => {
     const context = contextStore.getStore();
-    if (context?.companyId) {
+    if (context?.companyId || context?.userId) {
       // If we have a context, we MUST use a dedicated client from the pool
       // to ensure set_config is scoped to this query execution.
       // For simplicity in a single-call pool.query, we'll wrap it.
       const client = await pool.connect();
       try {
-        await client.query(`SELECT set_config('app.current_company_id', $1, true)`, [context.companyId]);
+        await applyRequestContext(client);
         return await client.query<T>(text, params);
       } finally {
         client.release();
@@ -40,13 +59,10 @@ export const db = {
   transaction: async <T>(
     fn: (client: pg.PoolClient) => Promise<T>
   ): Promise<T> => {
-    const context = contextStore.getStore();
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      if (context?.companyId) {
-        await client.query(`SELECT set_config('app.current_company_id', $1, true)`, [context.companyId]);
-      }
+      await applyRequestContext(client);
       const result = await fn(client);
       await client.query('COMMIT');
       return result;
@@ -64,7 +80,17 @@ export const db = {
   ): Promise<T> => {
     const client = await pool.connect();
     try {
-      await client.query(`SELECT set_config('app.current_company_id', $1, true)`, [companyId]);
+      await client.query(
+        `SELECT set_config('app.current_company_id', $1, true)`,
+        [companyId]
+      );
+      const context = contextStore.getStore();
+      if (context?.userId) {
+        await client.query(
+          `SELECT set_config('app.current_user_id', $1, true)`,
+          [context.userId]
+        );
+      }
       return await fn(client);
     } finally {
       client.release();

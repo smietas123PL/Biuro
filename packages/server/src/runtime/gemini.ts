@@ -39,15 +39,22 @@ export class GeminiRuntime implements IAgentRuntime {
       }))
       .filter((entry) => entry.parts[0]?.text.trim().length > 0);
 
-    const firstUserMessageIndex = history.findIndex((entry) => entry.role === 'user');
-    const filteredHistory = firstUserMessageIndex >= 0 ? history.slice(firstUserMessageIndex) : [];
+    const firstUserMessageIndex = history.findIndex(
+      (entry) => entry.role === 'user'
+    );
+    const filteredHistory =
+      firstUserMessageIndex >= 0 ? history.slice(firstUserMessageIndex) : [];
 
     const chat = model.startChat({
       history: filteredHistory,
     });
 
     try {
-      const result = await chat.sendMessage(context.current_task.description || context.current_task.title || 'Continue the current task.');
+      const result = await chat.sendMessage(
+        context.current_task.description ||
+          context.current_task.title ||
+          'Continue the current task.'
+      );
       const response = await result.response;
       const text = response.text();
 

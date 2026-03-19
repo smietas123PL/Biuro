@@ -40,7 +40,14 @@ describe('daily digest service', () => {
   it('generates a digest summary and formats the outbound message', async () => {
     dbMock.query
       .mockResolvedValueOnce({
-        rows: [{ id: 'company-1', name: 'QA Test Corp', slack_webhook_url: 'https://hooks.slack.test/digest', discord_webhook_url: null }],
+        rows: [
+          {
+            id: 'company-1',
+            name: 'QA Test Corp',
+            slack_webhook_url: 'https://hooks.slack.test/digest',
+            discord_webhook_url: null,
+          },
+        ],
       })
       .mockResolvedValueOnce({ rows: [{ count: '4' }] })
       .mockResolvedValueOnce({ rows: [{ count: '2' }] })
@@ -53,7 +60,10 @@ describe('daily digest service', () => {
         ],
       });
 
-    const summary = await generateDailyDigest('company-1', new Date('2026-03-19T18:05:00.000Z'));
+    const summary = await generateDailyDigest(
+      'company-1',
+      new Date('2026-03-19T18:05:00.000Z')
+    );
     expect(summary).toMatchObject({
       companyId: 'company-1',
       companyName: 'QA Test Corp',
@@ -64,7 +74,9 @@ describe('daily digest service', () => {
     });
 
     expect(formatDailyDigestMessage(summary!)).toContain('Completed today: 4');
-    expect(formatDailyDigestMessage(summary!)).toContain('Daily cost vs budget: $8.75 / $40.00');
+    expect(formatDailyDigestMessage(summary!)).toContain(
+      'Daily cost vs budget: $8.75 / $40.00'
+    );
     expect(formatDailyDigestMessage(summary!)).toContain('1. Tool timeout (3)');
   });
 
@@ -93,7 +105,10 @@ describe('daily digest service', () => {
         };
       }
 
-      if (text === 'SELECT id, name, slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1') {
+      if (
+        text ===
+        'SELECT id, name, slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1'
+      ) {
         return {
           rows: [
             {
@@ -106,7 +121,10 @@ describe('daily digest service', () => {
         };
       }
 
-      if (String(text).includes('FROM tasks') && String(text).includes('completed_at')) {
+      if (
+        String(text).includes('FROM tasks') &&
+        String(text).includes('completed_at')
+      ) {
         return { rows: [{ count: '5' }] };
       }
 
@@ -114,11 +132,17 @@ describe('daily digest service', () => {
         return { rows: [{ count: '1' }] };
       }
 
-      if (String(text).includes('FROM audit_log') && String(text).includes('SUM(cost_usd)')) {
+      if (
+        String(text).includes('FROM audit_log') &&
+        String(text).includes('SUM(cost_usd)')
+      ) {
         return { rows: [{ total: 11.2 }] };
       }
 
-      if (String(text).includes('FROM agents a') && String(text).includes('SUM(COALESCE')) {
+      if (
+        String(text).includes('FROM agents a') &&
+        String(text).includes('SUM(COALESCE')
+      ) {
         return { rows: [{ total: 50 }] };
       }
 
@@ -133,7 +157,9 @@ describe('daily digest service', () => {
       throw new Error(`Unexpected query: ${text}`);
     });
 
-    const results = await dispatchDueDailyDigests(new Date('2026-03-19T18:15:00.000Z'));
+    const results = await dispatchDueDailyDigests(
+      new Date('2026-03-19T18:15:00.000Z')
+    );
 
     expect(results).toHaveLength(1);
     expect(deliverOutgoingWebhooksMock).toHaveBeenCalledWith(
@@ -147,8 +173,12 @@ describe('daily digest service', () => {
   });
 
   it('opens the digest window only after the configured UTC time', () => {
-    expect(isDailyDigestWindowOpen(new Date('2026-03-19T17:59:00.000Z'))).toBe(false);
-    expect(isDailyDigestWindowOpen(new Date('2026-03-19T18:00:00.000Z'))).toBe(true);
+    expect(isDailyDigestWindowOpen(new Date('2026-03-19T17:59:00.000Z'))).toBe(
+      false
+    );
+    expect(isDailyDigestWindowOpen(new Date('2026-03-19T18:00:00.000Z'))).toBe(
+      true
+    );
   });
 
   it('skips companies whose own digest settings are disabled or not due yet', async () => {
@@ -179,7 +209,9 @@ describe('daily digest service', () => {
       ],
     });
 
-    const results = await dispatchDueDailyDigests(new Date('2026-03-19T18:15:00.000Z'));
+    const results = await dispatchDueDailyDigests(
+      new Date('2026-03-19T18:15:00.000Z')
+    );
 
     expect(results).toEqual([]);
     expect(deliverOutgoingWebhooksMock).not.toHaveBeenCalled();

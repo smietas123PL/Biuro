@@ -156,7 +156,8 @@ export async function createPgMemDb() {
   return {
     mem,
     pool,
-    query: <T = any>(text: string, params?: any[]) => pool.query<T>(text, params),
+    query: <T = any>(text: string, params?: any[]) =>
+      pool.query<T>(text, params),
     transaction: async <T>(fn: (client: any) => Promise<T>) => {
       const client = await pool.connect();
       try {

@@ -70,7 +70,8 @@ describe('OpenAIRuntime', () => {
         {
           message: {
             content: JSON.stringify({
-              thought: 'I should delegate user interviews and keep tracking progress.',
+              thought:
+                'I should delegate user interviews and keep tracking progress.',
               actions: [
                 {
                   type: 'delegate',
@@ -80,7 +81,8 @@ describe('OpenAIRuntime', () => {
                 },
                 {
                   type: 'continue',
-                  thought: 'I will synthesize the interview findings once they arrive.',
+                  thought:
+                    'I will synthesize the interview findings once they arrive.',
                 },
               ],
             }),
@@ -117,7 +119,9 @@ describe('OpenAIRuntime', () => {
         thought: 'I will synthesize the interview findings once they arrive.',
       },
     ]);
-    expect(response.thought).toBe('I should delegate user interviews and keep tracking progress.');
+    expect(response.thought).toBe(
+      'I should delegate user interviews and keep tracking progress.'
+    );
   });
 
   it('falls back to continue when structured JSON is invalid', async () => {

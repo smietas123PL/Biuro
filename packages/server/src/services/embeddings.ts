@@ -4,7 +4,8 @@ import { logger } from '../utils/logger.js';
 
 const EMBEDDING_DIMENSIONS = 1536;
 const FALLBACK_EMBEDDING_MODEL = 'local-hash-v1';
-const DEFAULT_EMBEDDING_MODEL = env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
+const DEFAULT_EMBEDDING_MODEL =
+  env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 
 let openAIClient: OpenAI | null = null;
 let loggedFallbackReason = false;
@@ -33,7 +34,10 @@ function logFallback(reason: string, err?: unknown) {
   }
 
   loggedFallbackReason = true;
-  logger.warn({ reason, err }, 'Embeddings API unavailable, using deterministic fallback embeddings');
+  logger.warn(
+    { reason, err },
+    'Embeddings API unavailable, using deterministic fallback embeddings'
+  );
 }
 
 function tokenize(text: string) {
@@ -54,7 +58,10 @@ function hashToken(token: string, seed: number) {
   return hash >>> 0;
 }
 
-export function buildDeterministicEmbedding(text: string, dimensions: number = EMBEDDING_DIMENSIONS) {
+export function buildDeterministicEmbedding(
+  text: string,
+  dimensions: number = EMBEDDING_DIMENSIONS
+) {
   const vector = Array(dimensions).fill(0);
   const tokens = tokenize(text);
 
@@ -83,11 +90,15 @@ export function buildDeterministicEmbedding(text: string, dimensions: number = E
 }
 
 export function toPgVector(vector: number[]) {
-  const normalized = vector.map((value) => (Number.isFinite(value) ? value : 0));
+  const normalized = vector.map((value) =>
+    Number.isFinite(value) ? value : 0
+  );
   return `[${normalized.join(',')}]`;
 }
 
-export async function generateEmbedding(text: string): Promise<EmbeddingResult> {
+export async function generateEmbedding(
+  text: string
+): Promise<EmbeddingResult> {
   const normalizedText = text.trim();
   if (!normalizedText) {
     return {

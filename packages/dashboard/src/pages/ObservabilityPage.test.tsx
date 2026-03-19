@@ -171,14 +171,22 @@ describe('ObservabilityPage', () => {
     );
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/observability/traces/recent?limit=100', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
-      expect(requestMock).toHaveBeenCalledWith('/observability/traces/trace-a1234567890', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/observability/traces/recent?limit=100',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
+      expect(requestMock).toHaveBeenCalledWith(
+        '/observability/traces/trace-a1234567890',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
     });
 
     expect(screen.getByText('Observability')).toBeTruthy();
@@ -193,10 +201,14 @@ describe('ObservabilityPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('tool.execute')).toBeTruthy();
-      expect(requestMock).toHaveBeenCalledWith('/observability/traces/trace-b1234567890', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/observability/traces/trace-b1234567890',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
     });
   });
 });

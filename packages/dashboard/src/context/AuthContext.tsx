@@ -5,7 +5,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { clearAuthToken, getAuthToken, setAuthToken, AUTH_EVENT } from '../lib/session';
+import {
+  clearAuthToken,
+  getAuthToken,
+  setAuthToken,
+  AUTH_EVENT,
+} from '../lib/session';
 
 type AuthUser = {
   id: string;

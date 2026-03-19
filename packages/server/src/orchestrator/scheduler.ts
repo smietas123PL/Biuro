@@ -26,7 +26,10 @@ function notifyHeartbeatWaiters() {
   inFlightHeartbeatWaiters.clear();
 }
 
-function trackHeartbeat(companyId: string | null, promise: Promise<HeartbeatOutcome>) {
+function trackHeartbeat(
+  companyId: string | null,
+  promise: Promise<HeartbeatOutcome>
+) {
   inFlightHeartbeats.add(promise);
   promise
     .then(async (result) => {
@@ -68,10 +71,13 @@ async function waitForCapacity() {
 
   await new Promise<void>((resolve) => {
     inFlightHeartbeatWaiters.add(resolve);
-    setTimeout(() => {
-      inFlightHeartbeatWaiters.delete(resolve);
-      resolve();
-    }, Math.min(env.SCHEDULER_STREAM_BLOCK_MS, 1000)).unref();
+    setTimeout(
+      () => {
+        inFlightHeartbeatWaiters.delete(resolve);
+        resolve();
+      },
+      Math.min(env.SCHEDULER_STREAM_BLOCK_MS, 1000)
+    ).unref();
   });
 }
 
@@ -85,7 +91,10 @@ async function runScheduledMaintenance(nowMs: number = Date.now()) {
 }
 
 async function dispatchQueuedCompany(companyId: string) {
-  const remainingCapacity = Math.max(env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size, 0);
+  const remainingCapacity = Math.max(
+    env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size,
+    0
+  );
   if (remainingCapacity === 0) {
     await enqueueCompanyWakeup(companyId, 'capacity_deferred');
     return;
@@ -143,7 +152,10 @@ async function runQueueDrivenScheduler() {
         break;
       }
 
-      const remainingCapacity = Math.max(env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size, 0);
+      const remainingCapacity = Math.max(
+        env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size,
+        0
+      );
       if (remainingCapacity === 0) {
         continue;
       }
@@ -176,7 +188,10 @@ export function startOrchestrator() {
   lastDailyDigestSweepAt = 0;
 
   logger.info(
-    { intervalMs: env.HEARTBEAT_INTERVAL_MS, maxConcurrentHeartbeats: env.MAX_CONCURRENT_HEARTBEATS },
+    {
+      intervalMs: env.HEARTBEAT_INTERVAL_MS,
+      maxConcurrentHeartbeats: env.MAX_CONCURRENT_HEARTBEATS,
+    },
     'Starting orchestrator scheduler'
   );
 
@@ -190,9 +205,15 @@ export function startOrchestrator() {
   interval = setInterval(async () => {
     try {
       await runScheduledMaintenance();
-      const remainingCapacity = Math.max(env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size, 0);
+      const remainingCapacity = Math.max(
+        env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size,
+        0
+      );
       if (remainingCapacity === 0) {
-        logger.debug({ activeHeartbeats: inFlightHeartbeats.size }, 'Skipping scheduler tick because capacity is full');
+        logger.debug(
+          { activeHeartbeats: inFlightHeartbeats.size },
+          'Skipping scheduler tick because capacity is full'
+        );
         return;
       }
 
@@ -225,14 +246,20 @@ export async function stopOrchestrator(timeoutMs: number = 9_000) {
   if (interval) {
     clearInterval(interval);
     interval = null;
-    logger.info({ activeHeartbeats: inFlightHeartbeats.size }, 'Orchestrator scheduler stopped');
+    logger.info(
+      { activeHeartbeats: inFlightHeartbeats.size },
+      'Orchestrator scheduler stopped'
+    );
   }
 
   if (queueLoopPromise) {
     await queueLoopPromise;
     queueLoopPromise = null;
     await closeSchedulerQueue();
-    logger.info({ activeHeartbeats: inFlightHeartbeats.size }, 'Queue-driven orchestrator stopped');
+    logger.info(
+      { activeHeartbeats: inFlightHeartbeats.size },
+      'Queue-driven orchestrator stopped'
+    );
   }
 
   if (inFlightHeartbeats.size === 0) {
@@ -240,7 +267,10 @@ export async function stopOrchestrator(timeoutMs: number = 9_000) {
   }
 
   const pendingHeartbeats = Array.from(inFlightHeartbeats);
-  logger.info({ activeHeartbeats: pendingHeartbeats.length }, 'Waiting for active heartbeats to finish');
+  logger.info(
+    { activeHeartbeats: pendingHeartbeats.length },
+    'Waiting for active heartbeats to finish'
+  );
 
   await Promise.race([
     Promise.allSettled(pendingHeartbeats),
@@ -251,6 +281,9 @@ export async function stopOrchestrator(timeoutMs: number = 9_000) {
 
   await Promise.resolve();
   if (inFlightHeartbeats.size > 0) {
-    logger.warn({ activeHeartbeats: inFlightHeartbeats.size }, 'Timed out waiting for active heartbeats');
+    logger.warn(
+      { activeHeartbeats: inFlightHeartbeats.size },
+      'Timed out waiting for active heartbeats'
+    );
   }
 }

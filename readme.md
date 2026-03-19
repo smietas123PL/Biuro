@@ -16,11 +16,11 @@ It looks like a task manager — but under the hood it has org charts, budgets, 
 
 **Manage business goals, not pull requests.**
 
-| Step | Example |
-|------|---------|
-| 01 — Define the goal | *"Build the #1 AI note-taking app to $1M MRR."* |
-| 02 — Hire the team | CEO, CTO, engineers, designers, marketers — any bot, any provider. |
-| 03 — Approve and run | Review strategy. Set budgets. Hit go. Monitor from the dashboard. |
+| Step                 | Example                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| 01 — Define the goal | _"Build the #1 AI note-taking app to $1M MRR."_                    |
+| 02 — Hire the team   | CEO, CTO, engineers, designers, marketers — any bot, any provider. |
+| 03 — Approve and run | Review strategy. Set budgets. Hit go. Monitor from the dashboard.  |
 
 </div>
 
@@ -68,6 +68,7 @@ pnpm dev
 ```
 
 This starts:
+
 - **API Server** at `http://localhost:3100`
 - **Dashboard** at `http://localhost:3200`
 
@@ -104,6 +105,7 @@ This creates a full company with 5 agents (CEO, CTO, Developer, Designer, Market
 ## 📋 Features
 
 ### 🔌 Bring Your Own Agent
+
 Any agent, any runtime, one org chart. If it can receive a heartbeat, it's hired.
 
 ```
@@ -111,7 +113,8 @@ Works with: Claude · GPT-4o · OpenAI Codex · Cursor · Custom HTTP · Bash sc
 ```
 
 ### 🎯 Goal Alignment
-Every task traces back to the company mission. Agents know *what* to do and *why*.
+
+Every task traces back to the company mission. Agents know _what_ to do and _why_.
 
 ```
 Mission: "Build #1 AI note-taking app"
@@ -122,6 +125,7 @@ Mission: "Build #1 AI note-taking app"
 ```
 
 ### 💓 Heartbeats
+
 Agents wake on a schedule, check for work, and act. Delegation flows up and down the org chart.
 
 ```
@@ -136,6 +140,7 @@ Every 30 seconds:
 ```
 
 ### 💰 Cost Control
+
 Monthly budgets per agent. When they hit the limit, they stop. No runaway costs.
 
 ```
@@ -145,12 +150,15 @@ Charlie (Dev):    $24.50 / $30.00  [█████████████░�
 ```
 
 ### 🏢 Multi-Company
+
 One deployment, many companies. Complete data isolation. One control plane for your portfolio.
 
 ### 🎫 Ticket System
+
 Every conversation is traced. Every decision is explained. Full tool-call tracing and immutable audit log.
 
 ### 🛡️ Governance
+
 You're the board. Approve hires, override strategy, pause or terminate any agent — at any time.
 
 ```
@@ -162,6 +170,7 @@ Policies:
 ```
 
 ### 📊 Org Chart
+
 Hierarchies, roles, reporting lines. Your agents have a boss, a title, and a job description.
 
 ```
@@ -174,6 +183,7 @@ Board (You)
 ```
 
 ### 🔧 Tools
+
 Register any tool — HTTP APIs, bash commands, built-in functions — and assign them to agents with permissions and rate limits.
 
 ```
@@ -183,15 +193,19 @@ github_api    → Developer           (30/hour)
 ```
 
 ### 📦 Templates
+
 Export and import entire companies. Browse preset templates and launch a new company in seconds.
 
 ### 🔗 Integrations
+
 Connect Slack, Discord, email, or custom webhooks to get notified about events.
 
 ### 📊 Reports
+
 Generate daily summaries, weekly reports, and cost reports — on-demand or scheduled.
 
 ### 📱 Mobile Ready
+
 Monitor and manage your autonomous businesses from anywhere. Responsive design with mobile sidebar.
 
 ---
@@ -610,11 +624,11 @@ Templates let you export and import entire companies — agents, goals, tools, p
 
 ### Preset Templates
 
-| Template | Agents | Description |
-|----------|--------|-------------|
-| `saas-startup.json` | 5 (CEO, CTO, Developer, Designer, Marketer) | Full SaaS startup team with goals, tools, and governance |
-| `content-agency.json` | — | Content creation agency *(coming soon)* |
-| `dev-shop.json` | — | Development agency *(coming soon)* |
+| Template              | Agents                                      | Description                                              |
+| --------------------- | ------------------------------------------- | -------------------------------------------------------- |
+| `saas-startup.json`   | 5 (CEO, CTO, Developer, Designer, Marketer) | Full SaaS startup team with goals, tools, and governance |
+| `content-agency.json` | —                                           | Content creation agency _(coming soon)_                  |
+| `dev-shop.json`       | —                                           | Development agency _(coming soon)_                       |
 
 ### Creating Custom Templates
 
@@ -832,14 +846,14 @@ ws.onmessage = (event) => {
 
 #### Event Types
 
-| Event | Description |
-|-------|-------------|
-| `connected` | WebSocket connection established |
-| `heartbeat.completed` | Agent finished a heartbeat cycle |
-| `approval.requested` | Agent needs board approval |
-| `approval.approved` | Approval granted |
-| `approval.rejected` | Approval denied |
-| `agent.auto_paused` | Agent auto-paused by safety system |
+| Event                 | Description                        |
+| --------------------- | ---------------------------------- |
+| `connected`           | WebSocket connection established   |
+| `heartbeat.completed` | Agent finished a heartbeat cycle   |
+| `approval.requested`  | Agent needs board approval         |
+| `approval.approved`   | Approval granted                   |
+| `approval.rejected`   | Approval denied                    |
+| `agent.auto_paused`   | Agent auto-paused by safety system |
 
 ---
 
@@ -847,19 +861,20 @@ ws.onmessage = (event) => {
 
 Autonomiczne Biuro includes multiple safety mechanisms to prevent runaway agents:
 
-| Protection | Default Limit | What Happens |
-|-----------|---------------|--------------|
-| Heartbeat rate | 60/hour | Agent auto-paused |
-| Tool calls per task | 100 | Task blocked |
-| Delegation depth | 5 levels | Task blocked |
-| Message flood | 20/minute | Agent auto-paused |
-| Consecutive errors | 5 | Agent auto-paused |
-| Task duration | 24 hours | Task blocked |
-| Circular delegation | — | Agent auto-paused + task blocked |
-| Budget exceeded | per-agent monthly | Agent skipped |
-| Integration errors | 10 consecutive | Integration auto-disabled |
+| Protection          | Default Limit     | What Happens                     |
+| ------------------- | ----------------- | -------------------------------- |
+| Heartbeat rate      | 60/hour           | Agent auto-paused                |
+| Tool calls per task | 100               | Task blocked                     |
+| Delegation depth    | 5 levels          | Task blocked                     |
+| Message flood       | 20/minute         | Agent auto-paused                |
+| Consecutive errors  | 5                 | Agent auto-paused                |
+| Task duration       | 24 hours          | Task blocked                     |
+| Circular delegation | —                 | Agent auto-paused + task blocked |
+| Budget exceeded     | per-agent monthly | Agent skipped                    |
+| Integration errors  | 10 consecutive    | Integration auto-disabled        |
 
 All safety events are:
+
 - Logged in audit log
 - Broadcast via WebSocket
 - Dispatched to integrations (Slack/Discord/etc.)
@@ -873,16 +888,17 @@ When `AUTH_ENABLED=true`, the system supports:
 
 ### Roles
 
-| Role | Capabilities |
-|------|-------------|
-| **Owner** | Full access to everything |
-| **Admin** | Manage agents, tasks, tools, policies, integrations. Can't delete company. |
-| **Member** | Create agents/tasks/goals. Read tools/policies. |
-| **Viewer** | Read-only access to everything |
+| Role       | Capabilities                                                               |
+| ---------- | -------------------------------------------------------------------------- |
+| **Owner**  | Full access to everything                                                  |
+| **Admin**  | Manage agents, tasks, tools, policies, integrations. Can't delete company. |
+| **Member** | Create agents/tasks/goals. Read tools/policies.                            |
+| **Viewer** | Read-only access to everything                                             |
 
 ### Per-Company Roles
 
 A user can have different roles in different companies:
+
 - Owner of "AI Startup"
 - Viewer of "Content Agency"
 
@@ -1019,6 +1035,7 @@ curl -X POST /api/companies/$CID/reports/scheduled \
 ### Report Contents
 
 Reports include:
+
 - **KPIs**: Total cost, tasks created/completed, heartbeats, tool calls, approvals
 - **Per-agent performance**: Heartbeats, tasks done, cost, budget usage
 - **Recently completed tasks**: With results
@@ -1043,6 +1060,7 @@ pnpm --filter @biuro/server test:watch
 ```
 
 Tests cover:
+
 - Company CRUD and cascade delete
 - Atomic task checkout (no double-work)
 - Budget enforcement
@@ -1101,7 +1119,7 @@ docker compose up -d
   # Prometheus: http://localhost:9090
   # Grafana:    http://localhost:3001
   # Tempo:      http://localhost:3202
-  ```
+```
 
 Grafana ships with a pre-provisioned `Autonomiczne Biuro Overview` dashboard, Prometheus scrapes both the API server and worker out of the box, and traces flow through the local OpenTelemetry Collector into Tempo.
 
@@ -1144,7 +1162,7 @@ Yes. A single deployment can run an unlimited number of companies with complete 
 
 ### How is this different from agents like Claude Code or Codex?
 
-Autonomiczne Biuro *uses* those agents. It orchestrates them into a company — with org charts, budgets, goals, governance, and accountability. Think of it as the difference between an employee and a company.
+Autonomiczne Biuro _uses_ those agents. It orchestrates them into a company — with org charts, budgets, goals, governance, and accountability. Think of it as the difference between an employee and a company.
 
 ### Why not just use Asana or Trello?
 
@@ -1212,14 +1230,14 @@ PostgreSQL 16+. The schema uses `pgcrypto` for UUID generation and `FOR UPDATE S
 
 ## 🏛️ What Autonomiczne Biuro is NOT
 
-| Not this | But this |
-|----------|----------|
-| Not a chatbot | Agents have **jobs**, not chat windows |
-| Not an agent framework | We don't tell you how to build agents. We tell you how to **run a company** made of them |
-| Not a workflow builder | No drag-and-drop pipelines. We model **companies** — with org charts, goals, budgets, and governance |
-| Not a prompt manager | Agents bring their own prompts, models, and runtimes. We manage the **organization** they work in |
+| Not this                | But this                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Not a chatbot           | Agents have **jobs**, not chat windows                                                                             |
+| Not an agent framework  | We don't tell you how to build agents. We tell you how to **run a company** made of them                           |
+| Not a workflow builder  | No drag-and-drop pipelines. We model **companies** — with org charts, goals, budgets, and governance               |
+| Not a prompt manager    | Agents bring their own prompts, models, and runtimes. We manage the **organization** they work in                  |
 | Not a single-agent tool | This is for **teams**. If you have one agent, you probably don't need this. If you have twenty — you definitely do |
-| Not a code review tool | We orchestrate **work**, not pull requests. Bring your own review process |
+| Not a code review tool  | We orchestrate **work**, not pull requests. Bring your own review process                                          |
 
 ---
 

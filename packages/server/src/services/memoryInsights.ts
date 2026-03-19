@@ -99,7 +99,9 @@ function toNumber(value: string | number | null | undefined) {
 }
 
 function extractTokens(content: string) {
-  return Array.from(content.toLowerCase().matchAll(/[\p{L}\p{N}][\p{L}\p{N}_-]{2,}/gu))
+  return Array.from(
+    content.toLowerCase().matchAll(/[\p{L}\p{N}][\p{L}\p{N}_-]{2,}/gu)
+  )
     .map((match) => match[0])
     .filter((token) => !MEMORY_STOP_WORDS.has(token));
 }
@@ -154,9 +156,10 @@ function buildRecurringTopics(items: RecentLessonRow[]) {
 }
 
 export async function getMemoryInsights(companyId: string, days: number) {
-  const [summaryRes, topAgentsRes, recentLessonsRes, revisitedQueriesRes] = await Promise.all([
-    db.query<MemorySummaryRow>(
-      `SELECT
+  const [summaryRes, topAgentsRes, recentLessonsRes, revisitedQueriesRes] =
+    await Promise.all([
+      db.query<MemorySummaryRow>(
+        `SELECT
          (SELECT COUNT(*) FROM agent_memory WHERE company_id = $1)::int AS total_memories,
          COUNT(*)::int AS recent_memories,
          COUNT(DISTINCT agent_id)::int AS agents_with_memories,
@@ -171,10 +174,10 @@ export async function getMemoryInsights(companyId: string, days: number) {
        FROM agent_memory
        WHERE company_id = $1
          AND created_at >= now() - make_interval(days => $2)`,
-      [companyId, days]
-    ),
-    db.query<TopAgentRow>(
-      `SELECT
+        [companyId, days]
+      ),
+      db.query<TopAgentRow>(
+        `SELECT
          m.agent_id,
          a.name AS agent_name,
          COUNT(*)::int AS total_memories,
@@ -186,10 +189,10 @@ export async function getMemoryInsights(companyId: string, days: number) {
        GROUP BY m.agent_id, a.name
        ORDER BY total_memories DESC, latest_memory_at DESC
        LIMIT 5`,
-      [companyId, days]
-    ),
-    db.query<RecentLessonRow>(
-      `SELECT
+        [companyId, days]
+      ),
+      db.query<RecentLessonRow>(
+        `SELECT
          m.id,
          m.content,
          m.created_at,
@@ -204,10 +207,10 @@ export async function getMemoryInsights(companyId: string, days: number) {
          AND m.created_at >= now() - make_interval(days => $2)
        ORDER BY m.created_at DESC
        LIMIT 24`,
-      [companyId, days]
-    ),
-    db.query<RevisitedQueryRow>(
-      `SELECT
+        [companyId, days]
+      ),
+      db.query<RevisitedQueryRow>(
+        `SELECT
          query,
          COUNT(*)::int AS total
        FROM retrieval_metrics
@@ -219,9 +222,9 @@ export async function getMemoryInsights(companyId: string, days: number) {
        GROUP BY query
        ORDER BY total DESC, query ASC
        LIMIT 5`,
-      [companyId, days]
-    ),
-  ]);
+        [companyId, days]
+      ),
+    ]);
 
   const summary = summaryRes.rows[0] ?? {
     total_memories: 0,

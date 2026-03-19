@@ -35,7 +35,11 @@ function printStatusTable(
 async function runUp() {
   const client = await db.getClient();
   try {
-    const appliedCount = await applyPendingMigrations(client, __dirname, logger);
+    const appliedCount = await applyPendingMigrations(
+      client,
+      __dirname,
+      logger
+    );
     logger.info({ appliedCount }, 'Migration run completed');
   } finally {
     client.release();
@@ -65,7 +69,11 @@ async function runVerify() {
 
 async function runCreate(nameArg: string | undefined) {
   const migrationFiles = listMigrationFiles(__dirname);
-  const nextVersion = migrationFiles.reduce((highest, migration) => Math.max(highest, migration.version), 0) + 1;
+  const nextVersion =
+    migrationFiles.reduce(
+      (highest, migration) => Math.max(highest, migration.version),
+      0
+    ) + 1;
   const filename = buildMigrationFilename(nextVersion, nameArg);
   const filepath = path.join(__dirname, filename);
 
@@ -73,7 +81,11 @@ async function runCreate(nameArg: string | undefined) {
     throw new Error(`Migration file already exists: ${filename}`);
   }
 
-  fs.writeFileSync(filepath, createMigrationTemplate(nextVersion, nameArg), 'utf8');
+  fs.writeFileSync(
+    filepath,
+    createMigrationTemplate(nextVersion, nameArg),
+    'utf8'
+  );
   logger.info({ filename, filepath }, 'Created migration file');
 }
 

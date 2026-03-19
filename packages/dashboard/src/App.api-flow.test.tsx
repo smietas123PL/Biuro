@@ -129,12 +129,18 @@ async function startTestApiServer(): Promise<TestApiServer> {
       return;
     }
 
-    if (method === 'GET' && url === '/api/companies/company-1/activity-feed?limit=12') {
+    if (
+      method === 'GET' &&
+      url === '/api/companies/company-1/activity-feed?limit=12'
+    ) {
       json(res, 200, []);
       return;
     }
 
-    if (method === 'GET' && url === '/api/companies/company-1/retrieval-metrics?days=7') {
+    if (
+      method === 'GET' &&
+      url === '/api/companies/company-1/retrieval-metrics?days=7'
+    ) {
       json(res, 200, {
         range_days: 7,
         totals: {
@@ -153,7 +159,10 @@ async function startTestApiServer(): Promise<TestApiServer> {
       return;
     }
 
-    if (method === 'GET' && url === '/api/companies/company-1/memory-insights?days=30') {
+    if (
+      method === 'GET' &&
+      url === '/api/companies/company-1/memory-insights?days=30'
+    ) {
       json(res, 200, {
         range_days: 30,
         summary: {
@@ -171,7 +180,10 @@ async function startTestApiServer(): Promise<TestApiServer> {
       return;
     }
 
-    if (method === 'GET' && url === '/api/companies/company-1/budgets-summary') {
+    if (
+      method === 'GET' &&
+      url === '/api/companies/company-1/budgets-summary'
+    ) {
       json(res, 200, {
         totals: {
           limit_usd: 10,
@@ -263,25 +275,34 @@ describe('App API-backed auth flow', () => {
     });
 
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
-    expect(screen.getByText('Live operating snapshot for QA Test Corp')).toBeTruthy();
+    expect(
+      screen.getByText('Live operating snapshot for QA Test Corp')
+    ).toBeTruthy();
     expect(screen.getByDisplayValue('QA Test Corp')).toBeTruthy();
 
     expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe('token-123');
     expect(localStorage.getItem(COMPANY_STORAGE_KEY)).toBe('company-1');
 
-    const loginRequest = apiServer.requests.find((request) => request.method === 'POST' && request.url === '/api/auth/login');
+    const loginRequest = apiServer.requests.find(
+      (request) =>
+        request.method === 'POST' && request.url === '/api/auth/login'
+    );
     expect(loginRequest?.body).toEqual({
       email: 'ada@example.com',
       password: 'password123',
     });
 
-    const companiesRequest = apiServer.requests.find((request) => request.method === 'GET' && request.url === '/api/companies');
+    const companiesRequest = apiServer.requests.find(
+      (request) => request.method === 'GET' && request.url === '/api/companies'
+    );
     expect(companiesRequest?.headers.authorization).toBe('Bearer token-123');
 
     await waitFor(() => {
       expect(
         apiServer.requests.some(
-          (request) => request.method === 'GET' && request.url === '/api/companies/company-1/stats'
+          (request) =>
+            request.method === 'GET' &&
+            request.url === '/api/companies/company-1/stats'
         )
       ).toBe(true);
     });

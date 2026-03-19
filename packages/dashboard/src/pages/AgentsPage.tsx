@@ -80,7 +80,10 @@ export default function AgentsPage() {
     void fetchAgents();
   }, [selectedCompanyId]);
 
-  const handleAction = async (agentId: string, action: 'pause' | 'resume' | 'terminate') => {
+  const handleAction = async (
+    agentId: string,
+    action: 'pause' | 'resume' | 'terminate'
+  ) => {
     await request(`/agents/${agentId}/${action}`, { method: 'POST' });
     await fetchAgents();
   };
@@ -111,19 +114,27 @@ export default function AgentsPage() {
   };
 
   if (!selectedCompany) {
-    return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to manage agents.</div>;
+    return (
+      <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
+        Choose a company to manage agents.
+      </div>
+    );
   }
 
   const activeAgents = agents.filter((agent) => agent.status !== 'terminated');
   const agentTree = buildAgentTree(activeAgents);
-  const managerCount = activeAgents.filter((agent) => activeAgents.some((candidate) => candidate.reports_to === agent.id)).length;
+  const managerCount = activeAgents.filter((agent) =>
+    activeAgents.some((candidate) => candidate.reports_to === agent.id)
+  ).length;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Agents</h2>
-          <p className="text-sm text-muted-foreground">Team for {selectedCompany.name}</p>
+          <p className="text-sm text-muted-foreground">
+            Team for {selectedCompany.name}
+          </p>
         </div>
         <button
           onClick={() => setShowHireModal(true)}
@@ -134,17 +145,28 @@ export default function AgentsPage() {
         </button>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold">Organization View</h3>
-            <p className="text-sm text-muted-foreground">Hierarchy built from `reports_to`, so you can see the team shape at a glance.</p>
+            <p className="text-sm text-muted-foreground">
+              Hierarchy built from `reports_to`, so you can see the team shape
+              at a glance.
+            </p>
           </div>
           <div className="flex gap-3 text-xs text-muted-foreground">
-            <span className="rounded-full bg-muted px-3 py-1">{activeAgents.length} active agents</span>
-            <span className="rounded-full bg-muted px-3 py-1">{managerCount} managers</span>
+            <span className="rounded-full bg-muted px-3 py-1">
+              {activeAgents.length} active agents
+            </span>
+            <span className="rounded-full bg-muted px-3 py-1">
+              {managerCount} managers
+            </span>
           </div>
         </div>
 
@@ -155,7 +177,8 @@ export default function AgentsPage() {
 
           {agentTree.length === 0 && !loading && (
             <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-              No reporting structure yet. Assign managers when hiring agents to see the org chart here.
+              No reporting structure yet. Assign managers when hiring agents to
+              see the org chart here.
             </div>
           )}
         </div>
@@ -175,21 +198,32 @@ export default function AgentsPage() {
             </thead>
             <tbody className="divide-y">
               {agents.map((agent) => (
-                <tr key={agent.id} className="hover:bg-accent/50 transition-colors">
+                <tr
+                  key={agent.id}
+                  className="hover:bg-accent/50 transition-colors"
+                >
                   <td className="px-6 py-4">
-                    <Link to={`/agents/${agent.id}`} className="font-semibold text-foreground transition-colors hover:text-primary">
+                    <Link
+                      to={`/agents/${agent.id}`}
+                      className="font-semibold text-foreground transition-colors hover:text-primary"
+                    >
                       {agent.name}
                     </Link>
-                    <div className="text-sm text-muted-foreground">{agent.title || agent.role}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {agent.title || agent.role}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <span
                       className={clsx(
                         'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize',
-                        agent.status === 'idle' && 'bg-green-100 text-green-700',
+                        agent.status === 'idle' &&
+                          'bg-green-100 text-green-700',
                         agent.status === 'working' && 'bg-sky-100 text-sky-700',
-                        agent.status === 'paused' && 'bg-yellow-100 text-yellow-700',
-                        agent.status === 'terminated' && 'bg-red-100 text-red-700',
+                        agent.status === 'paused' &&
+                          'bg-yellow-100 text-yellow-700',
+                        agent.status === 'terminated' &&
+                          'bg-red-100 text-red-700'
                       )}
                     >
                       {agent.status}
@@ -198,23 +232,30 @@ export default function AgentsPage() {
                   <td
                     className={clsx(
                       'px-6 py-4 font-mono text-sm font-medium',
-                      agent.runtime === 'claude' ? 'text-orange-600' :
-                      agent.runtime === 'openai' ? 'text-green-600' :
-                      agent.runtime === 'gemini' ? 'text-blue-600' :
-                      'text-gray-600',
+                      agent.runtime === 'claude'
+                        ? 'text-orange-600'
+                        : agent.runtime === 'openai'
+                          ? 'text-green-600'
+                          : agent.runtime === 'gemini'
+                            ? 'text-blue-600'
+                            : 'text-gray-600'
                     )}
                   >
                     {agent.runtime}
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {agents.find((candidate) => candidate.id === agent.reports_to)?.name || 'None'}
+                    {agents.find(
+                      (candidate) => candidate.id === agent.reports_to
+                    )?.name || 'None'}
                   </td>
                   <td className="px-6 py-4 text-right space-x-2">
                     {agent.status !== 'terminated' && (
                       <>
                         {agent.status === 'paused' ? (
                           <button
-                            onClick={() => void handleAction(agent.id, 'resume')}
+                            onClick={() =>
+                              void handleAction(agent.id, 'resume')
+                            }
                             className="p-2 hover:bg-green-50 text-green-600 rounded-md transition-colors"
                             title="Resume"
                           >
@@ -230,7 +271,9 @@ export default function AgentsPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => void handleAction(agent.id, 'terminate')}
+                          onClick={() =>
+                            void handleAction(agent.id, 'terminate')
+                          }
                           className="p-2 hover:bg-red-50 text-red-600 rounded-md transition-colors"
                           title="Terminate"
                         >
@@ -243,7 +286,10 @@ export default function AgentsPage() {
               ))}
               {agents.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic">
+                  <td
+                    colSpan={5}
+                    className="px-6 py-12 text-center text-muted-foreground italic"
+                  >
                     No agents hired yet.
                   </td>
                 </tr>
@@ -259,9 +305,14 @@ export default function AgentsPage() {
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-semibold">Hire Agent</h3>
-                <p className="text-sm text-muted-foreground">Add a new teammate to {selectedCompany.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Add a new teammate to {selectedCompany.name}
+                </p>
               </div>
-              <button onClick={() => setShowHireModal(false)} className="rounded-md p-2 hover:bg-accent">
+              <button
+                onClick={() => setShowHireModal(false)}
+                className="rounded-md p-2 hover:bg-accent"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -271,7 +322,12 @@ export default function AgentsPage() {
                 id="agent-name"
                 name="agentName"
                 value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
                 placeholder="Name"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
@@ -279,7 +335,12 @@ export default function AgentsPage() {
                 id="agent-role"
                 name="agentRole"
                 value={form.role}
-                onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    role: event.target.value,
+                  }))
+                }
                 placeholder="Role"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
@@ -287,7 +348,12 @@ export default function AgentsPage() {
                 id="agent-title"
                 name="agentTitle"
                 value={form.title}
-                onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
                 placeholder="Title"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
@@ -295,7 +361,12 @@ export default function AgentsPage() {
                 id="agent-runtime"
                 name="agentRuntime"
                 value={form.runtime}
-                onChange={(event) => setForm((current) => ({ ...current, runtime: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    runtime: event.target.value,
+                  }))
+                }
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               >
                 <option value="claude">Claude</option>
@@ -306,7 +377,12 @@ export default function AgentsPage() {
                 id="agent-monthly-budget"
                 name="agentMonthlyBudgetUsd"
                 value={form.monthly_budget_usd}
-                onChange={(event) => setForm((current) => ({ ...current, monthly_budget_usd: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    monthly_budget_usd: event.target.value,
+                  }))
+                }
                 placeholder="Monthly budget (USD)"
                 type="number"
                 min="0"
@@ -317,7 +393,12 @@ export default function AgentsPage() {
                 id="agent-reports-to"
                 name="agentReportsTo"
                 value={form.reports_to}
-                onChange={(event) => setForm((current) => ({ ...current, reports_to: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    reports_to: event.target.value,
+                  }))
+                }
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               >
                 <option value="">No manager</option>
@@ -331,7 +412,12 @@ export default function AgentsPage() {
                 id="agent-system-prompt"
                 name="agentSystemPrompt"
                 value={form.system_prompt}
-                onChange={(event) => setForm((current) => ({ ...current, system_prompt: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    system_prompt: event.target.value,
+                  }))
+                }
                 placeholder="System prompt (optional)"
                 rows={4}
                 className="md:col-span-2 rounded-md border bg-background px-3 py-2 text-sm"
@@ -370,7 +456,10 @@ function AgentTreeNode({ node, depth }: { node: AgentNode; depth: number }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Link to={`/agents/${node.id}`} className="font-semibold text-foreground transition-colors hover:text-primary">
+              <Link
+                to={`/agents/${node.id}`}
+                className="font-semibold text-foreground transition-colors hover:text-primary"
+              >
                 {node.name}
               </Link>
               <span className="rounded-full bg-background px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -394,12 +483,15 @@ function AgentTreeNode({ node, depth }: { node: AgentNode; depth: number }) {
                 </span>
               )}
             </div>
-            <div className="text-sm text-muted-foreground">{node.title || node.role}</div>
+            <div className="text-sm text-muted-foreground">
+              {node.title || node.role}
+            </div>
           </div>
 
           {node.children.length > 0 && (
             <div className="rounded-full bg-background px-3 py-1 text-xs text-muted-foreground">
-              {node.children.length} direct report{node.children.length === 1 ? '' : 's'}
+              {node.children.length} direct report
+              {node.children.length === 1 ? '' : 's'}
             </div>
           )}
         </div>

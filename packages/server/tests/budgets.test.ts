@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { attachBudgetForecasts, buildBudgetForecast, buildDailySpendSeries, summarizeAgentBudgets } from '../src/utils/budgets.js';
+import {
+  attachBudgetForecasts,
+  buildBudgetForecast,
+  buildDailySpendSeries,
+  summarizeAgentBudgets,
+} from '../src/utils/budgets.js';
 
 describe('buildDailySpendSeries', () => {
   it('fills missing days and preserves existing spend values', () => {

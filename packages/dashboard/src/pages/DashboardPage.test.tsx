@@ -52,8 +52,10 @@ describe('DashboardPage', () => {
             agent_name: 'Ada',
             task_id: 'task-1',
             task_title: 'Investigate churn',
-            thought: 'We should verify retention cohorts before changing the headline.',
-            summary: 'We should verify retention cohorts before changing the headline.',
+            thought:
+              'We should verify retention cohorts before changing the headline.',
+            summary:
+              'We should verify retention cohorts before changing the headline.',
           },
         ];
       }
@@ -120,7 +122,8 @@ describe('DashboardPage', () => {
           recent_lessons: [
             {
               id: 'memory-1',
-              content: 'Retention cohorts are more predictive than signup totals for this segment.',
+              content:
+                'Retention cohorts are more predictive than signup totals for this segment.',
               created_at: '2026-03-19T09:58:00.000Z',
               agent_id: 'agent-1',
               agent_name: 'Ada',
@@ -203,32 +206,52 @@ describe('DashboardPage', () => {
 
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith('/companies/company-1/stats');
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/budgets-summary', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
-      expect(requestMock).toHaveBeenCalledWith('/observability/traces/trace-1234abcd', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/budgets-summary',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
+      expect(requestMock).toHaveBeenCalledWith(
+        '/observability/traces/trace-1234abcd',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
     });
 
     expect(screen.getByText('Trace Drilldown')).toBeTruthy();
     expect(screen.getByText('Live Cost Ticker')).toBeTruthy();
     expect(screen.getByText('Budget Gauge')).toBeTruthy();
-    const thoughtSection = screen.getByText('Live Thought Stream').closest('div.rounded-2xl.border.bg-card.p-6.shadow-sm') as HTMLElement | null;
+    const thoughtSection = screen
+      .getByText('Live Thought Stream')
+      .closest(
+        'div.rounded-2xl.border.bg-card.p-6.shadow-sm'
+      ) as HTMLElement | null;
     if (!thoughtSection) {
       throw new Error('Expected Live Thought Stream section');
     }
     const thoughtPanel = within(thoughtSection);
     expect(thoughtPanel.getByText('Live Thought Stream')).toBeTruthy();
-    expect(thoughtPanel.getByText('We should verify retention cohorts before changing the headline.')).toBeTruthy();
+    expect(
+      thoughtPanel.getByText(
+        'We should verify retention cohorts before changing the headline.'
+      )
+    ).toBeTruthy();
     expect(thoughtPanel.getByText('Recent heartbeat')).toBeTruthy();
     expect(screen.getByText('Memory Insights')).toBeTruthy();
     expect(screen.getByText('Recurring lessons')).toBeTruthy();
     expect(screen.getAllByText('retention cohorts').length).toBeGreaterThan(0);
     expect(screen.getByText('Most revisited questions')).toBeTruthy();
-    expect(screen.getByText('Retention cohorts are more predictive than signup totals for this segment.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Retention cohorts are more predictive than signup totals for this segment.'
+      )
+    ).toBeTruthy();
     expect(screen.getByText('$12.5000 today')).toBeTruthy();
     expect(screen.getByText('$27.50 remaining')).toBeTruthy();
     expect(screen.getByText(/Latest trace/)).toBeTruthy();
@@ -261,9 +284,15 @@ describe('DashboardPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Live Thought Stream')).toBeTruthy();
-      expect(screen.getByText('The current friction is around the second confirmation step.')).toBeTruthy();
+      expect(
+        screen.getByText(
+          'The current friction is around the second confirmation step.'
+        )
+      ).toBeTruthy();
       expect(screen.getByText('Live now')).toBeTruthy();
-      expect(screen.getByRole('link', { name: 'Open task' }).getAttribute('href')).toContain('/tasks/task-2');
+      expect(
+        screen.getByRole('link', { name: 'Open task' }).getAttribute('href')
+      ).toContain('/tasks/task-2');
     });
   });
 });

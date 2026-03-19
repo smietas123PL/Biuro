@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { getTemplatePresetById, listTemplatePresets } from '../src/services/templatePresets.js';
+import {
+  getTemplatePresetById,
+  listTemplatePresets,
+} from '../src/services/templatePresets.js';
 
 describe('template presets catalog', () => {
   it('lists curated presets with useful summaries', () => {

@@ -21,24 +21,45 @@ export const templatePresetsCatalog: TemplatePreset[] = [
   {
     id: 'solo-founder',
     name: 'Solo Founder Sprint',
-    description: 'A lean company setup for one founder who needs planning, execution and basic operations support.',
-    recommended_for: 'New product teams validating an idea with a tiny AI team.',
+    description:
+      'A lean company setup for one founder who needs planning, execution and basic operations support.',
+    recommended_for:
+      'New product teams validating an idea with a tiny AI team.',
     template: {
       version: '1.1',
       company: {
         name: 'Solo Founder Studio',
-        mission: 'Validate the first version of the product, ship quickly and keep execution visible.',
+        mission:
+          'Validate the first version of the product, ship quickly and keep execution visible.',
       },
       roles: ['owner', 'admin', 'member'],
       goals: [
-        { ref: 'goal-1', title: 'Validate the initial offer', description: 'Find a sharp customer problem and confirm demand.', status: 'active' },
-        { ref: 'goal-2', parent_ref: 'goal-1', title: 'Interview early users', description: 'Collect structured qualitative feedback every week.', status: 'active' },
-        { ref: 'goal-3', parent_ref: 'goal-1', title: 'Ship a usable MVP', description: 'Release a version that supports one critical workflow.', status: 'active' },
+        {
+          ref: 'goal-1',
+          title: 'Validate the initial offer',
+          description: 'Find a sharp customer problem and confirm demand.',
+          status: 'active',
+        },
+        {
+          ref: 'goal-2',
+          parent_ref: 'goal-1',
+          title: 'Interview early users',
+          description: 'Collect structured qualitative feedback every week.',
+          status: 'active',
+        },
+        {
+          ref: 'goal-3',
+          parent_ref: 'goal-1',
+          title: 'Ship a usable MVP',
+          description: 'Release a version that supports one critical workflow.',
+          status: 'active',
+        },
       ],
       policies: [
         {
           name: 'Approval for external calls',
-          description: 'Human review is required before tools that can affect third-party systems are executed.',
+          description:
+            'Human review is required before tools that can affect third-party systems are executed.',
           type: 'approval_required',
           rules: { actions: ['use_tool'] },
           is_active: true,
@@ -62,7 +83,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
         {
           ref: 'tool-2',
           name: 'founder_notes',
-          description: 'Shared MCP workspace for notes, plans and operating docs.',
+          description:
+            'Shared MCP workspace for notes, plans and operating docs.',
           type: 'mcp',
           config: {
             serverName: 'founder-notes',
@@ -79,7 +101,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Founder Operations Lead',
           runtime: 'claude',
           model: null,
-          system_prompt: 'Keep the founder focused. Turn broad goals into a short list of visible priorities.',
+          system_prompt:
+            'Keep the founder focused. Turn broad goals into a short list of visible priorities.',
           config: {},
           reports_to_ref: null,
           monthly_budget_usd: 35,
@@ -92,7 +115,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Product Planner',
           runtime: 'openai',
           model: null,
-          system_prompt: 'Translate user signals into roadmap options and concrete backlog items.',
+          system_prompt:
+            'Translate user signals into roadmap options and concrete backlog items.',
           config: {},
           reports_to_ref: 'agent-1',
           monthly_budget_usd: 25,
@@ -105,7 +129,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Execution Assistant',
           runtime: 'gemini',
           model: null,
-          system_prompt: 'Draft docs, summaries and follow-ups so work keeps moving every day.',
+          system_prompt:
+            'Draft docs, summaries and follow-ups so work keeps moving every day.',
           config: {},
           reports_to_ref: 'agent-1',
           monthly_budget_usd: 20,
@@ -122,24 +147,47 @@ export const templatePresetsCatalog: TemplatePreset[] = [
   {
     id: 'content-studio',
     name: 'Content Studio',
-    description: 'A preset for a content-heavy company that needs planning, production and publishing support.',
-    recommended_for: 'Agencies, media teams and founder-led brands shipping content every week.',
+    description:
+      'A preset for a content-heavy company that needs planning, production and publishing support.',
+    recommended_for:
+      'Agencies, media teams and founder-led brands shipping content every week.',
     template: {
       version: '1.1',
       company: {
         name: 'Content Studio',
-        mission: 'Plan, produce and publish content on a repeatable weekly rhythm.',
+        mission:
+          'Plan, produce and publish content on a repeatable weekly rhythm.',
       },
       roles: ['owner', 'admin', 'member', 'viewer'],
       goals: [
-        { ref: 'goal-1', title: 'Own a focused editorial niche', description: 'Build authority in one theme and publish consistently.', status: 'active' },
-        { ref: 'goal-2', parent_ref: 'goal-1', title: 'Run weekly content calendar', description: 'Maintain a rolling 4-week calendar of topics and assets.', status: 'active' },
-        { ref: 'goal-3', parent_ref: 'goal-1', title: 'Repurpose each pillar piece', description: 'Turn one core asset into multiple distribution formats.', status: 'active' },
+        {
+          ref: 'goal-1',
+          title: 'Own a focused editorial niche',
+          description: 'Build authority in one theme and publish consistently.',
+          status: 'active',
+        },
+        {
+          ref: 'goal-2',
+          parent_ref: 'goal-1',
+          title: 'Run weekly content calendar',
+          description:
+            'Maintain a rolling 4-week calendar of topics and assets.',
+          status: 'active',
+        },
+        {
+          ref: 'goal-3',
+          parent_ref: 'goal-1',
+          title: 'Repurpose each pillar piece',
+          description:
+            'Turn one core asset into multiple distribution formats.',
+          status: 'active',
+        },
       ],
       policies: [
         {
           name: 'Tool usage review',
-          description: 'Publishing-capable tools require owner or admin review.',
+          description:
+            'Publishing-capable tools require owner or admin review.',
           type: 'approval_required',
           rules: { actions: ['use_tool'] },
           is_active: true,
@@ -185,7 +233,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Trend Researcher',
           runtime: 'openai',
           model: null,
-          system_prompt: 'Find useful source material, proof points and fresh angles for the editorial team.',
+          system_prompt:
+            'Find useful source material, proof points and fresh angles for the editorial team.',
           config: {},
           reports_to_ref: 'agent-1',
           monthly_budget_usd: 25,
@@ -198,7 +247,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Publishing Coordinator',
           runtime: 'gemini',
           model: null,
-          system_prompt: 'Prepare publishing payloads, channel-ready versions and launch checklists.',
+          system_prompt:
+            'Prepare publishing payloads, channel-ready versions and launch checklists.',
           config: {},
           reports_to_ref: 'agent-1',
           monthly_budget_usd: 25,
@@ -215,31 +265,54 @@ export const templatePresetsCatalog: TemplatePreset[] = [
   {
     id: 'product-delivery',
     name: 'Product Delivery Pod',
-    description: 'A small engineering-oriented structure for shipping product work with clear ownership and review.',
-    recommended_for: 'Software teams that want a compact AI delivery pod around a roadmap.',
+    description:
+      'A small engineering-oriented structure for shipping product work with clear ownership and review.',
+    recommended_for:
+      'Software teams that want a compact AI delivery pod around a roadmap.',
     template: {
       version: '1.1',
       company: {
         name: 'Product Delivery Pod',
-        mission: 'Move roadmap items from planning through implementation and quality review with visible governance.',
+        mission:
+          'Move roadmap items from planning through implementation and quality review with visible governance.',
       },
       roles: ['owner', 'admin', 'member'],
       goals: [
-        { ref: 'goal-1', title: 'Ship roadmap increments weekly', description: 'Maintain a healthy planning-to-delivery cadence.', status: 'active' },
-        { ref: 'goal-2', parent_ref: 'goal-1', title: 'Keep execution observable', description: 'Track budgets, blockers and delivery risk daily.', status: 'active' },
-        { ref: 'goal-3', parent_ref: 'goal-1', title: 'Protect quality gates', description: 'Require review for risky tool actions and deployment-adjacent work.', status: 'active' },
+        {
+          ref: 'goal-1',
+          title: 'Ship roadmap increments weekly',
+          description: 'Maintain a healthy planning-to-delivery cadence.',
+          status: 'active',
+        },
+        {
+          ref: 'goal-2',
+          parent_ref: 'goal-1',
+          title: 'Keep execution observable',
+          description: 'Track budgets, blockers and delivery risk daily.',
+          status: 'active',
+        },
+        {
+          ref: 'goal-3',
+          parent_ref: 'goal-1',
+          title: 'Protect quality gates',
+          description:
+            'Require review for risky tool actions and deployment-adjacent work.',
+          status: 'active',
+        },
       ],
       policies: [
         {
           name: 'Deployment approval threshold',
-          description: 'Any high-risk action should be reviewed before execution.',
+          description:
+            'Any high-risk action should be reviewed before execution.',
           type: 'approval_required',
           rules: { actions: ['use_tool', 'delegate'] },
           is_active: true,
         },
         {
           name: 'Budget threshold review',
-          description: 'Large usage spikes should be reviewed before they compound.',
+          description:
+            'Large usage spikes should be reviewed before they compound.',
           type: 'budget_threshold',
           rules: { threshold_usd: 15 },
           is_active: true,
@@ -271,7 +344,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Delivery Lead',
           runtime: 'claude',
           model: null,
-          system_prompt: 'Break work into clear tasks, manage risk and keep the roadmap visible.',
+          system_prompt:
+            'Break work into clear tasks, manage risk and keep the roadmap visible.',
           config: {},
           reports_to_ref: null,
           monthly_budget_usd: 45,
@@ -284,7 +358,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Implementation Engineer',
           runtime: 'openai',
           model: null,
-          system_prompt: 'Implement scoped changes and surface technical tradeoffs early.',
+          system_prompt:
+            'Implement scoped changes and surface technical tradeoffs early.',
           config: {},
           reports_to_ref: 'agent-1',
           monthly_budget_usd: 35,
@@ -300,7 +375,8 @@ export const templatePresetsCatalog: TemplatePreset[] = [
           title: 'Quality Reviewer',
           runtime: 'gemini',
           model: null,
-          system_prompt: 'Review execution, validate readiness and catch regressions before release.',
+          system_prompt:
+            'Review execution, validate readiness and catch regressions before release.',
           config: {},
           reports_to_ref: 'agent-1',
           monthly_budget_usd: 20,

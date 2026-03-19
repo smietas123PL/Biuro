@@ -12,11 +12,26 @@ vi.mock('../src/db/client.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireAuth: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => {
-    (_req as express.Request & { user?: { id: string } }).user = { id: 'user-1' };
-    next();
-  },
+  requireAuth:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) => {
+      (_req as express.Request & { user?: { id: string } }).user = {
+        id: 'user-1',
+      };
+      next();
+    },
 }));
 
 import companiesRouter from '../src/routes/companies.js';
@@ -28,7 +43,10 @@ describe('companies settings routes', () => {
   beforeEach(async () => {
     dbMock.query.mockReset();
     dbMock.transaction.mockReset();
-    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof dbMock.query }) => unknown) => fn({ query: dbMock.query }));
+    dbMock.transaction.mockImplementation(
+      async (fn: (client: { query: typeof dbMock.query }) => unknown) =>
+        fn({ query: dbMock.query })
+    );
 
     const app = express();
     app.use(express.json());
@@ -131,13 +149,17 @@ describe('companies settings routes', () => {
       primary_runtime: 'openai',
       fallback_order: ['openai', 'gemini', 'claude'],
     });
-    expect(dbMock.query).toHaveBeenNthCalledWith(2, 'UPDATE companies SET config = $2 WHERE id = $1 RETURNING id, name, config', [
-      'company-1',
-      JSON.stringify({
-        llm_primary_runtime: 'openai',
-        llm_fallback_order: ['openai', 'gemini', 'claude'],
-      }),
-    ]);
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      2,
+      'UPDATE companies SET config = $2 WHERE id = $1 RETURNING id, name, config',
+      [
+        'company-1',
+        JSON.stringify({
+          llm_primary_runtime: 'openai',
+          llm_fallback_order: ['openai', 'gemini', 'claude'],
+        }),
+      ]
+    );
     expect(dbMock.query).toHaveBeenNthCalledWith(
       3,
       `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
@@ -232,15 +254,19 @@ describe('companies settings routes', () => {
       hour_utc: 19,
       minute_utc: 15,
     });
-    expect(dbMock.query).toHaveBeenNthCalledWith(2, 'UPDATE companies SET config = $2 WHERE id = $1 RETURNING id, name, config', [
-      'company-1',
-      JSON.stringify({
-        llm_primary_runtime: 'gemini',
-        daily_digest_enabled: false,
-        daily_digest_hour_utc: 19,
-        daily_digest_minute_utc: 15,
-      }),
-    ]);
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      2,
+      'UPDATE companies SET config = $2 WHERE id = $1 RETURNING id, name, config',
+      [
+        'company-1',
+        JSON.stringify({
+          llm_primary_runtime: 'gemini',
+          daily_digest_enabled: false,
+          daily_digest_hour_utc: 19,
+          daily_digest_minute_utc: 15,
+        }),
+      ]
+    );
     expect(dbMock.query).toHaveBeenNthCalledWith(
       3,
       `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
@@ -284,7 +310,8 @@ describe('companies settings routes', () => {
         rows: [
           {
             id: 'mem-1',
-            content: 'Customer churn spikes when onboarding steps are hidden from the sidebar.',
+            content:
+              'Customer churn spikes when onboarding steps are hidden from the sidebar.',
             created_at: '2026-03-19T08:40:00.000Z',
             agent_id: 'agent-1',
             agent_name: 'Ada',
@@ -293,7 +320,8 @@ describe('companies settings routes', () => {
           },
           {
             id: 'mem-2',
-            content: 'Customer churn drops when onboarding steps are visible and progress is explicit.',
+            content:
+              'Customer churn drops when onboarding steps are visible and progress is explicit.',
             created_at: '2026-03-18T08:40:00.000Z',
             agent_id: 'agent-1',
             agent_name: 'Ada',

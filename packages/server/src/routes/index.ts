@@ -23,7 +23,9 @@ router.use('/auth', auth);
 // Catch "undefined" in URL early
 router.use((req, _res, next) => {
   if (req.path.includes('/undefined')) {
-    return _res.status(400).json({ error: 'Invalid parameter in URL: "undefined"' });
+    return _res
+      .status(400)
+      .json({ error: 'Invalid parameter in URL: "undefined"' });
   }
   next();
 });
@@ -69,7 +71,11 @@ router.use('/nl-command', nlCommand);
 
 // Health check
 router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // WS stats stub

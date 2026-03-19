@@ -7,7 +7,10 @@ import { MCPService } from '../services/mcp.js';
 import { recordToolCallMetric } from '../observability/metrics.js';
 import { startActiveSpan } from '../observability/tracing.js';
 import { env } from '../env.js';
-import { runSandboxedBashCommand, validateSandboxedCommand } from './bashSandbox.js';
+import {
+  runSandboxedBashCommand,
+  validateSandboxedCommand,
+} from './bashSandbox.js';
 
 const WORKSPACE_ROOT = path.resolve(env.WORKSPACE_ROOT);
 export type ExecutableTool = {
@@ -18,7 +21,8 @@ export type ExecutableTool = {
 };
 
 function getAllowedBashCommands(config: any): string[] {
-  const configuredCommands = config?.allowed_commands ?? config?.allowedCommands;
+  const configuredCommands =
+    config?.allowed_commands ?? config?.allowedCommands;
   if (!Array.isArray(configuredCommands)) {
     return [];
   }
@@ -30,18 +34,22 @@ function getAllowedBashCommands(config: any): string[] {
 }
 
 function validateBashCommand(tool: any, params: any) {
-  const command = typeof params?.command === 'string' ? params.command.trim() : '';
+  const command =
+    typeof params?.command === 'string' ? params.command.trim() : '';
   if (!command) {
     throw new Error('Bash tool requires a non-empty command');
   }
 
   const allowedCommands = getAllowedBashCommands(tool.config);
   if (allowedCommands.length === 0) {
-    throw new Error(`Bash tool "${tool.name}" is missing allowed_commands configuration`);
+    throw new Error(
+      `Bash tool "${tool.name}" is missing allowed_commands configuration`
+    );
   }
 
   const isAllowed = allowedCommands.some(
-    (allowedCommand) => command === allowedCommand || command.startsWith(`${allowedCommand} `)
+    (allowedCommand) =>
+      command === allowedCommand || command.startsWith(`${allowedCommand} `)
   );
 
   if (!isAllowed) {
@@ -78,7 +86,12 @@ async function runWebSearch(params: any) {
 
   const maxResults = Math.min(
     8,
-    Math.max(1, Number.isFinite(Number(params?.max_results)) ? Number(params.max_results) : 5)
+    Math.max(
+      1,
+      Number.isFinite(Number(params?.max_results))
+        ? Number(params.max_results)
+        : 5
+    )
   );
 
   const response = await fetch(
@@ -94,7 +107,7 @@ async function runWebSearch(params: any) {
     throw new Error(`web_search failed with status ${response.status}`);
   }
 
-  const payload = await response.json() as {
+  const payload = (await response.json()) as {
     AbstractText?: string;
     AbstractURL?: string;
     Heading?: string;
@@ -107,7 +120,8 @@ async function runWebSearch(params: any) {
 
   const relatedTopicResults = (payload.RelatedTopics ?? []).flatMap((entry) => {
     if (Array.isArray((entry as { Topics?: unknown[] }).Topics)) {
-      return (entry as { Topics: Array<{ FirstURL?: string; Text?: string }> }).Topics;
+      return (entry as { Topics: Array<{ FirstURL?: string; Text?: string }> })
+        .Topics;
     }
 
     return [entry as { FirstURL?: string; Text?: string }];
@@ -135,10 +149,23 @@ async function runWebSearch(params: any) {
       source: 'duckduckgo-related',
     })),
   ]
-    .filter((entry): entry is { title: string; url: string; snippet: string; source: string } => Boolean(entry))
+    .filter(
+      (
+        entry
+      ): entry is {
+        title: string;
+        url: string;
+        snippet: string;
+        source: string;
+      } => Boolean(entry)
+    )
     .filter((entry) => entry.snippet.trim().length > 0)
-    .filter((entry, index, collection) =>
-      collection.findIndex((candidate) => candidate.url === entry.url && candidate.snippet === entry.snippet) === index
+    .filter(
+      (entry, index, collection) =>
+        collection.findIndex(
+          (candidate) =>
+            candidate.url === entry.url && candidate.snippet === entry.snippet
+        ) === index
     )
     .slice(0, maxResults);
 
@@ -175,7 +202,10 @@ export async function executeStandaloneTool(tool: ExecutableTool, params: any) {
       return runSandboxedBashCommand(command, tool.config);
     }
     case 'http': {
-      const method = typeof params?.method === 'string' ? params.method : tool.config.method || 'GET';
+      const method =
+        typeof params?.method === 'string'
+          ? params.method
+          : tool.config.method || 'GET';
       const response = await fetch(tool.config.url, {
         method,
         body: params?.data ? JSON.stringify(params.data) : undefined,
@@ -191,9 +221,13 @@ export async function executeStandaloneTool(tool: ExecutableTool, params: any) {
         : await response.text();
 
       if (!response.ok) {
-        const error = new Error(`HTTP tool responded with status ${response.status}`);
-        (error as Error & { output?: unknown; status?: number }).output = output;
-        (error as Error & { output?: unknown; status?: number }).status = response.status;
+        const error = new Error(
+          `HTTP tool responded with status ${response.status}`
+        );
+        (error as Error & { output?: unknown; status?: number }).output =
+          output;
+        (error as Error & { output?: unknown; status?: number }).status =
+          response.status;
         throw error;
       }
 
@@ -202,7 +236,11 @@ export async function executeStandaloneTool(tool: ExecutableTool, params: any) {
     case 'mcp':
       return MCPService.callTool(
         tool.config.serverName,
-        { command: tool.config.command, args: tool.config.args, env: tool.config.env },
+        {
+          command: tool.config.command,
+          args: tool.config.args,
+          env: tool.config.env,
+        },
         tool.name,
         params
       );
@@ -211,15 +249,20 @@ export async function executeStandaloneTool(tool: ExecutableTool, params: any) {
   }
 }
 
-export async function executeTool(agentId: string, taskId: string, toolName: string, params: any) {
+export async function executeTool(
+  agentId: string,
+  taskId: string,
+  toolName: string,
+  params: any
+) {
   const startTime = Date.now();
-  
+
   // 1. Get Tool Info
   const toolRes = await db.query(
     'SELECT * FROM tools WHERE name = $1 AND company_id = (SELECT company_id FROM agents WHERE id = $2)',
     [toolName, agentId]
   );
-  
+
   if (toolRes.rows.length === 0) throw new Error(`Tool ${toolName} not found`);
   const tool = toolRes.rows[0];
 
@@ -257,7 +300,15 @@ export async function executeTool(agentId: string, taskId: string, toolName: str
       await db.query(
         `INSERT INTO tool_calls (agent_id, task_id, tool_id, input, output, status, duration_ms)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [agentId, taskId, tool.id, JSON.stringify(params), JSON.stringify(output), status, durationMs]
+        [
+          agentId,
+          taskId,
+          tool.id,
+          JSON.stringify(params),
+          JSON.stringify(output),
+          status,
+          durationMs,
+        ]
       );
 
       recordToolCallMetric({

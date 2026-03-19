@@ -6,7 +6,9 @@ const dbMock = vi.hoisted(() => ({
 }));
 
 const runtimeExecuteMock = vi.hoisted(() => vi.fn());
-const getRuntimeMock = vi.hoisted(() => vi.fn(() => ({ execute: runtimeExecuteMock })));
+const getRuntimeMock = vi.hoisted(() =>
+  vi.fn(() => ({ execute: runtimeExecuteMock }))
+);
 const buildAgentContextMock = vi.hoisted(() => vi.fn());
 const canUseToolMock = vi.hoisted(() => vi.fn());
 const executeToolMock = vi.hoisted(() => vi.fn());
@@ -67,7 +69,10 @@ vi.mock('../src/services/outgoingWebhooks.js', () => ({
   deliverOutgoingWebhooks: deliverOutgoingWebhooksMock,
 }));
 
-import { applyAgentBudgetSpend, processAgentHeartbeat } from '../src/orchestrator/heartbeat.js';
+import {
+  applyAgentBudgetSpend,
+  processAgentHeartbeat,
+} from '../src/orchestrator/heartbeat.js';
 
 describe('heartbeat integration flows', () => {
   beforeEach(() => {
@@ -99,17 +104,23 @@ describe('heartbeat integration flows', () => {
     });
 
     expect(dbMock.query).toHaveBeenCalledTimes(2);
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('ON CONFLICT (agent_id, month) DO UPDATE');
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('WHERE budgets.spent_usd + EXCLUDED.spent_usd <= budgets.limit_usd');
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'ON CONFLICT (agent_id, month) DO UPDATE'
+    );
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'WHERE budgets.spent_usd + EXCLUDED.spent_usd <= budgets.limit_usd'
+    );
   });
 
   it('records capped budget metadata during a successful heartbeat', async () => {
-    evaluatePolicyMock.mockImplementation(async (_companyId: string, type: string) => {
-      if (type === 'rate_limit' || type === 'tool_restriction') {
+    evaluatePolicyMock.mockImplementation(
+      async (_companyId: string, type: string) => {
+        if (type === 'rate_limit' || type === 'tool_restriction') {
+          return { allowed: true, requires_approval: false };
+        }
         return { allowed: true, requires_approval: false };
       }
-      return { allowed: true, requires_approval: false };
-    });
+    );
     checkSafetyMock.mockResolvedValue({ ok: true });
     findRelatedMemoriesMock.mockResolvedValue([]);
     buildAgentContextMock.mockResolvedValue({
@@ -138,19 +149,22 @@ describe('heartbeat integration flows', () => {
         cost_usd: 4.25,
       },
     });
-    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof dbMock.query }) => Promise<unknown>) =>
-      fn({
-        query: vi.fn().mockResolvedValue({
-          rows: [
-            {
-              id: 'task-1',
-              company_id: 'company-1',
-              title: 'Investigate churn',
-              description: 'Look for the churn drivers.',
-            },
-          ],
-        }),
-      } as never)
+    dbMock.transaction.mockImplementation(
+      async (
+        fn: (client: { query: typeof dbMock.query }) => Promise<unknown>
+      ) =>
+        fn({
+          query: vi.fn().mockResolvedValue({
+            rows: [
+              {
+                id: 'task-1',
+                company_id: 'company-1',
+                title: 'Investigate churn',
+                description: 'Look for the churn drivers.',
+              },
+            ],
+          }),
+        } as never)
     );
     dbMock.query.mockImplementation(async (text: string) => {
       if (text.includes("UPDATE agents SET status = 'working'")) {
@@ -166,10 +180,22 @@ describe('heartbeat integration flows', () => {
       }
 
       if (text === 'SELECT config FROM companies WHERE id = $1') {
-        return { rows: [{ config: { llm_primary_runtime: 'gemini', llm_fallback_order: ['gemini', 'claude', 'openai'] } }] };
+        return {
+          rows: [
+            {
+              config: {
+                llm_primary_runtime: 'gemini',
+                llm_fallback_order: ['gemini', 'claude', 'openai'],
+              },
+            },
+          ],
+        };
       }
 
-      if (text === 'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2') {
+      if (
+        text ===
+        'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2'
+      ) {
         return { rows: [] };
       }
 
@@ -190,7 +216,9 @@ describe('heartbeat integration flows', () => {
       String(text).includes('INSERT INTO audit_log')
     );
     const heartbeatInsert = dbMock.query.mock.calls.find(([text]) =>
-      String(text).includes('INSERT INTO heartbeats (agent_id, task_id, status, duration_ms, cost_usd, details)')
+      String(text).includes(
+        'INSERT INTO heartbeats (agent_id, task_id, status, duration_ms, cost_usd, details)'
+      )
     );
 
     expect(auditInsert).toBeTruthy();
@@ -232,10 +260,15 @@ describe('heartbeat integration flows', () => {
       allowed: true,
       requires_approval: false,
     });
-    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof taskCheckoutQueryMock }) => Promise<unknown>) =>
-      fn({
-        query: taskCheckoutQueryMock,
-      } as never)
+    dbMock.transaction.mockImplementation(
+      async (
+        fn: (client: {
+          query: typeof taskCheckoutQueryMock;
+        }) => Promise<unknown>
+      ) =>
+        fn({
+          query: taskCheckoutQueryMock,
+        } as never)
     );
     dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
       if (text.includes("UPDATE agents SET status = 'working'")) {
@@ -262,11 +295,21 @@ describe('heartbeat integration flows', () => {
 
     expect(dbMock.transaction).toHaveBeenCalledTimes(1);
     expect(taskCheckoutQueryMock).toHaveBeenCalledTimes(1);
-    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain('UPDATE tasks');
-    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain("SET status = 'in_progress', locked_by = $1, locked_at = now()");
-    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain("status IN ('backlog', 'assigned')");
-    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain('FOR UPDATE SKIP LOCKED');
-    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain('RETURNING *');
+    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain(
+      'UPDATE tasks'
+    );
+    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain(
+      "SET status = 'in_progress', locked_by = $1, locked_at = now()"
+    );
+    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain(
+      "status IN ('backlog', 'assigned')"
+    );
+    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain(
+      'FOR UPDATE SKIP LOCKED'
+    );
+    expect(String(taskCheckoutQueryMock.mock.calls[0]?.[0])).toContain(
+      'RETURNING *'
+    );
     expect(taskCheckoutQueryMock.mock.calls[0]?.[1]).toEqual(['agent-1']);
 
     const heartbeatInsert = dbMock.query.mock.calls.find(([text]) =>
@@ -279,7 +322,10 @@ describe('heartbeat integration flows', () => {
   });
 
   it('broadcasts live cost updates and sends a one-time budget threshold alert', async () => {
-    evaluatePolicyMock.mockResolvedValue({ allowed: true, requires_approval: false });
+    evaluatePolicyMock.mockResolvedValue({
+      allowed: true,
+      requires_approval: false,
+    });
     checkSafetyMock.mockResolvedValue({ ok: true });
     findRelatedMemoriesMock.mockResolvedValue([]);
     buildAgentContextMock.mockResolvedValue({
@@ -303,19 +349,22 @@ describe('heartbeat integration flows', () => {
         cost_usd: 1.5,
       },
     });
-    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof dbMock.query }) => Promise<unknown>) =>
-      fn({
-        query: vi.fn().mockResolvedValue({
-          rows: [
-            {
-              id: 'task-1',
-              company_id: 'company-1',
-              title: 'Investigate churn',
-              description: 'Look for the churn drivers.',
-            },
-          ],
-        }),
-      } as never)
+    dbMock.transaction.mockImplementation(
+      async (
+        fn: (client: { query: typeof dbMock.query }) => Promise<unknown>
+      ) =>
+        fn({
+          query: vi.fn().mockResolvedValue({
+            rows: [
+              {
+                id: 'task-1',
+                company_id: 'company-1',
+                title: 'Investigate churn',
+                description: 'Look for the churn drivers.',
+              },
+            ],
+          }),
+        } as never)
     );
     dbMock.query.mockImplementation(async (text: string) => {
       if (text.includes("UPDATE agents SET status = 'working'")) {
@@ -327,10 +376,22 @@ describe('heartbeat integration flows', () => {
       }
 
       if (text === 'SELECT config FROM companies WHERE id = $1') {
-        return { rows: [{ config: { llm_primary_runtime: 'gemini', llm_fallback_order: ['gemini', 'claude', 'openai'] } }] };
+        return {
+          rows: [
+            {
+              config: {
+                llm_primary_runtime: 'gemini',
+                llm_fallback_order: ['gemini', 'claude', 'openai'],
+              },
+            },
+          ],
+        };
       }
 
-      if (text === 'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2') {
+      if (
+        text ===
+        'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2'
+      ) {
         return { rows: [] };
       }
 
@@ -339,10 +400,15 @@ describe('heartbeat integration flows', () => {
       }
 
       if (text.includes('CASE') && text.includes('FROM budgets')) {
-        return { rows: [{ spent_usd: 8.2, limit_usd: 10, utilization_pct: 82 }] };
+        return {
+          rows: [{ spent_usd: 8.2, limit_usd: 10, utilization_pct: 82 }],
+        };
       }
 
-      if (text.includes("FROM audit_log") && text.includes("details->>'threshold_pct'")) {
+      if (
+        text.includes('FROM audit_log') &&
+        text.includes("details->>'threshold_pct'")
+      ) {
         return { rows: [] };
       }
 
@@ -350,8 +416,18 @@ describe('heartbeat integration flows', () => {
         return { rows: [{ total: 5.75 }] };
       }
 
-      if (text === 'SELECT slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1') {
-        return { rows: [{ slack_webhook_url: 'https://hooks.slack.test/services/alerts', discord_webhook_url: null }] };
+      if (
+        text ===
+        'SELECT slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1'
+      ) {
+        return {
+          rows: [
+            {
+              slack_webhook_url: 'https://hooks.slack.test/services/alerts',
+              discord_webhook_url: null,
+            },
+          ],
+        };
       }
 
       return { rows: [] };
@@ -397,9 +473,10 @@ describe('heartbeat integration flows', () => {
         agentId: 'agent-1',
         event: 'budget.threshold',
         slackWebhookUrl: 'https://hooks.slack.test/services/alerts',
-        slackText: expect.stringContaining('Ada reached 82.0% of monthly budget'),
+        slackText: expect.stringContaining(
+          'Ada reached 82.0% of monthly budget'
+        ),
       })
     );
   });
-
 });

@@ -12,9 +12,11 @@ export const EmailService = {
       "SELECT sum(amount) as total_cost FROM billing_transactions WHERE company_id = $1 AND created_at > now() - interval '7 days' AND type = 'usage'",
       [companyId]
     );
-    
+
     const tasksCompleted = taskRes.rows[0].count;
-    const totalCost = Math.abs(parseFloat(costRes.rows[0].total_cost || '0')).toFixed(2);
+    const totalCost = Math.abs(
+      parseFloat(costRes.rows[0].total_cost || '0')
+    ).toFixed(2);
 
     // 2. Format Report (Simplified AI simulation)
     const report = `
@@ -32,14 +34,19 @@ export const EmailService = {
       - Monitor budget for next week.
       - 2 new delegation paths identified for optimization.
     `;
-    
+
     return report;
   },
 
   async sendReport(email: string, reportTitle: string, content: string) {
-    logger.info({ to: email, subject: reportTitle }, 'Sending weekly report email');
+    logger.info(
+      { to: email, subject: reportTitle },
+      'Sending weekly report email'
+    );
     // Simulation of Resend/SendGrid call
-    console.log(`[EMAIL SEND] To: ${email} | Subject: ${reportTitle}\n${content}`);
+    console.log(
+      `[EMAIL SEND] To: ${email} | Subject: ${reportTitle}\n${content}`
+    );
     return { success: true };
-  }
+  },
 };

@@ -32,7 +32,10 @@ function getNormalizedStatus(statusCode: string) {
   return statusCode === '2' ? 'error' : 'ok';
 }
 
-function buildTraceSummaries(spans: ObservabilitySpanItem[], fallbackService: string) {
+function buildTraceSummaries(
+  spans: ObservabilitySpanItem[],
+  fallbackService: string
+) {
   const grouped = new Map<string, ObservabilitySpanItem[]>();
 
   for (const span of spans) {
@@ -44,22 +47,33 @@ function buildTraceSummaries(spans: ObservabilitySpanItem[], fallbackService: st
   return Array.from(grouped.entries())
     .map(([traceId, traceSpans]): TraceSummary => {
       const sortedSpans = [...traceSpans].sort(
-        (left, right) => Date.parse(left.start_time) - Date.parse(right.start_time)
+        (left, right) =>
+          Date.parse(left.start_time) - Date.parse(right.start_time)
       );
-      const rootSpan = sortedSpans.find((span) => !span.parent_span_id) ?? sortedSpans[0];
+      const rootSpan =
+        sortedSpans.find((span) => !span.parent_span_id) ?? sortedSpans[0];
       const startedAt = sortedSpans[0]?.start_time ?? new Date().toISOString();
-      const endedAt = sortedSpans[sortedSpans.length - 1]?.end_time ?? startedAt;
+      const endedAt =
+        sortedSpans[sortedSpans.length - 1]?.end_time ?? startedAt;
       const highlights = sortedSpans
         .flatMap((span) => [
-          typeof span.attributes['http.route'] === 'string' ? String(span.attributes['http.route']) : null,
-          typeof span.attributes['task.id'] === 'string' ? `task ${String(span.attributes['task.id'])}` : null,
-          typeof span.attributes['tool.name'] === 'string' ? `tool ${String(span.attributes['tool.name'])}` : null,
+          typeof span.attributes['http.route'] === 'string'
+            ? String(span.attributes['http.route'])
+            : null,
+          typeof span.attributes['task.id'] === 'string'
+            ? `task ${String(span.attributes['task.id'])}`
+            : null,
+          typeof span.attributes['tool.name'] === 'string'
+            ? `tool ${String(span.attributes['tool.name'])}`
+            : null,
           typeof span.attributes['heartbeat.status'] === 'string'
             ? `heartbeat ${String(span.attributes['heartbeat.status'])}`
             : null,
         ])
         .filter((value): value is string => Boolean(value))
-        .filter((value, index, collection) => collection.indexOf(value) === index)
+        .filter(
+          (value, index, collection) => collection.indexOf(value) === index
+        )
         .slice(0, 3);
 
       return {
@@ -74,25 +88,34 @@ function buildTraceSummaries(spans: ObservabilitySpanItem[], fallbackService: st
         highlights,
       };
     })
-    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
+    .sort(
+      (left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt)
+    );
 }
 
 export default function ObservabilityPage() {
   const { request, loading, error, lastTrace } = useApi();
-  const [recentTraceData, setRecentTraceData] = useState<ObservabilityRecentTracesResponse | null>(null);
-  const [traceDetail, setTraceDetail] = useState<ObservabilityTraceDetailResponse | null>(null);
+  const [recentTraceData, setRecentTraceData] =
+    useState<ObservabilityRecentTracesResponse | null>(null);
+  const [traceDetail, setTraceDetail] =
+    useState<ObservabilityTraceDetailResponse | null>(null);
   const [traceDetailError, setTraceDetailError] = useState<string | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [serviceFilter, setServiceFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<(typeof statusFilters)[number]>('all');
+  const [statusFilter, setStatusFilter] =
+    useState<(typeof statusFilters)[number]>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const loadRecentTraces = async () => {
-      const data = (await request('/observability/traces/recent?limit=100', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      })) as ObservabilityRecentTracesResponse;
+      const data = (await request(
+        '/observability/traces/recent?limit=100',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      )) as ObservabilityRecentTracesResponse;
       setRecentTraceData(data);
     };
 
@@ -100,12 +123,19 @@ export default function ObservabilityPage() {
   }, [request]);
 
   const traceSummaries = useMemo(
-    () => buildTraceSummaries(recentTraceData?.items ?? [], recentTraceData?.service ?? 'autonomiczne-biuro'),
+    () =>
+      buildTraceSummaries(
+        recentTraceData?.items ?? [],
+        recentTraceData?.service ?? 'autonomiczne-biuro'
+      ),
     [recentTraceData]
   );
 
   const availableServices = useMemo(
-    () => Array.from(new Set(traceSummaries.map((trace) => trace.serviceName))).sort(),
+    () =>
+      Array.from(
+        new Set(traceSummaries.map((trace) => trace.serviceName))
+      ).sort(),
     [traceSummaries]
   );
 
@@ -117,7 +147,10 @@ export default function ObservabilityPage() {
         return false;
       }
 
-      if (statusFilter !== 'all' && getNormalizedStatus(trace.statusCode) !== statusFilter) {
+      if (
+        statusFilter !== 'all' &&
+        getNormalizedStatus(trace.statusCode) !== statusFilter
+      ) {
         return false;
       }
 
@@ -147,7 +180,10 @@ export default function ObservabilityPage() {
     }
 
     setSelectedTraceId((current) => {
-      if (current && filteredTraces.some((trace) => trace.traceId === current)) {
+      if (
+        current &&
+        filteredTraces.some((trace) => trace.traceId === current)
+      ) {
         return current;
       }
 
@@ -164,15 +200,21 @@ export default function ObservabilityPage() {
 
     const loadTraceDetail = async () => {
       try {
-        const data = (await request(`/observability/traces/${selectedTraceId}`, undefined, {
-          suppressError: true,
-          trackTrace: false,
-        })) as ObservabilityTraceDetailResponse;
+        const data = (await request(
+          `/observability/traces/${selectedTraceId}`,
+          undefined,
+          {
+            suppressError: true,
+            trackTrace: false,
+          }
+        )) as ObservabilityTraceDetailResponse;
         setTraceDetail(data);
         setTraceDetailError(null);
       } catch (err) {
         setTraceDetail(null);
-        setTraceDetailError(err instanceof Error ? err.message : 'Trace detail is unavailable.');
+        setTraceDetailError(
+          err instanceof Error ? err.message : 'Trace detail is unavailable.'
+        );
       }
     };
 
@@ -187,11 +229,16 @@ export default function ObservabilityPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Observability</h2>
         <p className="text-sm text-muted-foreground">
-          Recent trace sessions, grouped by trace ID, with detail view and Grafana handoff.
+          Recent trace sessions, grouped by trace ID, with detail view and
+          Grafana handoff.
         </p>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-2xl border bg-card p-5 shadow-sm">
@@ -202,7 +249,8 @@ export default function ObservabilityPage() {
                 Recent trace sessions
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                The in-app buffer currently holds {traceSummaries.length} grouped trace sessions.
+                The in-app buffer currently holds {traceSummaries.length}{' '}
+                grouped trace sessions.
               </p>
             </div>
             {lastTrace && (
@@ -241,7 +289,11 @@ export default function ObservabilityPage() {
             <select
               aria-label="Filter traces by status"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as (typeof statusFilters)[number])}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value as (typeof statusFilters)[number]
+                )
+              }
               className="rounded-xl border bg-background px-4 py-3 text-sm"
             >
               {statusFilters.map((status) => (
@@ -261,13 +313,19 @@ export default function ObservabilityPage() {
                   type="button"
                   onClick={() => setSelectedTraceId(trace.traceId)}
                   className={`w-full rounded-2xl border p-4 text-left transition-colors ${
-                    isSelected ? 'border-primary bg-primary/5' : 'bg-muted/10 hover:bg-accent'
+                    isSelected
+                      ? 'border-primary bg-primary/5'
+                      : 'bg-muted/10 hover:bg-accent'
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="space-y-1">
-                      <div className="font-medium text-foreground">{trace.rootSpanName}</div>
-                      <div className="text-xs text-muted-foreground">{trace.serviceName}</div>
+                      <div className="font-medium text-foreground">
+                        {trace.rootSpanName}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {trace.serviceName}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span
@@ -292,7 +350,10 @@ export default function ObservabilityPage() {
                   {trace.highlights.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {trace.highlights.map((highlight) => (
-                        <span key={highlight} className="rounded-full border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                        <span
+                          key={highlight}
+                          className="rounded-full border bg-background px-2 py-1 text-[11px] text-muted-foreground"
+                        >
                           {highlight}
                         </span>
                       ))}
@@ -326,7 +387,11 @@ export default function ObservabilityPage() {
                   traceId: selectedTraceSummary.traceId,
                   path: selectedTraceSummary.rootSpanName,
                   method: 'TRACE',
-                  status: getNormalizedStatus(selectedTraceSummary.statusCode) === 'error' ? 500 : 200,
+                  status:
+                    getNormalizedStatus(selectedTraceSummary.statusCode) ===
+                    'error'
+                      ? 500
+                      : 200,
                   capturedAt: selectedTraceSummary.startedAt,
                 }}
                 title="Selected trace"
@@ -345,8 +410,14 @@ export default function ObservabilityPage() {
             {traceDetail ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <DetailStat label="Spans" value={String(traceDetail.summary.span_count)} />
-                  <DetailStat label="Duration" value={`${Math.round(traceDetail.summary.duration_ms)} ms`} />
+                  <DetailStat
+                    label="Spans"
+                    value={String(traceDetail.summary.span_count)}
+                  />
+                  <DetailStat
+                    label="Duration"
+                    value={`${Math.round(traceDetail.summary.duration_ms)} ms`}
+                  />
                   <DetailStat label="Service" value={traceDetail.service} />
                 </div>
 
@@ -357,10 +428,15 @@ export default function ObservabilityPage() {
                   </div>
                   <div className="mt-4 space-y-3">
                     {traceDetail.items.map((span) => (
-                      <div key={span.span_id} className="rounded-xl border bg-background p-3">
+                      <div
+                        key={span.span_id}
+                        className="rounded-xl border bg-background p-3"
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
-                            <div className="font-medium text-foreground">{span.name}</div>
+                            <div className="font-medium text-foreground">
+                              {span.name}
+                            </div>
                             <div className="mt-1 text-xs text-muted-foreground">
                               {new Date(span.start_time).toLocaleString()}
                             </div>
@@ -372,7 +448,10 @@ export default function ObservabilityPage() {
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {extractSpanTags(span.attributes).map((tag) => (
-                            <span key={tag} className="rounded-full border bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                            <span
+                              key={tag}
+                              className="rounded-full border bg-muted px-2 py-1 text-[11px] text-muted-foreground"
+                            >
                               {tag}
                             </span>
                           ))}
@@ -395,10 +474,18 @@ export default function ObservabilityPage() {
 }
 
 function extractSpanTags(attributes: Record<string, unknown>) {
-  return ['http.route', 'task.id', 'tool.name', 'heartbeat.status', 'company.id']
+  return [
+    'http.route',
+    'task.id',
+    'tool.name',
+    'heartbeat.status',
+    'company.id',
+  ]
     .map((key) => {
       const value = attributes[key];
-      return typeof value === 'string' && value.length > 0 ? `${key}: ${value}` : null;
+      return typeof value === 'string' && value.length > 0
+        ? `${key}: ${value}`
+        : null;
     })
     .filter((value): value is string => Boolean(value))
     .slice(0, 4);
@@ -407,7 +494,9 @@ function extractSpanTags(attributes: Record<string, unknown>) {
 function DetailStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border bg-muted/20 p-4">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
       <div className="mt-2 text-lg font-semibold text-foreground">{value}</div>
     </div>
   );

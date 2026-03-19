@@ -13,7 +13,13 @@ export async function seedDefaultTools(client: Queryable, companyId: string) {
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (company_id, name) DO NOTHING
        RETURNING id, name`,
-      [companyId, blueprint.name, blueprint.description, blueprint.type, JSON.stringify(blueprint.config)]
+      [
+        companyId,
+        blueprint.name,
+        blueprint.description,
+        blueprint.type,
+        JSON.stringify(blueprint.config),
+      ]
     );
 
     if (result.rowCount && result.rowCount > 0) {

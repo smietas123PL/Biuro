@@ -23,7 +23,8 @@ const broadcastMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/db/client.js', () => ({
   db: {
     query: (text: string, params?: any[]) => dbState.impl!.query(text, params),
-    transaction: <T>(fn: (client: any) => Promise<T>) => dbState.impl!.transaction(fn),
+    transaction: <T>(fn: (client: any) => Promise<T>) =>
+      dbState.impl!.transaction(fn),
   },
 }));
 
@@ -67,7 +68,10 @@ vi.mock('../src/ws.js', () => ({
   getWSHub: () => ({ broadcast: broadcastMock }),
 }));
 
-import { applyAgentBudgetSpend, processAgentHeartbeat } from '../src/orchestrator/heartbeat.js';
+import {
+  applyAgentBudgetSpend,
+  processAgentHeartbeat,
+} from '../src/orchestrator/heartbeat.js';
 
 describe('heartbeat pg-mem scenarios', () => {
   let testDb: Awaited<ReturnType<typeof createPgMemDb>>;
@@ -177,5 +181,4 @@ describe('heartbeat pg-mem scenarios', () => {
     expect(checkSafetyMock).not.toHaveBeenCalled();
     expect(broadcastMock).not.toHaveBeenCalled();
   });
-
 });

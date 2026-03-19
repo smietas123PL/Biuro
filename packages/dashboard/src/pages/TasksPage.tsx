@@ -80,7 +80,11 @@ export default function TasksPage() {
   };
 
   if (!selectedCompany) {
-    return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to manage tasks.</div>;
+    return (
+      <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
+        Choose a company to manage tasks.
+      </div>
+    );
   }
 
   return (
@@ -88,7 +92,9 @@ export default function TasksPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Tasks</h2>
-          <p className="text-sm text-muted-foreground">Backlog and execution for {selectedCompany.name}</p>
+          <p className="text-sm text-muted-foreground">
+            Backlog and execution for {selectedCompany.name}
+          </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -99,22 +105,37 @@ export default function TasksPage() {
         </button>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4">
         {tasks.map((task) => (
-          <div key={task.id} className="p-4 bg-card border rounded-lg shadow-sm hover:border-primary/50 transition-all flex items-start justify-between">
+          <div
+            key={task.id}
+            className="p-4 bg-card border rounded-lg shadow-sm hover:border-primary/50 transition-all flex items-start justify-between"
+          >
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 {getStatusIcon(task.status)}
                 <h4 className="font-semibold text-lg">{task.title}</h4>
               </div>
-              <p className="text-sm text-muted-foreground line-clamp-2 max-w-2xl">{task.description}</p>
+              <p className="text-sm text-muted-foreground line-clamp-2 max-w-2xl">
+                {task.description}
+              </p>
               <div className="flex items-center gap-4 pt-2">
-                <div className="text-xs font-mono bg-muted px-2 py-0.5 rounded uppercase">{task.status}</div>
-                <div className="text-xs text-muted-foreground">Priority: {task.priority}</div>
+                <div className="text-xs font-mono bg-muted px-2 py-0.5 rounded uppercase">
+                  {task.status}
+                </div>
                 <div className="text-xs text-muted-foreground">
-                  Assigned: {agents.find((agent) => agent.id === task.assigned_to)?.name || 'Unassigned'}
+                  Priority: {task.priority}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Assigned:{' '}
+                  {agents.find((agent) => agent.id === task.assigned_to)
+                    ?.name || 'Unassigned'}
                 </div>
               </div>
             </div>
@@ -136,9 +157,14 @@ export default function TasksPage() {
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-semibold">Create Task</h3>
-                <p className="text-sm text-muted-foreground">Add a new task for {selectedCompany.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Add a new task for {selectedCompany.name}
+                </p>
               </div>
-              <button onClick={() => setShowCreateModal(false)} className="rounded-md p-2 hover:bg-accent">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="rounded-md p-2 hover:bg-accent"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -148,7 +174,12 @@ export default function TasksPage() {
                 id="task-title"
                 name="taskTitle"
                 value={form.title}
-                onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
                 placeholder="Task title"
                 className="rounded-md border bg-background px-3 py-2 text-sm"
               />
@@ -156,7 +187,12 @@ export default function TasksPage() {
                 id="task-description"
                 name="taskDescription"
                 value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
                 placeholder="Description"
                 rows={5}
                 className="rounded-md border bg-background px-3 py-2 text-sm"
@@ -166,7 +202,12 @@ export default function TasksPage() {
                   id="task-assigned-to"
                   name="taskAssignedTo"
                   value={form.assigned_to}
-                  onChange={(event) => setForm((current) => ({ ...current, assigned_to: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      assigned_to: event.target.value,
+                    }))
+                  }
                   className="rounded-md border bg-background px-3 py-2 text-sm"
                 >
                   <option value="">Unassigned</option>
@@ -180,7 +221,12 @@ export default function TasksPage() {
                   id="task-priority"
                   name="taskPriority"
                   value={form.priority}
-                  onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      priority: event.target.value,
+                    }))
+                  }
                   placeholder="Priority"
                   type="number"
                   className="rounded-md border bg-background px-3 py-2 text-sm"

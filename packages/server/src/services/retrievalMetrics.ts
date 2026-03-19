@@ -74,6 +74,9 @@ export async function recordRetrievalMetric(input: RetrievalMetricInput) {
       ]
     );
   } catch (err) {
-    logger.warn({ err, scope: input.scope, consumer: input.consumer }, 'Failed to record retrieval metric');
+    logger.warn(
+      { err, scope: input.scope, consumer: input.consumer },
+      'Failed to record retrieval metric'
+    );
   }
 }

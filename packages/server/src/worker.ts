@@ -1,14 +1,24 @@
 import 'dotenv/config';
 import { db } from './db/client.js';
 import { logger } from './utils/logger.js';
-import { getActiveHeartbeatCount, startOrchestrator, stopOrchestrator } from './orchestrator/scheduler.js';
+import {
+  getActiveHeartbeatCount,
+  startOrchestrator,
+  stopOrchestrator,
+} from './orchestrator/scheduler.js';
 import { runtimeRegistry } from './runtime/registry.js';
 import { MCPService } from './services/mcp.js';
 import { env } from './env.js';
 import { startMetricsServer } from './observability/metricsServer.js';
 import { initializeTracing, shutdownTracing } from './observability/tracing.js';
-import { closeRealtimeEventBus, initializeRealtimeEventBus } from './realtime/eventBus.js';
-import { closeSchedulerQueue, initializeSchedulerQueue } from './orchestrator/schedulerQueue.js';
+import {
+  closeRealtimeEventBus,
+  initializeRealtimeEventBus,
+} from './realtime/eventBus.js';
+import {
+  closeSchedulerQueue,
+  initializeSchedulerQueue,
+} from './orchestrator/schedulerQueue.js';
 
 initializeTracing({
   serviceName: `${env.OTEL_SERVICE_NAME}-worker`,
@@ -17,7 +27,10 @@ initializeTracing({
   otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
 });
 
-const metricsServer = startMetricsServer(env.WORKER_METRICS_PORT, 'biuro-worker');
+const metricsServer = startMetricsServer(
+  env.WORKER_METRICS_PORT,
+  'biuro-worker'
+);
 
 let shuttingDown = false;
 
@@ -37,7 +50,10 @@ async function shutdown(signal: string, exitCode: number = 0) {
 
   try {
     await stopOrchestrator();
-    logger.info({ activeHeartbeats: getActiveHeartbeatCount() }, 'Heartbeat drain finished');
+    logger.info(
+      { activeHeartbeats: getActiveHeartbeatCount() },
+      'Heartbeat drain finished'
+    );
     await metricsServer?.close();
     await closeSchedulerQueue();
     await closeRealtimeEventBus();
@@ -72,7 +88,7 @@ async function initWorker() {
 
     // 3. Start Scheduler
     startOrchestrator();
-    
+
     logger.info('Worker execution loop heartbeat started');
   } catch (err) {
     logger.error({ err }, 'Worker failed to start');

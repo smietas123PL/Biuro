@@ -8,13 +8,17 @@ import routes from './routes/index.js';
 import { createServer } from 'http';
 import { initWSHub } from './ws.js';
 import { MCPService } from './services/mcp.js';
-import { observabilityMiddleware, metricsHandler } from './observability/http.js';
+import {
+  observabilityMiddleware,
+  metricsHandler,
+} from './observability/http.js';
 import { initializeTracing, shutdownTracing } from './observability/tracing.js';
 import {
   closeRealtimeEventBus,
   initializeRealtimeEventBus,
   subscribeToCompanyEvents,
 } from './realtime/eventBus.js';
+import { buildHelmetOptions } from './security/helmet.js';
 
 initializeTracing({
   serviceName: `${env.OTEL_SERVICE_NAME}-api`,
@@ -26,41 +30,57 @@ initializeTracing({
 const app = express();
 const server = createServer(app);
 const wsHub = initWSHub(server);
-const unsubscribeRealtimeEvents = subscribeToCompanyEvents('api-ws-hub', async (envelope) => {
-  wsHub.broadcast(envelope.companyId, envelope.event, envelope.data);
-});
+const unsubscribeRealtimeEvents = subscribeToCompanyEvents(
+  'api-ws-hub',
+  async (envelope) => {
+    wsHub.broadcast(envelope.companyId, envelope.event, envelope.data);
+  }
+);
 const allowedOrigins = new Set(env.ALLOWED_ORIGINS);
 let shuttingDown = false;
 
-const captureRawBody: Parameters<typeof express.json>[0]['verify'] = (req, _res, buffer, encoding) => {
+const captureRawBody: Parameters<typeof express.json>[0]['verify'] = (
+  req,
+  _res,
+  buffer,
+  encoding
+) => {
   if (buffer.length === 0) {
     return;
   }
 
-  const bodyEncoding = typeof encoding === 'string' ? (encoding as BufferEncoding) : 'utf8';
-  (req as express.Request & { rawBody?: string }).rawBody = buffer.toString(bodyEncoding);
+  const bodyEncoding =
+    typeof encoding === 'string' ? (encoding as BufferEncoding) : 'utf8';
+  (req as express.Request & { rawBody?: string }).rawBody =
+    buffer.toString(bodyEncoding);
 };
 
 // Middleware
 app.disable('x-powered-by');
-app.use(helmet());
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin)) {
-      callback(null, true);
-      return;
-    }
+app.use(helmet(buildHelmetOptions(allowedOrigins)));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
 
-    callback(null, false);
-  },
-  credentials: true,
-}));
+      callback(null, false);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ verify: captureRawBody }));
 app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
 app.use(observabilityMiddleware);
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+  });
 });
 app.get('/metrics', metricsHandler);
 
@@ -68,10 +88,17 @@ app.get('/metrics', metricsHandler);
 app.use('/api', routes);
 
 // Error handling
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error({ err, url: req.url }, 'Unhandled error');
-  res.status(500).json({ error: 'Internal server error' });
-});
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    logger.error({ err, url: req.url }, 'Unhandled error');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+);
 
 async function stopHttpServer() {
   if (!server.listening) {

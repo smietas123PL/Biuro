@@ -32,11 +32,16 @@ function formatLocalDay(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function buildDailySpendSeries(points: DailySpendPoint[], today = new Date()) {
+export function buildDailySpendSeries(
+  points: DailySpendPoint[],
+  today = new Date()
+) {
   const normalizedToday = new Date(today);
   normalizedToday.setHours(0, 0, 0, 0);
 
-  const pointsMap = new Map(points.map((point) => [point.day, toFloat(point.total_usd)]));
+  const pointsMap = new Map(
+    points.map((point) => [point.day, toFloat(point.total_usd)])
+  );
 
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(normalizedToday);
@@ -55,7 +60,8 @@ export function summarizeAgentBudgets(rows: RawBudgetAgentRow[]) {
     const limitUsd = toFloat(row.limit_usd);
     const spentUsd = toFloat(row.spent_usd);
     const remainingUsd = Math.max(limitUsd - spentUsd, 0);
-    const utilizationPct = limitUsd > 0 ? Math.min((spentUsd / limitUsd) * 100, 100) : null;
+    const utilizationPct =
+      limitUsd > 0 ? Math.min((spentUsd / limitUsd) * 100, 100) : null;
 
     return {
       id: row.id,
@@ -86,7 +92,10 @@ export function summarizeAgentBudgets(rows: RawBudgetAgentRow[]) {
     agents,
     totals: {
       ...totals,
-      utilization_pct: totals.limit_usd > 0 ? Math.min((totals.spent_usd / totals.limit_usd) * 100, 100) : null,
+      utilization_pct:
+        totals.limit_usd > 0
+          ? Math.min((totals.spent_usd / totals.limit_usd) * 100, 100)
+          : null,
     },
   };
 }
@@ -103,7 +112,8 @@ export function buildBudgetForecast(params: {
   const currentDay = today.getDate();
   const remainingDays = Math.max(daysInMonth - currentDay, 0);
   const avgDailySpendUsd = toFloat(params.last7dSpendUsd) / 7;
-  const projectedMonthSpendUsd = toFloat(params.totalSpentUsd) + (avgDailySpendUsd * remainingDays);
+  const projectedMonthSpendUsd =
+    toFloat(params.totalSpentUsd) + avgDailySpendUsd * remainingDays;
 
   return {
     avg_daily_spend_usd: avgDailySpendUsd,
@@ -119,7 +129,7 @@ export function attachBudgetForecasts<
     id: string;
     spent_usd: number;
     limit_usd: number;
-  }
+  },
 >(agents: T[], spendRows: RawAgentSpendRow[], today?: Date) {
   const spendMap = new Map(
     spendRows.map((row) => [row.agent_id, toFloat(row.last_7d_spend_usd)])

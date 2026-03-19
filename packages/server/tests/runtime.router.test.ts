@@ -20,14 +20,24 @@ vi.mock('../src/utils/logger.js', () => ({
 }));
 
 vi.mock('../src/observability/tracing.js', () => ({
-  startActiveSpan: async (_name: string, _attributes: Record<string, unknown>, fn: (span: { setAttribute: (key: string, value: unknown) => void }) => Promise<unknown>) =>
+  startActiveSpan: async (
+    _name: string,
+    _attributes: Record<string, unknown>,
+    fn: (span: {
+      setAttribute: (key: string, value: unknown) => void;
+    }) => Promise<unknown>
+  ) =>
     fn({
       setAttribute: () => undefined,
     }),
 }));
 
 import { MultiProviderRuntimeRouter } from '../src/runtime/router.js';
-import type { AgentContext, AgentResponse, IAgentRuntime } from '../src/types/agent.js';
+import type {
+  AgentContext,
+  AgentResponse,
+  IAgentRuntime,
+} from '../src/types/agent.js';
 
 function createContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
@@ -56,16 +66,16 @@ describe('multi-provider runtime router', () => {
   });
 
   it('uses the preferred runtime when it succeeds', async () => {
-    const preferredExecute = vi.fn<IAgentRuntime['execute']>().mockResolvedValue({
-      thought: 'Done.',
-      actions: [{ type: 'continue', thought: 'Next.' }],
-    } satisfies AgentResponse);
+    const preferredExecute = vi
+      .fn<IAgentRuntime['execute']>()
+      .mockResolvedValue({
+        thought: 'Done.',
+        actions: [{ type: 'continue', thought: 'Next.' }],
+      } satisfies AgentResponse);
 
     const router = new MultiProviderRuntimeRouter(
       'openai',
-      new Map([
-        ['openai', { execute: preferredExecute }],
-      ])
+      new Map([['openai', { execute: preferredExecute }]])
     );
 
     const response = await router.execute(createContext());
@@ -85,7 +95,9 @@ describe('multi-provider runtime router', () => {
   });
 
   it('falls back to the next provider on retryable runtime failures', async () => {
-    const openAiExecute = vi.fn<IAgentRuntime['execute']>().mockRejectedValue(new Error('429 rate limit exceeded'));
+    const openAiExecute = vi
+      .fn<IAgentRuntime['execute']>()
+      .mockRejectedValue(new Error('429 rate limit exceeded'));
     const claudeExecute = vi.fn<IAgentRuntime['execute']>().mockResolvedValue({
       thought: 'Recovered.',
       actions: [{ type: 'continue', thought: 'Working.' }],
@@ -128,7 +140,9 @@ describe('multi-provider runtime router', () => {
   });
 
   it('does not fallback on non-retryable provider errors', async () => {
-    const openAiExecute = vi.fn<IAgentRuntime['execute']>().mockRejectedValue(new Error('invalid_api_key'));
+    const openAiExecute = vi
+      .fn<IAgentRuntime['execute']>()
+      .mockRejectedValue(new Error('invalid_api_key'));
     const claudeExecute = vi.fn<IAgentRuntime['execute']>().mockResolvedValue({
       thought: 'Recovered.',
       actions: [{ type: 'continue', thought: 'Working.' }],
@@ -142,12 +156,16 @@ describe('multi-provider runtime router', () => {
       ])
     );
 
-    await expect(router.execute(createContext())).rejects.toThrow('invalid_api_key');
+    await expect(router.execute(createContext())).rejects.toThrow(
+      'invalid_api_key'
+    );
     expect(claudeExecute).not.toHaveBeenCalled();
   });
 
   it('uses an explicit fallback order override when provided', async () => {
-    const openAiExecute = vi.fn<IAgentRuntime['execute']>().mockRejectedValue(new Error('429 rate limit exceeded'));
+    const openAiExecute = vi
+      .fn<IAgentRuntime['execute']>()
+      .mockRejectedValue(new Error('429 rate limit exceeded'));
     const geminiExecute = vi.fn<IAgentRuntime['execute']>().mockResolvedValue({
       thought: 'Recovered via Gemini.',
       actions: [{ type: 'continue', thought: 'Working.' }],

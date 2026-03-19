@@ -11,47 +11,53 @@ const interpretSchema = z.object({
   input: z.string().min(3).max(500),
 });
 
-router.post('/', requireRole(['owner', 'admin', 'member', 'viewer']), async (req: AuthRequest, res, next) => {
-  try {
-    const parsed = interpretSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error });
-    }
+router.post(
+  '/',
+  requireRole(['owner', 'admin', 'member', 'viewer']),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const parsed = interpretSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error });
+      }
 
-    const companyId = req.user?.companyId;
-    if (!companyId) {
-      return res.status(400).json({ error: 'Missing company context for natural language command' });
-    }
+      const companyId = req.user?.companyId;
+      if (!companyId) {
+        return res.status(400).json({
+          error: 'Missing company context for natural language command',
+        });
+      }
 
-    const plan = await planNaturalLanguageCommand(
-      {
-        companyId,
-        role: req.user?.role,
-      },
-      parsed.data.input
-    );
+      const plan = await planNaturalLanguageCommand(
+        {
+          companyId,
+          role: req.user?.role,
+        },
+        parsed.data.input
+      );
 
-    await db.query(
-      `INSERT INTO audit_log (company_id, action, details)
+      await db.query(
+        `INSERT INTO audit_log (company_id, action, details)
        VALUES ($1, 'nl_command.planned', $2)`,
-      [
-        companyId,
-        JSON.stringify({
-          input: parsed.data.input,
-          source: plan.source,
-          can_execute: plan.can_execute,
-          action_count: plan.actions.length,
-          action_types: plan.actions.map((action) => action.type),
-          planner: plan.planner,
-          user_id: req.user?.id ?? null,
-        }),
-      ]
-    );
+        [
+          companyId,
+          JSON.stringify({
+            input: parsed.data.input,
+            source: plan.source,
+            can_execute: plan.can_execute,
+            action_count: plan.actions.length,
+            action_types: plan.actions.map((action) => action.type),
+            planner: plan.planner,
+            user_id: req.user?.id ?? null,
+          }),
+        ]
+      );
 
-    res.json(plan);
-  } catch (err) {
-    next(err);
+      res.json(plan);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 export default router;

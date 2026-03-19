@@ -10,7 +10,7 @@ const repoRoot = path.resolve(import.meta.dirname, '..', '..', '..');
 const cliDistEntry = path.join(repoRoot, 'packages', 'cli', 'dist', 'index.js');
 
 function stripAnsi(value) {
-  return value.replace(/\x1B\[[0-9;]*m/g, '');
+  return value.replace(/\u001B\[[0-9;]*m/g, '');
 }
 
 async function startApiServer() {
@@ -139,13 +139,18 @@ test('login persists auth state and status reuses it for authorized company-scop
     assert.match(statusResult.stdout, /--- Biuro Status ---/);
     assert.match(statusResult.stdout, /QA Test Corp/);
 
-    const loginRequest = api.requests.find((request) => request.method === 'POST' && request.url === '/api/auth/login');
+    const loginRequest = api.requests.find(
+      (request) =>
+        request.method === 'POST' && request.url === '/api/auth/login'
+    );
     assert.deepEqual(loginRequest?.body, {
       email: 'ada@example.com',
       password: 'password123',
     });
 
-    const statusRequest = api.requests.find((request) => request.method === 'GET' && request.url === '/api/companies');
+    const statusRequest = api.requests.find(
+      (request) => request.method === 'GET' && request.url === '/api/companies'
+    );
     assert.equal(statusRequest?.headers.authorization, 'Bearer test-token');
     assert.equal(statusRequest?.headers['x-company-id'], 'company-123');
   } finally {
@@ -183,7 +188,10 @@ test('deploy uploads a local template JSON file to the import endpoint', async (
     assert.match(result.stdout, /Successfully deployed template:/);
     assert.match(result.stdout, /company-123/);
 
-    const deployRequest = api.requests.find((request) => request.method === 'POST' && request.url === '/api/templates/import');
+    const deployRequest = api.requests.find(
+      (request) =>
+        request.method === 'POST' && request.url === '/api/templates/import'
+    );
     assert.deepEqual(deployRequest?.body, {
       version: '1.0.0',
       company: {

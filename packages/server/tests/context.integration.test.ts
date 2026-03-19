@@ -56,7 +56,10 @@ describe('buildAgentContext integration flows', () => {
         };
       }
 
-      if (text.includes('FROM tools t') && text.includes('JOIN agent_tools at')) {
+      if (
+        text.includes('FROM tools t') &&
+        text.includes('JOIN agent_tools at')
+      ) {
         return {
           rows: [
             {
@@ -73,7 +76,9 @@ describe('buildAgentContext integration flows', () => {
               type: 'bash',
               description: 'Run a safe shell command from the approved list.',
               config: { allowed_commands: ['ls', 'cat package.json'] },
-              agent_tool_config: { allowed_commands: ['ls', 'cat package.json'] },
+              agent_tool_config: {
+                allowed_commands: ['ls', 'cat package.json'],
+              },
             },
           ],
         };
@@ -81,15 +86,26 @@ describe('buildAgentContext integration flows', () => {
 
       if (text.includes('WITH RECURSIVE goal_path')) {
         return {
-          rows: [{ title: 'Improve retention' }, { title: 'Investigate churn' }],
+          rows: [
+            { title: 'Improve retention' },
+            { title: 'Investigate churn' },
+          ],
         };
       }
 
       if (text.includes('FROM messages')) {
         return {
           rows: [
-            { from_agent: 'agent-1', content: 'I started the analysis.', metadata: { step: 1 } },
-            { from_agent: null, content: 'Please focus on enterprise users.', metadata: null },
+            {
+              from_agent: 'agent-1',
+              content: 'I started the analysis.',
+              metadata: { step: 1 },
+            },
+            {
+              from_agent: null,
+              content: 'Please focus on enterprise users.',
+              metadata: null,
+            },
           ],
         };
       }
@@ -98,27 +114,49 @@ describe('buildAgentContext integration flows', () => {
     });
 
     searchMock.mockResolvedValue([
-      { title: 'Support notes', content: 'Enterprise users churn after onboarding.', metadata: {} },
+      {
+        title: 'Support notes',
+        content: 'Enterprise users churn after onboarding.',
+        metadata: {},
+      },
     ]);
 
     const context = await buildAgentContext('agent-1', 'task-1');
 
     expect(context.company_name).toBe('QA Test Corp');
-    expect(context.goal_hierarchy).toEqual(['Improve retention', 'Investigate churn']);
+    expect(context.goal_hierarchy).toEqual([
+      'Improve retention',
+      'Investigate churn',
+    ]);
     expect(context.additional_context).toContain('AVAILABLE TOOLS:');
     expect(context.additional_context).toContain('- web_search [builtin]');
     expect(context.additional_context).toContain('tool_name":"web_search"');
-    expect(context.additional_context).toContain('Allowed commands: ls, cat package.json');
+    expect(context.additional_context).toContain(
+      'Allowed commands: ls, cat package.json'
+    );
     expect(context.history).toEqual([
-      { role: 'user', content: 'Please focus on enterprise users.', metadata: null },
-      { role: 'assistant', content: 'I started the analysis.', metadata: { step: 1 } },
+      {
+        role: 'user',
+        content: 'Please focus on enterprise users.',
+        metadata: null,
+      },
+      {
+        role: 'assistant',
+        content: 'I started the analysis.',
+        metadata: { step: 1 },
+      },
     ]);
     expect(context.knowledge_context).toContain('Support notes');
-    expect(searchMock).toHaveBeenCalledWith('company-1', 'Look for the churn drivers.', 5, {
-      agentId: 'agent-1',
-      taskId: 'task-1',
-      consumer: 'agent_context',
-    });
+    expect(searchMock).toHaveBeenCalledWith(
+      'company-1',
+      'Look for the churn drivers.',
+      5,
+      {
+        agentId: 'agent-1',
+        taskId: 'task-1',
+        consumer: 'agent_context',
+      }
+    );
 
     const goalQueries = dbMock.query.mock.calls.filter(([text]) =>
       String(text).includes('WITH RECURSIVE goal_path')
@@ -163,7 +201,10 @@ describe('buildAgentContext integration flows', () => {
         };
       }
 
-      if (text.includes('FROM tools t') && text.includes('JOIN agent_tools at')) {
+      if (
+        text.includes('FROM tools t') &&
+        text.includes('JOIN agent_tools at')
+      ) {
         return { rows: [] };
       }
 
@@ -178,10 +219,15 @@ describe('buildAgentContext integration flows', () => {
 
     await buildAgentContext('agent-1', 'task-1');
 
-    expect(searchMock).toHaveBeenCalledWith('company-1', 'Investigate churn', 5, {
-      agentId: 'agent-1',
-      taskId: 'task-1',
-      consumer: 'agent_context',
-    });
+    expect(searchMock).toHaveBeenCalledWith(
+      'company-1',
+      'Investigate churn',
+      5,
+      {
+        agentId: 'agent-1',
+        taskId: 'task-1',
+        consumer: 'agent_context',
+      }
+    );
   });
 });

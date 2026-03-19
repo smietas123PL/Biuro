@@ -8,7 +8,10 @@ function getAllowedBashCommands(toolConfig: unknown): string[] {
     return [];
   }
 
-  const config = toolConfig as { allowed_commands?: unknown; allowedCommands?: unknown };
+  const config = toolConfig as {
+    allowed_commands?: unknown;
+    allowedCommands?: unknown;
+  };
   const configuredCommands = config.allowed_commands ?? config.allowedCommands;
   if (!Array.isArray(configuredCommands)) {
     return [];
@@ -27,17 +30,23 @@ function formatToolForPrompt(tool: any) {
     lines.push(`  Purpose: ${tool.description}`);
   }
 
-  lines.push(`  Invocation: {"type":"use_tool","tool_name":"${tool.name}","params":{...}}`);
+  lines.push(
+    `  Invocation: {"type":"use_tool","tool_name":"${tool.name}","params":{...}}`
+  );
 
   if (tool.type === 'bash') {
-    const allowedCommands = getAllowedBashCommands(tool.agent_tool_config ?? tool.config);
+    const allowedCommands = getAllowedBashCommands(
+      tool.agent_tool_config ?? tool.config
+    );
     if (allowedCommands.length > 0) {
       lines.push(`  Allowed commands: ${allowedCommands.join(', ')}`);
     }
   }
 
   if (tool.type === 'http') {
-    lines.push('  Notes: Uses a preconfigured HTTP endpoint. Pass only the request-specific params/data.');
+    lines.push(
+      '  Notes: Uses a preconfigured HTTP endpoint. Pass only the request-specific params/data.'
+    );
   }
 
   if (tool.type === 'mcp' && tool.config?.serverName) {
@@ -47,7 +56,10 @@ function formatToolForPrompt(tool: any) {
   return lines.join('\n');
 }
 
-export async function buildAgentContext(agentId: string, taskId: string): Promise<AgentContext> {
+export async function buildAgentContext(
+  agentId: string,
+  taskId: string
+): Promise<AgentContext> {
   // 1. Get Agent, Company, and Task
   const agentRes = await db.query(
     `SELECT a.*, c.name as company_name, c.mission as company_mission 
@@ -93,25 +105,34 @@ export async function buildAgentContext(agentId: string, taskId: string): Promis
      LIMIT 20`,
     [taskId]
   );
-  
-  const history = messagesRes.rows.reverse().map(m => ({
-    role: (m.from_agent === agentId ? 'assistant' : 'user') as 'assistant' | 'user',
+
+  const history = messagesRes.rows.reverse().map((m) => ({
+    role: (m.from_agent === agentId ? 'assistant' : 'user') as
+      | 'assistant'
+      | 'user',
     content: m.content,
-    metadata: m.metadata
+    metadata: m.metadata,
   }));
 
   // 4. Search Knowledge Base
-  const knowledgeRes = await KnowledgeService.search(agent.company_id, task.description || task.title, 5, {
-    agentId,
-    taskId,
-    consumer: 'agent_context',
-  });
-  const knowledge_context = knowledgeRes.length > 0
-    ? `COMPANY KNOWLEDGE:\n${knowledgeRes.map(k => `--- ${k.title} ---\n${k.content}`).join('\n')}`
-    : undefined;
-  const additional_context = tools.length > 0
-    ? `AVAILABLE TOOLS:\n${tools.map(formatToolForPrompt).join('\n\n')}\n\nUse tools whenever they materially help you complete the task faster, safer, or with better evidence.`
-    : undefined;
+  const knowledgeRes = await KnowledgeService.search(
+    agent.company_id,
+    task.description || task.title,
+    5,
+    {
+      agentId,
+      taskId,
+      consumer: 'agent_context',
+    }
+  );
+  const knowledge_context =
+    knowledgeRes.length > 0
+      ? `COMPANY KNOWLEDGE:\n${knowledgeRes.map((k) => `--- ${k.title} ---\n${k.content}`).join('\n')}`
+      : undefined;
+  const additional_context =
+    tools.length > 0
+      ? `AVAILABLE TOOLS:\n${tools.map(formatToolForPrompt).join('\n\n')}\n\nUse tools whenever they materially help you complete the task faster, safer, or with better evidence.`
+      : undefined;
 
   return {
     company_name: agent.company_name,

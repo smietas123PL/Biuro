@@ -37,6 +37,7 @@ DATABASE_URL=postgresql://biuro:super_mocne_haslo@127.0.0.1:5432/autonomiczne_bi
 ```
 
 Ważne:
+
 - hasło w `DATABASE_URL` powinno zgadzać się z `DB_PASSWORD`
 - przy Dockerze kontener `server` i `worker` i tak dostają własny `DATABASE_URL` z `docker-compose.yml`, ale lokalne narzędzia i migracje nadal korzystają z `.env`
 
@@ -63,6 +64,7 @@ GOOGLE_API_KEY=twoj_klucz_google
 ```
 
 W praktyce:
+
 - wystarczy jeden provider, ale dobrze mieć fallback
 - jeśli używasz embeddings OpenAI, przyda się też `OPENAI_API_KEY`
 
@@ -75,6 +77,11 @@ Hasło do lokalnej Grafany, jeśli uruchamiasz observability przez Docker.
 ```env
 GRAFANA_ADMIN_PASSWORD=zmien_to_haslo
 ```
+
+Ważne:
+
+- `docker-compose.yml` nie ma już domyślnego fallbacku dla tego pola
+- nie zostawiaj wartości typu `admin`
 
 ## 3. Pola do uzupelnienia tylko jeśli używasz danej funkcji
 
@@ -153,6 +160,7 @@ SCHEDULER_STREAM_KEY=biuro:scheduler:wakeups
 SCHEDULER_STREAM_BLOCK_MS=1000
 LLM_ROUTER_ENABLED=true
 LLM_ROUTER_FALLBACK_ORDER=gemini,claude,openai
+LLM_MOCK_MODE=false
 AUTH_RATE_LIMIT_WINDOW_MS=900000
 AUTH_RATE_LIMIT_MAX=20
 WS_RATE_LIMIT_WINDOW_MS=60000
@@ -176,6 +184,7 @@ AUTH_ENABLED=true
 ```
 
 `DAILY_DIGEST_*`:
+
 - opcjonalne
 - steruja automatycznym dziennym raportem wysylanym przez webhooki Slack/Discord
 - domyslnie raport jest sprawdzany co `60000 ms` i wysylany po `18:00 UTC`
@@ -238,6 +247,7 @@ docker compose up -d
 Nie commituj prawdziwych kluczy API do repo.
 
 Jeśli w istniejącym `.env` masz już prawdziwe sekrety:
+
 - traktuj ten plik jako lokalny
 - nie wrzucaj go do gita
 - jeśli klucze były gdziekolwiek udostępnione, zrotuj je u providera

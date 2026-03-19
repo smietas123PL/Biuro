@@ -6,9 +6,12 @@ export const NotificationService = {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      if (!response.ok) throw new Error(`Webhook failed: ${response.status} ${response.statusText}`);
+      if (!response.ok)
+        throw new Error(
+          `Webhook failed: ${response.status} ${response.statusText}`
+        );
       logger.info({ url }, 'Webhook sent successfully');
       return { ok: true as const };
     } catch (err: any) {
@@ -27,5 +30,5 @@ export const NotificationService = {
 
   async alertDiscord(url: string, message: string) {
     return this.sendWebhook(url, { content: message });
-  }
+  },
 };

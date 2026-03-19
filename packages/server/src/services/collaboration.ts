@@ -126,7 +126,9 @@ export type CollaborationSnapshot = {
 };
 
 function normalizeText(value: unknown, fallback: string) {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : fallback;
 }
 
 function summarizeMessageRow(row: CollaborationMessageRow) {
@@ -152,7 +154,10 @@ function summarizeMessageRow(row: CollaborationMessageRow) {
   return `${sender} sent a message to ${recipient}.`;
 }
 
-function mapMessageKind(type: string, fromAgent: string | null): CollaborationTimelineItem['kind'] {
+function mapMessageKind(
+  type: string,
+  fromAgent: string | null
+): CollaborationTimelineItem['kind'] {
   if (!fromAgent) {
     return 'supervisor';
   }
@@ -197,7 +202,11 @@ export async function getRootTaskId(taskId: string) {
   return (rootRes.rows[0]?.id as string | undefined) ?? null;
 }
 
-export async function findDelegateAgent(companyId: string, role: string, excludeAgentId?: string) {
+export async function findDelegateAgent(
+  companyId: string,
+  role: string,
+  excludeAgentId?: string
+) {
   const trimmedRole = role.trim();
   if (!trimmedRole) {
     return null;
@@ -231,15 +240,22 @@ export async function broadcastCollaborationSignal(
   details: Record<string, unknown> = {}
 ) {
   const rootTaskId = (await getRootTaskId(taskId)) ?? taskId;
-  await broadcastCompanyEvent(companyId, 'task.collaboration', {
-    root_task_id: rootTaskId,
-    task_id: taskId,
-    kind,
-    ...details,
-  }, 'worker');
+  await broadcastCompanyEvent(
+    companyId,
+    'task.collaboration',
+    {
+      root_task_id: rootTaskId,
+      task_id: taskId,
+      kind,
+      ...details,
+    },
+    'worker'
+  );
 }
 
-export async function getTaskCollaborationSnapshot(taskId: string): Promise<CollaborationSnapshot | null> {
+export async function getTaskCollaborationSnapshot(
+  taskId: string
+): Promise<CollaborationSnapshot | null> {
   const rootTaskId = await getRootTaskId(taskId);
   if (!rootTaskId) {
     return null;
@@ -297,9 +313,10 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
   const rootTask = tasks[0];
   const taskIds = tasks.map((entry) => entry.id);
 
-  const [messagesRes, heartbeatsRes, forkAuditRes, forkSessionRes] = await Promise.all([
-    db.query(
-      `SELECT
+  const [messagesRes, heartbeatsRes, forkAuditRes, forkSessionRes] =
+    await Promise.all([
+      db.query(
+        `SELECT
          m.id,
          m.task_id,
          t.title AS task_title,
@@ -319,10 +336,10 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
        LEFT JOIN agents recipient ON recipient.id = m.to_agent
        WHERE m.task_id = ANY($1::uuid[])
        ORDER BY m.created_at ASC`,
-      [taskIds]
-    ),
-    db.query(
-      `SELECT
+        [taskIds]
+      ),
+      db.query(
+        `SELECT
          h.id,
          h.task_id,
          t.title AS task_title,
@@ -340,47 +357,59 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
        WHERE h.task_id = ANY($1::uuid[])
          AND COALESCE(NULLIF(h.details->>'thought', ''), '') <> ''
        ORDER BY h.created_at ASC`,
-      [taskIds]
-    ),
-    db.query(
-      `SELECT agent_id, details
+        [taskIds]
+      ),
+      db.query(
+        `SELECT agent_id, details
        FROM audit_log
        WHERE entity_type = 'task'
          AND entity_id = $1
          AND action = 'replay.forked'
        ORDER BY created_at DESC
        LIMIT 1`,
-      [currentTask.id]
-    ),
-    db.query(
-      `SELECT state
+        [currentTask.id]
+      ),
+      db.query(
+        `SELECT state
        FROM agent_sessions
        WHERE task_id = $1
        ORDER BY updated_at DESC
        LIMIT 1`,
-      [currentTask.id]
-    ),
-  ]);
+        [currentTask.id]
+      ),
+    ]);
 
   const forkAuditDetails =
-    (forkAuditRes.rows[0]?.details as Record<string, unknown> | undefined) ?? null;
+    (forkAuditRes.rows[0]?.details as Record<string, unknown> | undefined) ??
+    null;
   const forkAuditAgentId =
-    typeof forkAuditRes.rows[0]?.agent_id === 'string' ? (forkAuditRes.rows[0].agent_id as string) : null;
+    typeof forkAuditRes.rows[0]?.agent_id === 'string'
+      ? (forkAuditRes.rows[0].agent_id as string)
+      : null;
   const forkSessionState =
-    (forkSessionRes.rows[0]?.state as Record<string, unknown> | undefined) ?? null;
+    (forkSessionRes.rows[0]?.state as Record<string, unknown> | undefined) ??
+    null;
   const forkedFrom =
-    forkSessionState?.forked_from && typeof forkSessionState.forked_from === 'object'
+    forkSessionState?.forked_from &&
+    typeof forkSessionState.forked_from === 'object'
       ? (forkSessionState.forked_from as Record<string, unknown>)
       : null;
   const forkOrigin =
-    forkAuditDetails?.source_task_id && typeof forkAuditDetails.source_task_id === 'string'
+    forkAuditDetails?.source_task_id &&
+    typeof forkAuditDetails.source_task_id === 'string'
       ? {
           source_agent_id: forkAuditAgentId,
           source_task_id: forkAuditDetails.source_task_id,
           source_event_id:
-            typeof forkAuditDetails.source_event_id === 'string' ? forkAuditDetails.source_event_id : null,
-          source_action: typeof forkedFrom?.action === 'string' ? forkedFrom.action : null,
-          source_timestamp: typeof forkedFrom?.timestamp === 'string' ? forkedFrom.timestamp : null,
+            typeof forkAuditDetails.source_event_id === 'string'
+              ? forkAuditDetails.source_event_id
+              : null,
+          source_action:
+            typeof forkedFrom?.action === 'string' ? forkedFrom.action : null,
+          source_timestamp:
+            typeof forkedFrom?.timestamp === 'string'
+              ? forkedFrom.timestamp
+              : null,
           prompt_override: Boolean(forkSessionState?.prompt_override),
         }
       : null;
@@ -508,12 +537,22 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
     participantMap.set(row.agent_id, existing);
   }
 
-  timeline.sort((left, right) => left.created_at.localeCompare(right.created_at));
+  timeline.sort((left, right) =>
+    left.created_at.localeCompare(right.created_at)
+  );
 
-  const thoughtCount = timeline.filter((item) => item.kind === 'thought').length;
-  const delegationCount = timeline.filter((item) => item.kind === 'delegation').length;
-  const messageCount = timeline.filter((item) =>
-    item.kind === 'message' || item.kind === 'supervisor' || item.kind === 'status' || item.kind === 'tool'
+  const thoughtCount = timeline.filter(
+    (item) => item.kind === 'thought'
+  ).length;
+  const delegationCount = timeline.filter(
+    (item) => item.kind === 'delegation'
+  ).length;
+  const messageCount = timeline.filter(
+    (item) =>
+      item.kind === 'message' ||
+      item.kind === 'supervisor' ||
+      item.kind === 'status' ||
+      item.kind === 'tool'
   ).length;
 
   return {

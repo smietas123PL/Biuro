@@ -26,7 +26,9 @@ const loggerMock = vi.hoisted(() => ({
 }));
 
 vi.mock('@google/generative-ai', async () => {
-  const actual = await vi.importActual<typeof import('@google/generative-ai')>('@google/generative-ai');
+  const actual = await vi.importActual<typeof import('@google/generative-ai')>(
+    '@google/generative-ai'
+  );
   return {
     ...actual,
     GoogleGenerativeAI: googleGenerativeAiConstructorMock,
@@ -104,7 +106,9 @@ describe('GeminiRuntime', () => {
     const runtime = new GeminiRuntime();
     const response = await runtime.execute(createContext());
 
-    expect(googleGenerativeAiConstructorMock).toHaveBeenCalledWith('google-test-key');
+    expect(googleGenerativeAiConstructorMock).toHaveBeenCalledWith(
+      'google-test-key'
+    );
     expect(getGenerativeModelMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gemini-2.0-flash',
@@ -124,7 +128,9 @@ describe('GeminiRuntime', () => {
         thought: 'I will evaluate the search findings next.',
       },
     ]);
-    expect(response.thought).toBe('I should use the tool first and then continue.');
+    expect(response.thought).toBe(
+      'I should use the tool first and then continue.'
+    );
   });
 
   it('falls back to continue when Gemini JSON is invalid', async () => {

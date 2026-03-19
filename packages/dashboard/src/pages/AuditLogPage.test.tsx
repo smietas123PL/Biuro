@@ -22,7 +22,10 @@ describe('AuditLogPage', () => {
     useCompanyMock.mockReset();
 
     requestMock.mockImplementation(async (path: string) => {
-      if (path === '/companies/company-1/audit-log?limit=5&action_prefix=nl_command.') {
+      if (
+        path ===
+        '/companies/company-1/audit-log?limit=5&action_prefix=nl_command.'
+      ) {
         return {
           items: [
             {
@@ -199,10 +202,14 @@ describe('AuditLogPage', () => {
     );
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/observability/traces/recent?limit=6', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/observability/traces/recent?limit=6',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
       expect(requestMock).toHaveBeenCalledWith(
         '/companies/company-1/audit-log?limit=5&action_prefix=nl_command.',
         undefined,
@@ -217,13 +224,19 @@ describe('AuditLogPage', () => {
     expect(screen.getByText('Control Panel Activity')).toBeTruthy();
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'Open in Grafana' }).getAttribute('href')).toContain('recent-trace-1234abcd');
+      expect(
+        screen
+          .getByRole('link', { name: 'Open in Grafana' })
+          .getAttribute('href')
+      ).toContain('recent-trace-1234abcd');
       expect(screen.getByText('Provider claude')).toBeTruthy();
       expect(screen.getByText('Model claude-sonnet-4-20250514')).toBeTruthy();
       expect(screen.getByText('Fallbacks 1')).toBeTruthy();
       expect(screen.getByText('LLM routing')).toBeTruthy();
       expect(screen.getByText(/openai \/ gpt-4o/)).toBeTruthy();
-      expect(screen.getAllByText(/429 rate limit exceeded/).length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(/429 rate limit exceeded/).length
+      ).toBeGreaterThan(0);
       expect(screen.getByText('Planned by Claude')).toBeTruthy();
       expect(screen.getByText('pause Ada')).toBeTruthy();
     });
@@ -231,7 +244,9 @@ describe('AuditLogPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy trace ID' }));
 
     await waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('recent-trace-1234abcd');
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        'recent-trace-1234abcd'
+      );
     });
   });
 
@@ -243,24 +258,38 @@ describe('AuditLogPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Control Panel' })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Control Panel' })
+      ).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Control Panel' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Failed Planning (1)' })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Failed Planning (1)' })
+      ).toBeTruthy();
       expect(screen.getAllByText('pause Ada').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('create goal Q4 partner pipeline').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('find me the best strategy for Europe').length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText('create goal Q4 partner pipeline').length
+      ).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText('find me the best strategy for Europe').length
+      ).toBeGreaterThan(0);
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Failed Planning (1)' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Failed Planning (1)' })
+    );
 
     await waitFor(() => {
       expect(screen.getAllByText('pause Ada').length).toBe(1);
-      expect(screen.queryAllByText('create goal Q4 partner pipeline').length).toBe(0);
-      expect(screen.getByText('find me the best strategy for Europe')).toBeTruthy();
+      expect(
+        screen.queryAllByText('create goal Q4 partner pipeline').length
+      ).toBe(0);
+      expect(
+        screen.getByText('find me the best strategy for Europe')
+      ).toBeTruthy();
     });
   });
 
@@ -272,25 +301,37 @@ describe('AuditLogPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Control Panel' })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Control Panel' })
+      ).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Control Panel' }));
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Search Control Panel commands...')).toBeTruthy();
+      expect(
+        screen.getByPlaceholderText('Search Control Panel commands...')
+      ).toBeTruthy();
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Search Control Panel commands...'), {
-      target: { value: 'Europe' },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText('Search Control Panel commands...'),
+      {
+        target: { value: 'Europe' },
+      }
+    );
 
     await waitFor(() => {
       expect(
-        screen.getByText((_, element) => element?.textContent === 'find me the best strategy for Europe')
+        screen.getByText(
+          (_, element) =>
+            element?.textContent === 'find me the best strategy for Europe'
+        )
       ).toBeTruthy();
       expect(screen.queryAllByText('pause Ada').length).toBe(0);
-      expect(screen.queryAllByText('create goal Q4 partner pipeline').length).toBe(0);
+      expect(
+        screen.queryAllByText('create goal Q4 partner pipeline').length
+      ).toBe(0);
       expect(container.querySelector('mark')?.textContent).toBe('Europe');
     });
   });

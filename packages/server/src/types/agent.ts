@@ -37,8 +37,7 @@ export const AgentActionSchema = z.discriminatedUnion('type', [
 
 export const AgentActionsSchema = z.array(AgentActionSchema);
 
-export type AgentAction =
-  z.infer<typeof AgentActionSchema>;
+export type AgentAction = z.infer<typeof AgentActionSchema>;
 
 export interface AgentResponse {
   thought: string;

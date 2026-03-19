@@ -6,7 +6,9 @@ const dbMock = vi.hoisted(() => ({
   query: vi.fn(),
 }));
 const runtimeExecuteMock = vi.hoisted(() => vi.fn());
-const getRuntimeMock = vi.hoisted(() => vi.fn(() => ({ execute: runtimeExecuteMock })));
+const getRuntimeMock = vi.hoisted(() =>
+  vi.fn(() => ({ execute: runtimeExecuteMock }))
+);
 const enqueueCompanyWakeupMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
@@ -18,7 +20,14 @@ vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 vi.mock('../src/runtime/registry.js', () => ({
@@ -72,8 +81,10 @@ describe('agent failure explanation route', () => {
     runtimeExecuteMock.mockResolvedValue({
       thought: JSON.stringify({
         headline: 'Provider timeout during launch note generation',
-        summary: 'The agent reached a heartbeat error because the model call timed out after fallback routing was exhausted.',
-        likely_cause: 'Both provider attempts failed, so the heartbeat could not complete the drafting step.',
+        summary:
+          'The agent reached a heartbeat error because the model call timed out after fallback routing was exhausted.',
+        likely_cause:
+          'Both provider attempts failed, so the heartbeat could not complete the drafting step.',
         evidence: [
           'heartbeat.error fired on Prepare launch notes',
           'openai/gpt-4o failed with timeout',
@@ -88,12 +99,17 @@ describe('agent failure explanation route', () => {
       routing: {
         selected_runtime: 'claude',
         selected_model: 'claude-sonnet',
-        attempts: [{ runtime: 'claude', model: 'claude-sonnet', status: 'success' }],
+        attempts: [
+          { runtime: 'claude', model: 'claude-sonnet', status: 'success' },
+        ],
       },
     });
 
     dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
-      if (text === 'SELECT id, company_id, name, role, status FROM agents WHERE id = $1') {
+      if (
+        text ===
+        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1'
+      ) {
         expect(params).toEqual(['agent-1']);
         return {
           rows: [
@@ -143,7 +159,10 @@ describe('agent failure explanation route', () => {
         };
       }
 
-      if (text.includes('FROM audit_log') && text.includes('WHERE agent_id = $1')) {
+      if (
+        text.includes('FROM audit_log') &&
+        text.includes('WHERE agent_id = $1')
+      ) {
         return { rows: [] };
       }
 
@@ -163,7 +182,10 @@ describe('agent failure explanation route', () => {
               id: 'company-1',
               name: 'QA Test Corp',
               mission: 'Ship reliable software',
-              config: { llm_primary_runtime: 'claude', llm_fallback_order: ['openai', 'gemini'] },
+              config: {
+                llm_primary_runtime: 'claude',
+                llm_fallback_order: ['openai', 'gemini'],
+              },
             },
           ],
         };

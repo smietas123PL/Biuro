@@ -16,14 +16,23 @@ vi.mock('../src/db/client.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (req: express.Request, _res: express.Response, next: express.NextFunction) => {
-    (req as express.Request & { user?: { id: string; role: string } }).user = { id: 'user-1', role: 'owner' };
-    next();
-  },
+  requireRole:
+    () =>
+    (
+      req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) => {
+      (req as express.Request & { user?: { id: string; role: string } }).user =
+        { id: 'user-1', role: 'owner' };
+      next();
+    },
 }));
 
 vi.mock('../src/services/template.js', async () => {
-  const actual = await vi.importActual<typeof import('../src/services/template.js')>('../src/services/template.js');
+  const actual = await vi.importActual<
+    typeof import('../src/services/template.js')
+  >('../src/services/template.js');
   return {
     ...actual,
     TemplateService: {
@@ -86,7 +95,11 @@ describe('template marketplace routes', () => {
 
   it('lists marketplace templates from the service catalog', async () => {
     listMarketplaceTemplatesMock.mockResolvedValue({
-      catalog: { name: 'Biuro Marketplace', source_type: 'remote', source_url: 'https://marketplace.test/templates.json' },
+      catalog: {
+        name: 'Biuro Marketplace',
+        source_type: 'remote',
+        source_url: 'https://marketplace.test/templates.json',
+      },
       templates: [{ id: 'market-1', name: 'Support Ops Pack' }],
     });
 
@@ -106,7 +119,10 @@ describe('template marketplace routes', () => {
       source_url: 'https://marketplace.test/support-ops-pack',
       template: {
         version: '1.1',
-        company: { name: 'Support Ops Pack', mission: 'Ship support operations.' },
+        company: {
+          name: 'Support Ops Pack',
+          mission: 'Ship support operations.',
+        },
         roles: [],
         goals: [],
         policies: [],

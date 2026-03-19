@@ -22,22 +22,31 @@ export async function deliverOutgoingWebhooks(args: {
 
   if (args.slackWebhookUrl && (args.slackPayload || args.slackText)) {
     const result = args.slackPayload
-      ? await NotificationService.sendSlackMessage(args.slackWebhookUrl, args.slackPayload)
-      : await NotificationService.alertSlack(args.slackWebhookUrl, args.slackText!);
+      ? await NotificationService.sendSlackMessage(
+          args.slackWebhookUrl,
+          args.slackPayload
+        )
+      : await NotificationService.alertSlack(
+          args.slackWebhookUrl,
+          args.slackText!
+        );
 
     attempts.push({
       target: 'slack',
       status: result.ok ? 'success' : 'failure',
-      error: result.ok ? null : result.error ?? null,
+      error: result.ok ? null : (result.error ?? null),
     });
   }
 
   if (args.discordWebhookUrl && args.discordMessage) {
-    const result = await NotificationService.alertDiscord(args.discordWebhookUrl, args.discordMessage);
+    const result = await NotificationService.alertDiscord(
+      args.discordWebhookUrl,
+      args.discordMessage
+    );
     attempts.push({
       target: 'discord',
       status: result.ok ? 'success' : 'failure',
-      error: result.ok ? null : result.error ?? null,
+      error: result.ok ? null : (result.error ?? null),
     });
   }
 

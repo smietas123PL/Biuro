@@ -55,7 +55,11 @@ vi.mock('../src/services/dailyDigest.js', () => ({
   dispatchDueDailyDigests: dispatchDueDailyDigestsMock,
 }));
 
-import { getActiveHeartbeatCount, startOrchestrator, stopOrchestrator } from '../src/orchestrator/scheduler.js';
+import {
+  getActiveHeartbeatCount,
+  startOrchestrator,
+  stopOrchestrator,
+} from '../src/orchestrator/scheduler.js';
 
 function createDeferred() {
   let resolve!: () => void;
@@ -105,8 +109,12 @@ describe('scheduler orchestration', () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(dbMock.query).toHaveBeenCalledTimes(1);
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain("WHERE status = 'idle'");
-    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain("AND status != 'terminated'");
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      "WHERE status = 'idle'"
+    );
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      "AND status != 'terminated'"
+    );
     expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('LIMIT $1');
     expect(dbMock.query.mock.calls[0]?.[1]).toEqual([2]);
     expect(processAgentHeartbeatMock).toHaveBeenCalledTimes(2);
@@ -251,16 +259,22 @@ describe('scheduler orchestration', () => {
       const dispatchQuery = dbMock.query.mock.calls.find(([text]) =>
         String(text).includes('FROM agents a')
       );
-      expect(String(bootstrapQuery?.[0])).toContain("status IN ('backlog', 'assigned')");
+      expect(String(bootstrapQuery?.[0])).toContain(
+        "status IN ('backlog', 'assigned')"
+      );
       expect(String(dispatchQuery?.[0])).toContain('FROM agents a');
       expect(dispatchQuery?.[1]).toEqual(['company-1', 2]);
       expect(processAgentHeartbeatMock).toHaveBeenCalledWith('agent-1');
       expect(acknowledgeSchedulerWakeupMock).toHaveBeenCalledWith('wake-1');
 
       await Promise.resolve();
-      expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith('company-1', 'heartbeat_follow_up', {
-        taskId: 'task-1',
-      });
+      expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith(
+        'company-1',
+        'heartbeat_follow_up',
+        {
+          taskId: 'task-1',
+        }
+      );
     } finally {
       await stopOrchestrator();
     }

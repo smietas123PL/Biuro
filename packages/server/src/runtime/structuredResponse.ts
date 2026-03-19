@@ -1,6 +1,10 @@
 import { SchemaType, type ResponseSchema } from '@google/generative-ai';
 import { z } from 'zod';
-import { AgentActionsSchema, type AgentAction, type AgentContext } from '../types/agent.js';
+import {
+  AgentActionsSchema,
+  type AgentAction,
+  type AgentContext,
+} from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 
 export const StructuredAgentResponseSchema = z.object({
@@ -14,7 +18,8 @@ export const structuredAgentResponseJsonSchema: Record<string, unknown> = {
   properties: {
     thought: {
       type: 'string',
-      description: 'Brief natural-language reasoning summary for the next step.',
+      description:
+        'Brief natural-language reasoning summary for the next step.',
     },
     actions: {
       type: 'array',
@@ -25,7 +30,14 @@ export const structuredAgentResponseJsonSchema: Record<string, unknown> = {
         properties: {
           type: {
             type: 'string',
-            enum: ['complete_task', 'delegate', 'message', 'use_tool', 'request_approval', 'continue'],
+            enum: [
+              'complete_task',
+              'delegate',
+              'message',
+              'use_tool',
+              'request_approval',
+              'continue',
+            ],
           },
           result: { type: 'string' },
           to_role: { type: 'string' },
@@ -57,7 +69,8 @@ export const structuredAgentResponseGeminiSchema: ResponseSchema = {
   properties: {
     thought: {
       type: SchemaType.STRING,
-      description: 'Brief natural-language reasoning summary for the next step.',
+      description:
+        'Brief natural-language reasoning summary for the next step.',
     },
     actions: {
       type: SchemaType.ARRAY,
@@ -68,7 +81,14 @@ export const structuredAgentResponseGeminiSchema: ResponseSchema = {
           type: {
             type: SchemaType.STRING,
             format: 'enum',
-            enum: ['complete_task', 'delegate', 'message', 'use_tool', 'request_approval', 'continue'],
+            enum: [
+              'complete_task',
+              'delegate',
+              'message',
+              'use_tool',
+              'request_approval',
+              'continue',
+            ],
           },
           result: { type: SchemaType.STRING, nullable: true },
           to_role: { type: SchemaType.STRING, nullable: true },
@@ -97,7 +117,9 @@ export const structuredAgentResponseGeminiSchema: ResponseSchema = {
   required: ['thought', 'actions'],
 };
 
-export function buildStructuredRuntimeSystemPrompt(context: AgentContext): string {
+export function buildStructuredRuntimeSystemPrompt(
+  context: AgentContext
+): string {
   return `
 You are ${context.agent_name}, a ${context.agent_role} at ${context.company_name}.
 Company Mission: ${context.company_mission}
@@ -124,13 +146,17 @@ Rules:
 `.trim();
 }
 
-export function parseStructuredAgentResponse(rawText: string, runtimeName: string): { thought: string; actions: AgentAction[] } {
+export function parseStructuredAgentResponse(
+  rawText: string,
+  runtimeName: string
+): { thought: string; actions: AgentAction[] } {
   try {
     const parsedJson = JSON.parse(rawText);
     const validated = StructuredAgentResponseSchema.safeParse(parsedJson);
 
     if (validated.success) {
-      const thought = validated.data.thought.trim() || 'Thinking through the next step.';
+      const thought =
+        validated.data.thought.trim() || 'Thinking through the next step.';
       const actions: AgentAction[] =
         validated.data.actions.length > 0
           ? validated.data.actions
@@ -138,9 +164,15 @@ export function parseStructuredAgentResponse(rawText: string, runtimeName: strin
       return { thought, actions };
     }
 
-    logger.error({ issues: validated.error.issues, rawText }, `${runtimeName} structured response failed schema validation`);
+    logger.error(
+      { issues: validated.error.issues, rawText },
+      `${runtimeName} structured response failed schema validation`
+    );
   } catch (error) {
-    logger.error({ error, rawText }, `Failed to parse ${runtimeName} structured response`);
+    logger.error(
+      { error, rawText },
+      `Failed to parse ${runtimeName} structured response`
+    );
   }
 
   const thought = rawText.trim() || 'Thinking through the next step.';

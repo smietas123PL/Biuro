@@ -1,11 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, PauseCircle, PlayCircle, Search, XCircle } from 'lucide-react';
+import {
+  ArrowRight,
+  PauseCircle,
+  PlayCircle,
+  Search,
+  XCircle,
+} from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
 import type { CompanyRole } from '../context/CompanyContext';
 
-type PaletteSection = 'Pages' | 'Agents' | 'Tasks' | 'Goals' | 'Tools' | 'Approvals' | 'Quick Actions';
+type PaletteSection =
+  | 'Pages'
+  | 'Agents'
+  | 'Tasks'
+  | 'Goals'
+  | 'Tools'
+  | 'Approvals'
+  | 'Quick Actions';
 
 type NavigationPaletteItem = {
   kind: 'navigation';
@@ -109,7 +122,11 @@ type NLCommandPlan = {
       status: 'success' | 'fallback' | 'failed';
       reason?: string;
     }>;
-    fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_plan' | null;
+    fallback_reason?:
+      | 'llm_unavailable'
+      | 'llm_failed'
+      | 'invalid_llm_plan'
+      | null;
   };
 };
 
@@ -121,22 +138,118 @@ function canManageCompany(role?: CompanyRole | null) {
 
 function getStaticItems(role?: CompanyRole | null): NavigationPaletteItem[] {
   const items: NavigationPaletteItem[] = [
-    { kind: 'navigation', id: 'page-dashboard', label: 'Dashboard', description: 'Company overview and live metrics', path: '/', section: 'Pages', keywords: ['overview', 'home', 'metrics'] },
-    { kind: 'navigation', id: 'page-agents', label: 'Agents', description: 'Team roster and hierarchy', path: '/agents', section: 'Pages', keywords: ['people', 'org chart', 'team'] },
-    { kind: 'navigation', id: 'page-tasks', label: 'Tasks', description: 'Backlog and current execution', path: '/tasks', section: 'Pages', keywords: ['work', 'backlog'] },
-    { kind: 'navigation', id: 'page-goals', label: 'Goals', description: 'Goal tree and mission structure', path: '/goals', section: 'Pages', keywords: ['strategy', 'objectives'] },
-    { kind: 'navigation', id: 'page-org-chart', label: 'Org Chart', description: 'Reporting lines and company hierarchy', path: '/org-chart', section: 'Pages', keywords: ['hierarchy', 'reports_to', 'team structure'] },
-    { kind: 'navigation', id: 'page-budgets', label: 'Budgets', description: 'Spend, caps and monthly forecast', path: '/budgets', section: 'Pages', keywords: ['costs', 'forecast', 'usage'] },
-    { kind: 'navigation', id: 'page-templates', label: 'Templates', description: 'Local preset library and company setup imports', path: '/templates', section: 'Pages', keywords: ['presets', 'marketplace', 'setup'] },
-    { kind: 'navigation', id: 'page-integrations', label: 'Integrations', description: 'Slack and Discord setup overview', path: '/integrations', section: 'Pages', keywords: ['slack', 'discord', 'webhooks'] },
-    { kind: 'navigation', id: 'page-tools', label: 'Tools', description: 'Registered tools and capabilities', path: '/tools', section: 'Pages', keywords: ['tooling', 'capabilities'] },
-    { kind: 'navigation', id: 'page-observability', label: 'Observability', description: 'Recent traces, span detail, and Grafana handoff', path: '/observability', section: 'Pages', keywords: ['traces', 'otel', 'grafana', 'tempo'] },
+    {
+      kind: 'navigation',
+      id: 'page-dashboard',
+      label: 'Dashboard',
+      description: 'Company overview and live metrics',
+      path: '/',
+      section: 'Pages',
+      keywords: ['overview', 'home', 'metrics'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-agents',
+      label: 'Agents',
+      description: 'Team roster and hierarchy',
+      path: '/agents',
+      section: 'Pages',
+      keywords: ['people', 'org chart', 'team'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-tasks',
+      label: 'Tasks',
+      description: 'Backlog and current execution',
+      path: '/tasks',
+      section: 'Pages',
+      keywords: ['work', 'backlog'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-goals',
+      label: 'Goals',
+      description: 'Goal tree and mission structure',
+      path: '/goals',
+      section: 'Pages',
+      keywords: ['strategy', 'objectives'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-org-chart',
+      label: 'Org Chart',
+      description: 'Reporting lines and company hierarchy',
+      path: '/org-chart',
+      section: 'Pages',
+      keywords: ['hierarchy', 'reports_to', 'team structure'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-budgets',
+      label: 'Budgets',
+      description: 'Spend, caps and monthly forecast',
+      path: '/budgets',
+      section: 'Pages',
+      keywords: ['costs', 'forecast', 'usage'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-templates',
+      label: 'Templates',
+      description: 'Local preset library and company setup imports',
+      path: '/templates',
+      section: 'Pages',
+      keywords: ['presets', 'marketplace', 'setup'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-integrations',
+      label: 'Integrations',
+      description: 'Slack and Discord setup overview',
+      path: '/integrations',
+      section: 'Pages',
+      keywords: ['slack', 'discord', 'webhooks'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-tools',
+      label: 'Tools',
+      description: 'Registered tools and capabilities',
+      path: '/tools',
+      section: 'Pages',
+      keywords: ['tooling', 'capabilities'],
+    },
+    {
+      kind: 'navigation',
+      id: 'page-observability',
+      label: 'Observability',
+      description: 'Recent traces, span detail, and Grafana handoff',
+      path: '/observability',
+      section: 'Pages',
+      keywords: ['traces', 'otel', 'grafana', 'tempo'],
+    },
   ];
 
   if (canManageCompany(role)) {
     items.push(
-      { kind: 'navigation', id: 'page-approvals', label: 'Approvals', description: 'Pending governance decisions', path: '/approvals', section: 'Pages', keywords: ['governance', 'review'] },
-      { kind: 'navigation', id: 'page-audit', label: 'Audit Log', description: 'Recent operational events', path: '/audit', section: 'Pages', keywords: ['events', 'history', 'logs'] }
+      {
+        kind: 'navigation',
+        id: 'page-approvals',
+        label: 'Approvals',
+        description: 'Pending governance decisions',
+        path: '/approvals',
+        section: 'Pages',
+        keywords: ['governance', 'review'],
+      },
+      {
+        kind: 'navigation',
+        id: 'page-audit',
+        label: 'Audit Log',
+        description: 'Recent operational events',
+        path: '/audit',
+        section: 'Pages',
+        keywords: ['events', 'history', 'logs'],
+      }
     );
   }
 
@@ -156,7 +269,8 @@ function buildAgentActionItems(agents: AgentItem[]): ActionPaletteItem[] {
         section: 'Quick Actions',
         keywords: [agent.name, agent.role, 'resume', 'agent'],
         confirm_title: `Resume ${agent.name}?`,
-        confirm_description: 'This will set the agent status back to idle. It does not change tasks, budgets or hierarchy.',
+        confirm_description:
+          'This will set the agent status back to idle. It does not change tasks, budgets or hierarchy.',
         endpoint: `/agents/${agent.id}/resume`,
         method: 'POST',
         success_message: `${agent.name} was resumed.`,
@@ -173,7 +287,8 @@ function buildAgentActionItems(agents: AgentItem[]): ActionPaletteItem[] {
       section: 'Quick Actions',
       keywords: [agent.name, agent.role, 'pause', 'agent'],
       confirm_title: `Pause ${agent.name}?`,
-      confirm_description: 'This only changes the agent status to paused. No tasks, tools or budgets are deleted.',
+      confirm_description:
+        'This only changes the agent status to paused. No tasks, tools or budgets are deleted.',
       endpoint: `/agents/${agent.id}/pause`,
       method: 'POST',
       success_message: `${agent.name} was paused.`,
@@ -184,7 +299,9 @@ function buildAgentActionItems(agents: AgentItem[]): ActionPaletteItem[] {
   return actionItems;
 }
 
-function buildApprovalActionItems(approvals: ApprovalItem[]): ActionPaletteItem[] {
+function buildApprovalActionItems(
+  approvals: ApprovalItem[]
+): ActionPaletteItem[] {
   return approvals
     .filter((approval) => approval.status === 'pending')
     .flatMap((approval) => [
@@ -192,11 +309,13 @@ function buildApprovalActionItems(approvals: ApprovalItem[]): ActionPaletteItem[
         kind: 'action',
         id: `action-approval-approve-${approval.id}`,
         label: `Approve: ${approval.reason}`,
-        description: 'Resolve this approval as approved with an explicit confirmation step.',
+        description:
+          'Resolve this approval as approved with an explicit confirmation step.',
         section: 'Quick Actions',
         keywords: [approval.reason, 'approve', 'approval', 'governance'],
         confirm_title: 'Approve this request?',
-        confirm_description: 'This will mark the approval as approved and continue the waiting workflow.',
+        confirm_description:
+          'This will mark the approval as approved and continue the waiting workflow.',
         endpoint: `/approvals/${approval.id}/resolve`,
         method: 'POST',
         body: {
@@ -210,11 +329,13 @@ function buildApprovalActionItems(approvals: ApprovalItem[]): ActionPaletteItem[
         kind: 'action',
         id: `action-approval-reject-${approval.id}`,
         label: `Reject: ${approval.reason}`,
-        description: 'Resolve this approval as rejected with an explicit confirmation step.',
+        description:
+          'Resolve this approval as rejected with an explicit confirmation step.',
         section: 'Quick Actions',
         keywords: [approval.reason, 'reject', 'approval', 'governance'],
         confirm_title: 'Reject this request?',
-        confirm_description: 'This will mark the approval as rejected and keep the decision visible in the approvals log.',
+        confirm_description:
+          'This will mark the approval as rejected and keep the decision visible in the approvals log.',
         endpoint: `/approvals/${approval.id}/resolve`,
         method: 'POST',
         body: {
@@ -315,7 +436,13 @@ function getPlannerBadge(plan: NLCommandPlan) {
   return 'Planned by Rules';
 }
 
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandPalette({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const navigate = useNavigate();
   const { request } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
@@ -323,9 +450,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const companyCanManage = canManageCompany(companyRole);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<PaletteItem[]>(getStaticItems(companyRole));
+  const [items, setItems] = useState<PaletteItem[]>(
+    getStaticItems(companyRole)
+  );
   const [activeIndex, setActiveIndex] = useState(0);
-  const [pendingAction, setPendingAction] = useState<ActionPaletteItem | null>(null);
+  const [pendingAction, setPendingAction] = useState<ActionPaletteItem | null>(
+    null
+  );
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
@@ -333,7 +464,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [nlPlan, setNlPlan] = useState<NLCommandPlan | null>(null);
   const [nlExecutionLoading, setNlExecutionLoading] = useState(false);
   const [nlExecutionError, setNlExecutionError] = useState<string | null>(null);
-  const [nlExecutionState, setNlExecutionState] = useState<Record<string, PlanExecutionState>>({});
+  const [nlExecutionState, setNlExecutionState] = useState<
+    Record<string, PlanExecutionState>
+  >({});
 
   useEffect(() => {
     if (!open) {
@@ -359,12 +492,22 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       setLoading(true);
       try {
         const [agents, tasks, goals, tools, approvals] = await Promise.all([
-          request(`/companies/${selectedCompanyId}/agents`) as Promise<AgentItem[]>,
-          request(`/companies/${selectedCompanyId}/tasks`) as Promise<TaskItem[]>,
-          request(`/companies/${selectedCompanyId}/goals`) as Promise<GoalItem[]>,
-          request(`/companies/${selectedCompanyId}/tools`) as Promise<ToolItem[]>,
+          request(`/companies/${selectedCompanyId}/agents`) as Promise<
+            AgentItem[]
+          >,
+          request(`/companies/${selectedCompanyId}/tasks`) as Promise<
+            TaskItem[]
+          >,
+          request(`/companies/${selectedCompanyId}/goals`) as Promise<
+            GoalItem[]
+          >,
+          request(`/companies/${selectedCompanyId}/tools`) as Promise<
+            ToolItem[]
+          >,
           companyCanManage
-            ? (request(`/companies/${selectedCompanyId}/approvals`) as Promise<ApprovalItem[]>)
+            ? (request(`/companies/${selectedCompanyId}/approvals`) as Promise<
+                ApprovalItem[]
+              >)
             : Promise.resolve([] as ApprovalItem[]),
         ]);
 
@@ -427,7 +570,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     };
 
     void loadItems();
-  }, [companyCanManage, companyRole, open, refreshIndex, request, selectedCompanyId]);
+  }, [
+    companyCanManage,
+    companyRole,
+    open,
+    refreshIndex,
+    request,
+    selectedCompanyId,
+  ]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredItems = items
@@ -436,7 +586,12 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         return true;
       }
 
-      const haystack = [item.label, item.description, item.section, ...item.keywords]
+      const haystack = [
+        item.label,
+        item.description,
+        item.section,
+        ...item.keywords,
+      ]
         .join(' ')
         .toLowerCase();
       return haystack.includes(normalizedQuery);
@@ -480,7 +635,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     try {
       await request(pendingAction.endpoint, {
         method: pendingAction.method,
-        body: pendingAction.body ? JSON.stringify(pendingAction.body) : undefined,
+        body: pendingAction.body
+          ? JSON.stringify(pendingAction.body)
+          : undefined,
       });
       setPendingAction(null);
       setActionMessage(pendingAction.success_message);
@@ -520,7 +677,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     setNlExecutionError(null);
     setNlExecutionLoading(true);
     const initialState = Object.fromEntries(
-      nlPlan.actions.map((action) => [action.id, 'pending' as PlanExecutionState])
+      nlPlan.actions.map((action) => [
+        action.id,
+        'pending' as PlanExecutionState,
+      ])
     );
     setNlExecutionState(initialState);
 
@@ -570,14 +730,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
       resetPlanState();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Plan execution failed.';
+      const message =
+        error instanceof Error ? error.message : 'Plan execution failed.';
       setNlExecutionError(message);
     } finally {
       setNlExecutionLoading(false);
     }
   };
 
-  const pendingActionStyles = pendingAction ? getAccentStyles(pendingAction.accent) : null;
+  const pendingActionStyles = pendingAction
+    ? getAccentStyles(pendingAction.accent)
+    : null;
   const planButtonDisabled = !selectedCompanyId || !query.trim() || nlLoading;
   const executePlanLabel =
     nlPlan?.actions.length === 1 && nlPlan.actions[0]?.type === 'navigate'
@@ -587,7 +750,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         : 'Execute plan';
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/40 px-4 py-12 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[100] bg-black/40 px-4 py-12 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         className="mx-auto w-full max-w-3xl overflow-hidden rounded-3xl border bg-card shadow-2xl"
         onClick={(event) => event.stopPropagation()}
@@ -609,13 +775,20 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               onKeyDown={(event) => {
                 if (!pendingAction && !nlPlan && event.key === 'ArrowDown') {
                   event.preventDefault();
-                  setActiveIndex((current) => Math.min(current + 1, Math.max(filteredItems.length - 1, 0)));
+                  setActiveIndex((current) =>
+                    Math.min(current + 1, Math.max(filteredItems.length - 1, 0))
+                  );
                 }
                 if (!pendingAction && !nlPlan && event.key === 'ArrowUp') {
                   event.preventDefault();
                   setActiveIndex((current) => Math.max(current - 1, 0));
                 }
-                if (!pendingAction && !nlPlan && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                if (
+                  !pendingAction &&
+                  !nlPlan &&
+                  (event.metaKey || event.ctrlKey) &&
+                  event.key === 'Enter'
+                ) {
                   event.preventDefault();
                   void handleInterpretCommand();
                   return;
@@ -643,7 +816,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   onClose();
                 }
               }}
-              placeholder={selectedCompany ? `Search ${selectedCompany.name} or type a command...` : 'Search pages and records...'}
+              placeholder={
+                selectedCompany
+                  ? `Search ${selectedCompany.name} or type a command...`
+                  : 'Search pages and records...'
+              }
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
             <button
@@ -659,11 +836,21 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-            <span>{selectedCompany ? `Scope: ${selectedCompany.name}` : 'Scope: app-wide pages'}</span>
-            <span>{loading ? 'Refreshing index...' : `${filteredItems.length} results`}</span>
+            <span>
+              {selectedCompany
+                ? `Scope: ${selectedCompany.name}`
+                : 'Scope: app-wide pages'}
+            </span>
+            <span>
+              {loading
+                ? 'Refreshing index...'
+                : `${filteredItems.length} results`}
+            </span>
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
-            Press <span className="font-medium text-foreground">Ctrl+Enter</span> to translate a natural-language command into an execution plan.
+            Press{' '}
+            <span className="font-medium text-foreground">Ctrl+Enter</span> to
+            translate a natural-language command into an execution plan.
           </div>
           {!selectedCompany && (
             <div className="mt-3 rounded-2xl border border-dashed px-4 py-3 text-xs text-muted-foreground">
@@ -672,7 +859,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           )}
           {!companyCanManage && selectedCompany && (
             <div className="mt-3 rounded-2xl border border-dashed px-4 py-3 text-xs text-muted-foreground">
-              Quick actions and governance entries are hidden for your role in {selectedCompany.name}, but you can still plan safe member actions.
+              Quick actions and governance entries are hidden for your role in{' '}
+              {selectedCompany.name}, but you can still plan safe member
+              actions.
             </div>
           )}
           {actionMessage && (
@@ -684,9 +873,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
         <div className="max-h-[60vh] overflow-auto p-3">
           {pendingAction && pendingActionStyles ? (
-            <div className={`rounded-3xl border p-6 ${pendingActionStyles.panel}`}>
+            <div
+              className={`rounded-3xl border p-6 ${pendingActionStyles.panel}`}
+            >
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${pendingActionStyles.badge}`}>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${pendingActionStyles.badge}`}
+                >
                   Confirmation required
                 </span>
                 <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-muted-foreground">
@@ -695,8 +888,12 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               </div>
 
               <div className="mt-4">
-                <div className="text-xl font-semibold text-foreground">{pendingAction.confirm_title}</div>
-                <div className="mt-2 text-sm text-muted-foreground">{pendingAction.confirm_description}</div>
+                <div className="text-xl font-semibold text-foreground">
+                  {pendingAction.confirm_title}
+                </div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  {pendingAction.confirm_description}
+                </div>
               </div>
 
               <div className="mt-4 rounded-2xl border bg-white/70 px-4 py-3 text-sm text-muted-foreground">
@@ -732,37 +929,53 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                 <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-muted-foreground">
                   {getPlannerBadge(nlPlan)}
                 </span>
-                {nlPlan.planner.attempts && nlPlan.planner.attempts.length > 1 && (
-                  <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-muted-foreground">
-                    Attempts: {nlPlan.planner.attempts.length}
-                  </span>
-                )}
+                {nlPlan.planner.attempts &&
+                  nlPlan.planner.attempts.length > 1 && (
+                    <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-muted-foreground">
+                      Attempts: {nlPlan.planner.attempts.length}
+                    </span>
+                  )}
               </div>
 
               <div className="mt-4">
-                <div className="text-xl font-semibold text-foreground">{nlPlan.summary}</div>
-                <div className="mt-2 text-sm text-muted-foreground">{nlPlan.reasoning}</div>
+                <div className="text-xl font-semibold text-foreground">
+                  {nlPlan.summary}
+                </div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  {nlPlan.reasoning}
+                </div>
               </div>
 
               {nlPlan.actions.length > 0 && (
                 <div className="mt-5 space-y-3">
                   {nlPlan.actions.map((action, index) => (
-                    <div key={action.id} className="rounded-2xl border bg-white/80 px-4 py-3">
+                    <div
+                      key={action.id}
+                      className="rounded-2xl border bg-white/80 px-4 py-3"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full bg-muted px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                               Step {index + 1}
                             </span>
-                            <span className="font-medium text-foreground">{action.label}</span>
-                            <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${getExecutionBadgeClass(nlExecutionState[action.id])}`}>
+                            <span className="font-medium text-foreground">
+                              {action.label}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-1 text-[11px] font-medium ${getExecutionBadgeClass(nlExecutionState[action.id])}`}
+                            >
                               {getExecutionLabel(nlExecutionState[action.id])}
                             </span>
                           </div>
-                          <div className="mt-1 text-sm text-muted-foreground">{action.description}</div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            {action.description}
+                          </div>
                         </div>
                         <span className="rounded-full bg-background px-3 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                          {action.type === 'navigate' ? 'Navigate' : action.method}
+                          {action.type === 'navigate'
+                            ? 'Navigate'
+                            : action.method}
                         </span>
                       </div>
                     </div>
@@ -808,18 +1021,26 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   key={item.id}
                   onClick={() => handleSelect(item)}
                   className={`flex w-full items-start justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors ${
-                    index === activeIndex ? 'border-primary bg-primary/5' : 'border-transparent hover:bg-accent'
+                    index === activeIndex
+                      ? 'border-primary bg-primary/5'
+                      : 'border-transparent hover:bg-accent'
                   }`}
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-foreground">{item.label}</span>
+                      <span className="font-medium text-foreground">
+                        {item.label}
+                      </span>
                       <span className="rounded-full bg-muted px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                         {item.section}
                       </span>
-                      {item.kind === 'action' && <ActionIcon accent={item.accent} />}
+                      {item.kind === 'action' && (
+                        <ActionIcon accent={item.accent} />
+                      )}
                     </div>
-                    <div className="mt-1 truncate text-sm text-muted-foreground">{item.description}</div>
+                    <div className="mt-1 truncate text-sm text-muted-foreground">
+                      {item.description}
+                    </div>
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 </button>
@@ -827,7 +1048,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
               {filteredItems.length === 0 && (
                 <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                  No matches for this query. Try the natural language planner above.
+                  No matches for this query. Try the natural language planner
+                  above.
                 </div>
               )}
             </div>

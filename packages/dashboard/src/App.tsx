@@ -23,7 +23,11 @@ function App() {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading session...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        Loading session...
+      </div>
+    );
   }
 
   return (
@@ -36,7 +40,9 @@ function App() {
         />
         <Route
           path="/"
-          element={isAuthenticated ? <Layout /> : <Navigate to="/auth" replace />}
+          element={
+            isAuthenticated ? <Layout /> : <Navigate to="/auth" replace />
+          }
         >
           <Route index element={<DashboardPage />} />
           <Route path="agents" element={<AgentsPage />} />
@@ -54,7 +60,10 @@ function App() {
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="audit" element={<AuditLogPage />} />
         </Route>
-        <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/auth'} replace />} />
+        <Route
+          path="*"
+          element={<Navigate to={isAuthenticated ? '/' : '/auth'} replace />}
+        />
       </Routes>
     </>
   );

@@ -16,7 +16,12 @@ export type CompanyTemplate = {
   policies: Array<{
     name: string;
     description?: string | null;
-    type: 'approval_required' | 'budget_threshold' | 'delegation_limit' | 'rate_limit' | 'tool_restriction';
+    type:
+      | 'approval_required'
+      | 'budget_threshold'
+      | 'delegation_limit'
+      | 'rate_limit'
+      | 'tool_restriction';
   }>;
   tools: Array<{
     name: string;
@@ -172,7 +177,11 @@ export type TemplateAISuggestPlanner = {
   mode: 'llm' | 'rules';
   runtime?: string;
   model?: string;
-  fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_output' | null;
+  fallback_reason?:
+    | 'llm_unavailable'
+    | 'llm_failed'
+    | 'invalid_llm_output'
+    | null;
 };
 
 export type TemplateAISuggestResponse = {

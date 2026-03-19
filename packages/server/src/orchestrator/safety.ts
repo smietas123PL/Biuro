@@ -4,7 +4,10 @@ import { deliverOutgoingWebhooks } from '../services/outgoingWebhooks.js';
 
 const MAX_HEARTBEATS_PER_HOUR = 60;
 
-export async function checkSafety(agentId: string, taskId: string): Promise<{ ok: boolean; reason?: string }> {
+export async function checkSafety(
+  agentId: string,
+  taskId: string
+): Promise<{ ok: boolean; reason?: string }> {
   // 1. Circular Delegation Check
   const isCircular = await detectCircularDelegation(taskId);
   if (isCircular) return { ok: false, reason: 'Circular delegation detected' };
@@ -54,7 +57,9 @@ async function detectCircularDelegation(taskId: string): Promise<boolean> {
     if (visited.has(currentId)) return true;
     visited.add(currentId);
 
-    const res = await db.query('SELECT parent_id FROM tasks WHERE id = $1', [currentId]);
+    const res = await db.query('SELECT parent_id FROM tasks WHERE id = $1', [
+      currentId,
+    ]);
     currentId = res.rows[0]?.parent_id;
   }
 
@@ -62,7 +67,10 @@ async function detectCircularDelegation(taskId: string): Promise<boolean> {
 }
 
 export async function autoPauseAgent(agentId: string, reason: string) {
-  logger.warn({ agentId, reason }, 'Auto-pausing agent due to safety violation');
+  logger.warn(
+    { agentId, reason },
+    'Auto-pausing agent due to safety violation'
+  );
 
   await db.query(
     "UPDATE agents SET status = 'paused', config = config || $1 WHERE id = $2",
@@ -77,7 +85,13 @@ export async function autoPauseAgent(agentId: string, reason: string) {
     [agentId]
   );
 
-  const { agent_name, company_id, company_name, slack_webhook_url, discord_webhook_url } = res.rows[0];
+  const {
+    agent_name,
+    company_id,
+    company_name,
+    slack_webhook_url,
+    discord_webhook_url,
+  } = res.rows[0];
   const message = `CRITICAL SAFETY ALERT\nCompany: ${company_name}\nAgent: ${agent_name}\nReason: ${reason}\nStatus: AUTO-PAUSED`;
 
   await db.query(

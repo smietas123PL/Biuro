@@ -4,7 +4,7 @@ import Conf from 'conf';
 const config = new Conf({ projectName: 'biuro' });
 
 const client = axios.create({
-  baseURL: process.env.BIURO_API_URL || 'http://localhost:3000/api'
+  baseURL: process.env.BIURO_API_URL || 'http://localhost:3000/api',
 });
 
 client.interceptors.request.use((req) => {

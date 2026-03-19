@@ -12,7 +12,9 @@ describe('ErrorBoundary', () => {
   });
 
   it('renders a recovery screen when a child component throws', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
     render(
       <ErrorBoundary>
@@ -27,7 +29,9 @@ describe('ErrorBoundary', () => {
   });
 
   it('reloads the dashboard when the user chooses recovery', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
     const assignMock = vi.fn();
     Object.defineProperty(window, 'location', {
       value: {

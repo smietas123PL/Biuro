@@ -45,8 +45,8 @@ export class ErrorBoundary extends React.Component<
               Dashboard needs a clean refresh
             </h1>
             <p className="mt-4 text-sm text-muted-foreground">
-              A component crashed while rendering. Session data is still intact, but this screen
-              needs to reload before we continue.
+              A component crashed while rendering. Session data is still intact,
+              but this screen needs to reload before we continue.
             </p>
             {this.state.errorMessage && (
               <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

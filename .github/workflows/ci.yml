@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Collect coverage
+        run: pnpm test:coverage
+
+      - name: Build
+        run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start docker stack
+        env:
+          AUTH_ENABLED: 'false'
+          DB_PASSWORD: ci_db_password
+          GRAFANA_ADMIN_PASSWORD: ci_grafana_admin_password
+          LLM_MOCK_MODE: 'true'
+        run: docker compose up -d --build
+
+      - name: Run API and dashboard E2E smoke suite
+        run: pnpm test:e2e
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Stop docker stack
+        if: always()
+        run: docker compose down -v

@@ -1,5 +1,8 @@
 import { db } from '../db/client.js';
-import { runEmbeddingBackfill, type EmbeddingBackfillOptions } from '../services/embeddingBackfill.js';
+import {
+  runEmbeddingBackfill,
+  type EmbeddingBackfillOptions,
+} from '../services/embeddingBackfill.js';
 import { logger } from '../utils/logger.js';
 
 function parseArgs(argv: string[]): EmbeddingBackfillOptions {

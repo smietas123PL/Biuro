@@ -7,7 +7,9 @@ const JsonObjectSchema = z.record(z.unknown());
 const SupportedRuntimeSchema = z.enum(['claude', 'openai', 'gemini']);
 type SupportedRuntime = z.infer<typeof SupportedRuntimeSchema>;
 const defaultTemplateRuntime: SupportedRuntime = 'gemini';
-const supportedTemplateRuntimeSet = new Set<SupportedRuntime>(SupportedRuntimeSchema.options);
+const supportedTemplateRuntimeSet = new Set<SupportedRuntime>(
+  SupportedRuntimeSchema.options
+);
 
 function normalizeTemplateRuntime(value: unknown): SupportedRuntime {
   if (typeof value !== 'string') {
@@ -30,7 +32,13 @@ const GoalTemplateSchema = z.object({
 const PolicyTemplateSchema = z.object({
   name: z.string().min(1),
   description: z.string().nullable().optional(),
-  type: z.enum(['approval_required', 'budget_threshold', 'delegation_limit', 'rate_limit', 'tool_restriction']),
+  type: z.enum([
+    'approval_required',
+    'budget_threshold',
+    'delegation_limit',
+    'rate_limit',
+    'tool_restriction',
+  ]),
   rules: JsonObjectSchema.default({}),
   is_active: z.boolean().default(true),
 });
@@ -216,7 +224,9 @@ export function buildTemplateImportDryRun(
   const preserveCompanyIdentity = options.preserveCompanyIdentity ?? false;
   const budgetsToImport = getBudgetsToImport(template);
   const budgetChanges = budgetsToImport.map((budget) => {
-    const relatedAgent = template.agents.find((agent) => agent.ref === budget.agent_ref);
+    const relatedAgent = template.agents.find(
+      (agent) => agent.ref === budget.agent_ref
+    );
     return {
       agent_name: relatedAgent?.name ?? budget.agent_ref,
       limit_usd: budget.limit_usd,
@@ -256,23 +266,33 @@ export function buildTemplateImportDryRun(
     existingState.tools.length > 0 ||
     existingState.policies.length > 0
   ) {
-    warnings.push('This company already contains records, so importing a preset will layer more structure on top of the current setup.');
+    warnings.push(
+      'This company already contains records, so importing a preset will layer more structure on top of the current setup.'
+    );
   }
 
   if (toolNameCollisions.length > 0) {
-    warnings.push(`${toolNameCollisions.length} tool name match(es) will update existing tools instead of creating new ones.`);
+    warnings.push(
+      `${toolNameCollisions.length} tool name match(es) will update existing tools instead of creating new ones.`
+    );
   }
 
   if (agentNameCollisions.length > 0) {
-    warnings.push(`${agentNameCollisions.length} agent name match(es) already exist and importing will create additional agent records with those names.`);
+    warnings.push(
+      `${agentNameCollisions.length} agent name match(es) already exist and importing will create additional agent records with those names.`
+    );
   }
 
   if (goalTitleCollisions.length > 0) {
-    warnings.push(`${goalTitleCollisions.length} goal title match(es) already exist and importing will add more goals with those titles.`);
+    warnings.push(
+      `${goalTitleCollisions.length} goal title match(es) already exist and importing will add more goals with those titles.`
+    );
   }
 
   if (policyNameCollisions.length > 0) {
-    warnings.push(`${policyNameCollisions.length} policy name match(es) already exist and importing will add more policy rows with those names.`);
+    warnings.push(
+      `${policyNameCollisions.length} policy name match(es) already exist and importing will add more policy rows with those names.`
+    );
   }
 
   return {
@@ -282,10 +302,12 @@ export function buildTemplateImportDryRun(
       current_mission: existingState.company.mission,
       incoming_name: template.company.name,
       incoming_mission: template.company.mission ?? null,
-      resulting_name: preserveCompanyIdentity ? existingState.company.name : template.company.name,
+      resulting_name: preserveCompanyIdentity
+        ? existingState.company.name
+        : template.company.name,
       resulting_mission: preserveCompanyIdentity
         ? existingState.company.mission
-        : template.company.mission ?? null,
+        : (template.company.mission ?? null),
     },
     current: {
       goals: existingState.goals.length,
@@ -409,14 +431,22 @@ export function buildTemplatePreviewAuditDetails(args: {
   };
 }
 
-async function insertGoals(client: pg.PoolClient, companyId: string, goals: CompanyTemplate['goals']) {
+async function insertGoals(
+  client: pg.PoolClient,
+  companyId: string,
+  goals: CompanyTemplate['goals']
+) {
   const goalIdByRef = new Map<string, string>();
   let remainingGoals = [...goals];
 
   while (remainingGoals.length > 0) {
-    const insertableGoals = remainingGoals.filter((goal) => !goal.parent_ref || goalIdByRef.has(goal.parent_ref));
+    const insertableGoals = remainingGoals.filter(
+      (goal) => !goal.parent_ref || goalIdByRef.has(goal.parent_ref)
+    );
     if (insertableGoals.length === 0) {
-      throw new Error('Goal hierarchy contains missing or circular parent references');
+      throw new Error(
+        'Goal hierarchy contains missing or circular parent references'
+      );
     }
 
     for (const goal of insertableGoals) {
@@ -424,13 +454,21 @@ async function insertGoals(client: pg.PoolClient, companyId: string, goals: Comp
         `INSERT INTO goals (company_id, parent_id, title, description, status)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-        [companyId, goal.parent_ref ? goalIdByRef.get(goal.parent_ref) ?? null : null, goal.title, goal.description ?? null, goal.status]
+        [
+          companyId,
+          goal.parent_ref ? (goalIdByRef.get(goal.parent_ref) ?? null) : null,
+          goal.title,
+          goal.description ?? null,
+          goal.status,
+        ]
       );
       goalIdByRef.set(goal.ref, insertedGoal.rows[0].id);
     }
 
     const insertedRefs = new Set(insertableGoals.map((goal) => goal.ref));
-    remainingGoals = remainingGoals.filter((goal) => !insertedRefs.has(goal.ref));
+    remainingGoals = remainingGoals.filter(
+      (goal) => !insertedRefs.has(goal.ref)
+    );
   }
 
   return goalIdByRef;
@@ -438,20 +476,41 @@ async function insertGoals(client: pg.PoolClient, companyId: string, goals: Comp
 
 export const TemplateService = {
   async exportCompany(companyId: string): Promise<CompanyTemplate> {
-    const company = (await db.query(
-      'SELECT name, mission FROM companies WHERE id = $1',
-      [companyId]
-    )).rows[0];
+    const company = (
+      await db.query('SELECT name, mission FROM companies WHERE id = $1', [
+        companyId,
+      ])
+    ).rows[0];
 
     if (!company) {
       throw new Error('Company not found');
     }
 
-    const [rolesRes, goalsRes, policiesRes, toolsRes, agentsRes, agentToolsRes, budgetsRes] = await Promise.all([
-      db.query('SELECT DISTINCT role FROM user_roles WHERE company_id = $1 ORDER BY role ASC', [companyId]),
-      db.query('SELECT id, parent_id, title, description, status FROM goals WHERE company_id = $1 ORDER BY created_at ASC', [companyId]),
-      db.query('SELECT name, description, type, rules, is_active FROM policies WHERE company_id = $1 ORDER BY created_at ASC', [companyId]),
-      db.query('SELECT id, name, description, type, config FROM tools WHERE company_id = $1 ORDER BY created_at ASC', [companyId]),
+    const [
+      rolesRes,
+      goalsRes,
+      policiesRes,
+      toolsRes,
+      agentsRes,
+      agentToolsRes,
+      budgetsRes,
+    ] = await Promise.all([
+      db.query(
+        'SELECT DISTINCT role FROM user_roles WHERE company_id = $1 ORDER BY role ASC',
+        [companyId]
+      ),
+      db.query(
+        'SELECT id, parent_id, title, description, status FROM goals WHERE company_id = $1 ORDER BY created_at ASC',
+        [companyId]
+      ),
+      db.query(
+        'SELECT name, description, type, rules, is_active FROM policies WHERE company_id = $1 ORDER BY created_at ASC',
+        [companyId]
+      ),
+      db.query(
+        'SELECT id, name, description, type, config FROM tools WHERE company_id = $1 ORDER BY created_at ASC',
+        [companyId]
+      ),
       db.query(
         `SELECT id, name, role, title, runtime, model, system_prompt, config, reports_to, monthly_budget_usd
          FROM agents
@@ -477,11 +536,29 @@ export const TemplateService = {
       ),
     ]);
 
-    const goalRefById = new Map(goalsRes.rows.map((goal, index) => [goal.id as string, `goal-${index + 1}`]));
-    const toolRefById = new Map(toolsRes.rows.map((tool, index) => [tool.id as string, `tool-${index + 1}`]));
-    const agentRefById = new Map(agentsRes.rows.map((agent, index) => [agent.id as string, `agent-${index + 1}`]));
+    const goalRefById = new Map(
+      goalsRes.rows.map((goal, index) => [
+        goal.id as string,
+        `goal-${index + 1}`,
+      ])
+    );
+    const toolRefById = new Map(
+      toolsRes.rows.map((tool, index) => [
+        tool.id as string,
+        `tool-${index + 1}`,
+      ])
+    );
+    const agentRefById = new Map(
+      agentsRes.rows.map((agent, index) => [
+        agent.id as string,
+        `agent-${index + 1}`,
+      ])
+    );
 
-    const toolAssignmentsByAgent = new Map<string, CompanyTemplate['agents'][number]['tools']>();
+    const toolAssignmentsByAgent = new Map<
+      string,
+      CompanyTemplate['agents'][number]['tools']
+    >();
     for (const assignment of agentToolsRes.rows) {
       const toolRef = toolRefById.get(assignment.tool_id);
       if (!toolRef) {
@@ -506,7 +583,9 @@ export const TemplateService = {
       roles: rolesRes.rows.map((row) => row.role),
       goals: goalsRes.rows.map((goal) => ({
         ref: goalRefById.get(goal.id)!,
-        parent_ref: goal.parent_id ? goalRefById.get(goal.parent_id) ?? null : null,
+        parent_ref: goal.parent_id
+          ? (goalRefById.get(goal.parent_id) ?? null)
+          : null,
         title: goal.title,
         description: goal.description ?? null,
         status: goal.status,
@@ -534,7 +613,9 @@ export const TemplateService = {
         model: agent.model ?? null,
         system_prompt: agent.system_prompt ?? null,
         config: agent.config ?? {},
-        reports_to_ref: agent.reports_to ? agentRefById.get(agent.reports_to) ?? null : null,
+        reports_to_ref: agent.reports_to
+          ? (agentRefById.get(agent.reports_to) ?? null)
+          : null,
         monthly_budget_usd: numericToNumber(agent.monthly_budget_usd),
         tools: toolAssignmentsByAgent.get(agent.id) ?? [],
       })),
@@ -551,11 +632,17 @@ export const TemplateService = {
             spent_usd: numericToNumber(budget.spent_usd),
           };
         })
-        .filter((budget): budget is NonNullable<typeof budget> => budget !== null),
+        .filter(
+          (budget): budget is NonNullable<typeof budget> => budget !== null
+        ),
     };
   },
 
-  async importCompany(companyId: string, template: CompanyTemplate, options: TemplateImportOptions = {}) {
+  async importCompany(
+    companyId: string,
+    template: CompanyTemplate,
+    options: TemplateImportOptions = {}
+  ) {
     return db.transaction(async (client) => {
       const currentCompanyRes = await client.query(
         'SELECT name, mission FROM companies WHERE id = $1',
@@ -566,10 +653,12 @@ export const TemplateService = {
         throw new Error('Company not found');
       }
 
-      const nextCompanyName = options.preserveCompanyIdentity ? currentCompany.name : template.company.name;
+      const nextCompanyName = options.preserveCompanyIdentity
+        ? currentCompany.name
+        : template.company.name;
       const nextCompanyMission = options.preserveCompanyIdentity
-        ? currentCompany.mission ?? null
-        : template.company.mission ?? null;
+        ? (currentCompany.mission ?? null)
+        : (template.company.mission ?? null);
 
       await client.query(
         'UPDATE companies SET name = $1, mission = $2 WHERE id = $3',
@@ -588,7 +677,13 @@ export const TemplateService = {
                type = EXCLUDED.type,
                config = EXCLUDED.config
            RETURNING id`,
-          [companyId, tool.name, tool.description ?? null, tool.type, JSON.stringify(tool.config ?? {})]
+          [
+            companyId,
+            tool.name,
+            tool.description ?? null,
+            tool.type,
+            JSON.stringify(tool.config ?? {}),
+          ]
         );
         toolIdByRef.set(tool.ref, toolRes.rows[0].id);
       }
@@ -624,13 +719,15 @@ export const TemplateService = {
         const agentId = agentIdByRef.get(agent.ref);
         const managerId = agentIdByRef.get(agent.reports_to_ref);
         if (!agentId || !managerId) {
-          throw new Error(`Agent reference "${agent.ref}" has an unknown manager reference`);
+          throw new Error(
+            `Agent reference "${agent.ref}" has an unknown manager reference`
+          );
         }
 
-        await client.query(
-          'UPDATE agents SET reports_to = $1 WHERE id = $2',
-          [managerId, agentId]
-        );
+        await client.query('UPDATE agents SET reports_to = $1 WHERE id = $2', [
+          managerId,
+          agentId,
+        ]);
       }
 
       for (const agent of template.agents) {
@@ -642,7 +739,9 @@ export const TemplateService = {
         for (const assignment of agent.tools) {
           const toolId = toolIdByRef.get(assignment.tool_ref);
           if (!toolId) {
-            throw new Error(`Agent "${agent.name}" references missing tool "${assignment.tool_ref}"`);
+            throw new Error(
+              `Agent "${agent.name}" references missing tool "${assignment.tool_ref}"`
+            );
           }
 
           await client.query(
@@ -651,7 +750,12 @@ export const TemplateService = {
              ON CONFLICT (agent_id, tool_id) DO UPDATE
              SET can_execute = EXCLUDED.can_execute,
                  config = EXCLUDED.config`,
-            [agentId, toolId, assignment.can_execute, JSON.stringify(assignment.config ?? {})]
+            [
+              agentId,
+              toolId,
+              assignment.can_execute,
+              JSON.stringify(assignment.config ?? {}),
+            ]
           );
         }
       }
@@ -661,7 +765,9 @@ export const TemplateService = {
       for (const budget of budgetsToImport) {
         const agentId = agentIdByRef.get(budget.agent_ref);
         if (!agentId) {
-          throw new Error(`Budget references missing agent "${budget.agent_ref}"`);
+          throw new Error(
+            `Budget references missing agent "${budget.agent_ref}"`
+          );
         }
 
         await client.query(
@@ -678,7 +784,14 @@ export const TemplateService = {
         await client.query(
           `INSERT INTO policies (company_id, name, description, type, rules, is_active)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [companyId, policy.name, policy.description ?? null, policy.type, JSON.stringify(policy.rules ?? {}), policy.is_active]
+          [
+            companyId,
+            policy.name,
+            policy.description ?? null,
+            policy.type,
+            JSON.stringify(policy.rules ?? {}),
+            policy.is_active,
+          ]
         );
       }
 
@@ -693,22 +806,31 @@ export const TemplateService = {
     });
   },
 
-  async previewImport(companyId: string, template: CompanyTemplate, options: TemplateImportOptions = {}) {
-    const [companyRes, goalsRes, agentsRes, toolsRes, policiesRes, budgetsRes] = await Promise.all([
-      db.query('SELECT name, mission FROM companies WHERE id = $1', [companyId]),
-      db.query('SELECT title FROM goals WHERE company_id = $1', [companyId]),
-      db.query('SELECT name FROM agents WHERE company_id = $1', [companyId]),
-      db.query('SELECT name FROM tools WHERE company_id = $1', [companyId]),
-      db.query('SELECT name FROM policies WHERE company_id = $1', [companyId]),
-      db.query(
-        `SELECT b.agent_id, a.name AS agent_name
+  async previewImport(
+    companyId: string,
+    template: CompanyTemplate,
+    options: TemplateImportOptions = {}
+  ) {
+    const [companyRes, goalsRes, agentsRes, toolsRes, policiesRes, budgetsRes] =
+      await Promise.all([
+        db.query('SELECT name, mission FROM companies WHERE id = $1', [
+          companyId,
+        ]),
+        db.query('SELECT title FROM goals WHERE company_id = $1', [companyId]),
+        db.query('SELECT name FROM agents WHERE company_id = $1', [companyId]),
+        db.query('SELECT name FROM tools WHERE company_id = $1', [companyId]),
+        db.query('SELECT name FROM policies WHERE company_id = $1', [
+          companyId,
+        ]),
+        db.query(
+          `SELECT b.agent_id, a.name AS agent_name
          FROM budgets b
          JOIN agents a ON a.id = b.agent_id
          WHERE a.company_id = $1
            AND b.month = date_trunc('month', now())::date`,
-        [companyId]
-      ),
-    ]);
+          [companyId]
+        ),
+      ]);
 
     const company = companyRes.rows[0];
     if (!company) {

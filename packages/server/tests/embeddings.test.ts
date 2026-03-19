@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeterministicEmbedding, toPgVector } from '../src/services/embeddings.js';
+import {
+  buildDeterministicEmbedding,
+  toPgVector,
+} from '../src/services/embeddings.js';
 
 describe('buildDeterministicEmbedding', () => {
   it('returns a stable 1536-dim vector for the same input', () => {
-    const first = buildDeterministicEmbedding('Product roadmap for warehouse SaaS');
-    const second = buildDeterministicEmbedding('Product roadmap for warehouse SaaS');
+    const first = buildDeterministicEmbedding(
+      'Product roadmap for warehouse SaaS'
+    );
+    const second = buildDeterministicEmbedding(
+      'Product roadmap for warehouse SaaS'
+    );
 
     expect(first).toHaveLength(1536);
     expect(second).toHaveLength(1536);

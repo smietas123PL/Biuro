@@ -39,7 +39,11 @@ type MemoryRow = {
   content: string;
 };
 
-export function buildBackfillQueryOptions(batchSize: number, onlyMissing: boolean, offset: number) {
+export function buildBackfillQueryOptions(
+  batchSize: number,
+  onlyMissing: boolean,
+  offset: number
+) {
   if (onlyMissing) {
     return {
       clause: 'WHERE embedding IS NULL',
@@ -53,8 +57,16 @@ export function buildBackfillQueryOptions(batchSize: number, onlyMissing: boolea
   };
 }
 
-async function fetchKnowledgeRows(batchSize: number, onlyMissing: boolean, offset: number) {
-  const queryOptions = buildBackfillQueryOptions(batchSize, onlyMissing, offset);
+async function fetchKnowledgeRows(
+  batchSize: number,
+  onlyMissing: boolean,
+  offset: number
+) {
+  const queryOptions = buildBackfillQueryOptions(
+    batchSize,
+    onlyMissing,
+    offset
+  );
   return db.query<KnowledgeRow>(
     `SELECT id, title, content
      FROM company_knowledge
@@ -66,8 +78,16 @@ async function fetchKnowledgeRows(batchSize: number, onlyMissing: boolean, offse
   );
 }
 
-async function fetchMemoryRows(batchSize: number, onlyMissing: boolean, offset: number) {
-  const queryOptions = buildBackfillQueryOptions(batchSize, onlyMissing, offset);
+async function fetchMemoryRows(
+  batchSize: number,
+  onlyMissing: boolean,
+  offset: number
+) {
+  const queryOptions = buildBackfillQueryOptions(
+    batchSize,
+    onlyMissing,
+    offset
+  );
   return db.query<MemoryRow>(
     `SELECT id, content
      FROM agent_memory
@@ -91,7 +111,9 @@ async function backfillKnowledge(batchSize: number, onlyMissing: boolean) {
     }
 
     for (const row of res.rows) {
-      const embedding = await generateEmbedding(`${row.title}\n\n${row.content}`);
+      const embedding = await generateEmbedding(
+        `${row.title}\n\n${row.content}`
+      );
       await db.query(
         'UPDATE company_knowledge SET embedding = $1::vector WHERE id = $2',
         [toPgVector(embedding.vector), row.id]
@@ -137,7 +159,9 @@ async function backfillMemory(batchSize: number, onlyMissing: boolean) {
   return { scanned, updated };
 }
 
-export async function runEmbeddingBackfill(options: EmbeddingBackfillOptions = {}): Promise<EmbeddingBackfillSummary> {
+export async function runEmbeddingBackfill(
+  options: EmbeddingBackfillOptions = {}
+): Promise<EmbeddingBackfillSummary> {
   const batchSize = clampBatchSize(options.batchSize);
   const onlyMissing = options.onlyMissing ?? false;
   const targets = new Set(options.targets ?? ['knowledge', 'memory']);

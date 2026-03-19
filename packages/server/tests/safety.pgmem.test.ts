@@ -48,7 +48,10 @@ describe('safety pg-mem flows', () => {
     const taskA = '00000000-0000-0000-0000-000000000101';
     const taskB = '00000000-0000-0000-0000-000000000102';
 
-    await testDb.query(`INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`, [companyId]);
+    await testDb.query(
+      `INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`,
+      [companyId]
+    );
     await testDb.query(
       `INSERT INTO tasks (id, company_id, parent_id, title, status)
        VALUES ($1, $2, $3, 'Task A', 'backlog')`,
@@ -71,7 +74,10 @@ describe('safety pg-mem flows', () => {
     const taskId = '00000000-0000-0000-0000-000000000201';
     const agentId = '00000000-0000-0000-0000-000000000202';
 
-    await testDb.query(`INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`, [companyId]);
+    await testDb.query(
+      `INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`,
+      [companyId]
+    );
     await testDb.query(
       `INSERT INTO tasks (id, company_id, title, status)
        VALUES ($1, $2, 'Investigate churn', 'backlog')`,
@@ -103,7 +109,10 @@ describe('safety pg-mem flows', () => {
     const taskId = '00000000-0000-0000-0000-000000000211';
     const agentId = '00000000-0000-0000-0000-000000000212';
 
-    await testDb.query(`INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`, [companyId]);
+    await testDb.query(
+      `INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`,
+      [companyId]
+    );
     await testDb.query(
       `INSERT INTO tasks (id, company_id, title, status)
        VALUES ($1, $2, 'Investigate churn', 'backlog')`,
@@ -133,7 +142,10 @@ describe('safety pg-mem flows', () => {
     const taskId = '00000000-0000-0000-0000-000000000301';
     const agentId = '00000000-0000-0000-0000-000000000302';
 
-    await testDb.query(`INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`, [companyId]);
+    await testDb.query(
+      `INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`,
+      [companyId]
+    );
     await testDb.query(
       `INSERT INTO tasks (id, company_id, title, status)
        VALUES ($1, $2, 'Investigate churn', 'backlog')`,
@@ -162,7 +174,10 @@ describe('safety pg-mem flows', () => {
     const agentId = '00000000-0000-0000-0000-000000000402';
     const queryMock = vi.fn(async (text: string, params?: any[]) => {
       if (text.includes("UPDATE agents SET status = 'paused'")) {
-        expect(params).toEqual([JSON.stringify({ pause_reason: 'Message flood detected' }), agentId]);
+        expect(params).toEqual([
+          JSON.stringify({ pause_reason: 'Message flood detected' }),
+          agentId,
+        ]);
         return { rows: [], rowCount: 1 };
       }
 
@@ -182,7 +197,10 @@ describe('safety pg-mem flows', () => {
         };
       }
 
-      if (text.includes("INSERT INTO audit_log") && text.includes("'agent.auto_paused'")) {
+      if (
+        text.includes('INSERT INTO audit_log') &&
+        text.includes("'agent.auto_paused'")
+      ) {
         return { rows: [], rowCount: 1 };
       }
 

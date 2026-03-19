@@ -110,10 +110,14 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('Primary runtime: Gemini')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Set openai as primary runtime' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Set openai as primary runtime' })
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Move openai up' }));
     fireEvent.click(screen.getByRole('button', { name: 'Move openai up' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save runtime settings' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save runtime settings' })
+    );
 
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith(
@@ -128,7 +132,9 @@ describe('SettingsPage', () => {
       );
     });
 
-    expect(screen.getByText('Runtime routing settings saved for this company.')).toBeTruthy();
+    expect(
+      screen.getByText('Runtime routing settings saved for this company.')
+    ).toBeTruthy();
     expect(screen.getByText('Primary runtime: OpenAI')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('checkbox'));
@@ -138,7 +144,9 @@ describe('SettingsPage', () => {
     fireEvent.change(screen.getByDisplayValue('00'), {
       target: { value: '15' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save daily digest settings' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save daily digest settings' })
+    );
 
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith(
@@ -154,7 +162,9 @@ describe('SettingsPage', () => {
       );
     });
 
-    expect(screen.getByText('Daily digest settings saved for this company.')).toBeTruthy();
+    expect(
+      screen.getByText('Daily digest settings saved for this company.')
+    ).toBeTruthy();
     expect(screen.getByText('Digest disabled')).toBeTruthy();
   });
 });

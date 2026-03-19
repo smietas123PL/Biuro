@@ -25,7 +25,9 @@ describe('useApi', () => {
     await act(async () => {
       await result.current.request('/integrations/config', {
         method: 'PATCH',
-        body: JSON.stringify({ slack_webhook_url: 'https://hooks.slack.test/services/abc' }),
+        body: JSON.stringify({
+          slack_webhook_url: 'https://hooks.slack.test/services/abc',
+        }),
       });
     });
 
@@ -127,9 +129,13 @@ describe('useApi', () => {
     const { result } = renderHook(() => useApi());
 
     await act(async () => {
-      await result.current.request('/observability/traces/trace-hidden', undefined, {
-        trackTrace: false,
-      });
+      await result.current.request(
+        '/observability/traces/trace-hidden',
+        undefined,
+        {
+          trackTrace: false,
+        }
+      );
     });
 
     expect(result.current.lastTrace).toBeNull();

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrgChartPage from './OrgChartPage';
@@ -109,7 +115,9 @@ describe('OrgChartPage', () => {
             timestamp: '2026-03-19T09:58:00.000Z',
             duration_ms: 4200,
             cost_usd: 1.42,
-            details: { thought: 'Triaged the top issue and isolated the regression.' },
+            details: {
+              thought: 'Triaged the top issue and isolated the regression.',
+            },
           },
         ]);
       }
@@ -129,16 +137,24 @@ describe('OrgChartPage', () => {
     });
 
     render(
-      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <OrgChartPage />
       </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/org-chart');
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/activity-feed?limit=24', undefined, {
-        suppressError: true,
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/org-chart'
+      );
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/activity-feed?limit=24',
+        undefined,
+        {
+          suppressError: true,
+        }
+      );
     });
 
     expect(screen.getByRole('heading', { name: 'Org Chart' })).toBeTruthy();
@@ -152,19 +168,35 @@ describe('OrgChartPage', () => {
 
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith('/agents/agent-2');
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-2/heartbeats', undefined, {
-        suppressError: true,
-      });
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-2/budgets', undefined, {
-        suppressError: true,
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-2/heartbeats',
+        undefined,
+        {
+          suppressError: true,
+        }
+      );
+      expect(requestMock).toHaveBeenCalledWith(
+        '/agents/agent-2/budgets',
+        undefined,
+        {
+          suppressError: true,
+        }
+      );
     });
 
-    const sidepanel = within(screen.getByText('Command Sidepanel').closest('aside') as HTMLElement);
+    const sidepanel = within(
+      screen.getByText('Command Sidepanel').closest('aside') as HTMLElement
+    );
     expect(sidepanel.getByText('Engineering Manager')).toBeTruthy();
-    expect(sidepanel.getAllByText('Triaged the top issue and isolated the regression.').length).toBeGreaterThan(0);
+    expect(
+      sidepanel.getAllByText(
+        'Triaged the top issue and isolated the regression.'
+      ).length
+    ).toBeGreaterThan(0);
     expect(sidepanel.getByText('$34.50 / $100.00')).toBeTruthy();
-    expect(sidepanel.getByRole('link', { name: 'Open task' }).getAttribute('href')).toBe('/tasks/task-77');
+    expect(
+      sidepanel.getByRole('link', { name: 'Open task' }).getAttribute('href')
+    ).toBe('/tasks/task-77');
     expect(sidepanel.getByRole('button', { name: 'Pause agent' })).toBeTruthy();
   });
 
@@ -205,7 +237,9 @@ describe('OrgChartPage', () => {
     });
 
     render(
-      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <OrgChartPage />
       </MemoryRouter>
     );
@@ -217,20 +251,30 @@ describe('OrgChartPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Inspect Ben' }));
 
     await waitFor(() => {
-      const sidepanel = within(screen.getByText('Command Sidepanel').closest('aside') as HTMLElement);
+      const sidepanel = within(
+        screen.getByText('Command Sidepanel').closest('aside') as HTMLElement
+      );
       expect(sidepanel.getByText('Triage production queue')).toBeTruthy();
       expect(sidepanel.getByText('Working')).toBeTruthy();
-      expect(sidepanel.getByRole('button', { name: 'Pause agent' })).toBeTruthy();
+      expect(
+        sidepanel.getByRole('button', { name: 'Pause agent' })
+      ).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause agent' }));
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/agents/agent-2/pause', { method: 'POST' });
+      expect(requestMock).toHaveBeenCalledWith('/agents/agent-2/pause', {
+        method: 'POST',
+      });
     });
 
-    const sidepanel = within(screen.getByText('Command Sidepanel').closest('aside') as HTMLElement);
+    const sidepanel = within(
+      screen.getByText('Command Sidepanel').closest('aside') as HTMLElement
+    );
     expect(sidepanel.getByText('Paused')).toBeTruthy();
-    expect(sidepanel.getByRole('button', { name: 'Resume agent' })).toBeTruthy();
+    expect(
+      sidepanel.getByRole('button', { name: 'Resume agent' })
+    ).toBeTruthy();
   });
 });

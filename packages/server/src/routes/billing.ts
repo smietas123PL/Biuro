@@ -5,11 +5,15 @@ import { requireRole } from '../middleware/auth.js';
 const router: Router = Router();
 
 // 1. Get current balance
-router.get('/balance', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res) => {
-  const companyId = req.headers['x-company-id'] as string;
-  const balance = await BillingService.getBalance(companyId);
-  res.json({ balance });
-});
+router.get(
+  '/balance',
+  requireRole(['owner', 'admin', 'member', 'viewer']),
+  async (req, res) => {
+    const companyId = req.headers['x-company-id'] as string;
+    const balance = await BillingService.getBalance(companyId);
+    res.json({ balance });
+  }
+);
 
 // 2. Mock Top-Up (Stripe simulation)
 router.post('/top-up', requireRole(['owner', 'admin']), async (req, res) => {
@@ -22,12 +26,12 @@ router.post('/top-up', requireRole(['owner', 'admin']), async (req, res) => {
 
   // Simulate Stripe processing
   const stripeId = `ch_${Math.random().toString(36).substring(7)}`;
-  
+
   try {
     await BillingService.addCredits(
-      companyId, 
-      amount, 
-      'top-up', 
+      companyId,
+      amount,
+      'top-up',
       `Credit top-up via Stripe (${paymentMethodId || 'mock_card'})`,
       stripeId
     );

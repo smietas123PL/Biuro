@@ -1,4 +1,11 @@
-import { context, trace, SpanStatusCode, type Attributes, type Span, type Tracer } from '@opentelemetry/api';
+import {
+  context,
+  trace,
+  SpanStatusCode,
+  type Attributes,
+  type Span,
+  type Tracer,
+} from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -34,23 +41,34 @@ class RecentSpanExporter implements SpanExporter {
 
   constructor(private readonly limit: number) {}
 
-  export(spans: ReadableSpan[], resultCallback: (result: { code: number }) => void): void {
+  export(
+    spans: ReadableSpan[],
+    resultCallback: (result: { code: number }) => void
+  ): void {
     for (const span of spans) {
-      const durationMs = Number((span.duration[0] * 1000 + span.duration[1] / 1_000_000).toFixed(3));
+      const durationMs = Number(
+        (span.duration[0] * 1000 + span.duration[1] / 1_000_000).toFixed(3)
+      );
       this.spans.push({
         trace_id: span.spanContext().traceId,
         span_id: span.spanContext().spanId,
         parent_span_id: span.parentSpanContext?.spanId,
         name: span.name,
         kind: String(span.kind),
-        start_time: new Date(span.startTime[0] * 1000 + span.startTime[1] / 1_000_000).toISOString(),
-        end_time: new Date(span.endTime[0] * 1000 + span.endTime[1] / 1_000_000).toISOString(),
+        start_time: new Date(
+          span.startTime[0] * 1000 + span.startTime[1] / 1_000_000
+        ).toISOString(),
+        end_time: new Date(
+          span.endTime[0] * 1000 + span.endTime[1] / 1_000_000
+        ).toISOString(),
         duration_ms: durationMs,
         status_code: String(span.status.code),
         attributes: { ...span.attributes },
         events: span.events.map((event) => ({
           name: event.name,
-          timestamp: new Date(event.time[0] * 1000 + event.time[1] / 1_000_000).toISOString(),
+          timestamp: new Date(
+            event.time[0] * 1000 + event.time[1] / 1_000_000
+          ).toISOString(),
           attributes: { ...(event.attributes ?? {}) },
         })),
       });
@@ -94,7 +112,9 @@ export function initializeTracing(config?: {
 
   activeServiceName = config?.serviceName || activeServiceName;
   recentSpanExporter = new RecentSpanExporter(config?.historyLimit ?? 200);
-  const spanProcessors: SpanProcessor[] = [new SimpleSpanProcessor(recentSpanExporter)];
+  const spanProcessors: SpanProcessor[] = [
+    new SimpleSpanProcessor(recentSpanExporter),
+  ];
   if (config?.enableConsoleExporter) {
     spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
   }

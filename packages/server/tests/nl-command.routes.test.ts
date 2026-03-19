@@ -18,16 +18,26 @@ vi.mock('../src/runtime/registry.js', () => ({
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (req: express.Request, _res: express.Response, next: express.NextFunction) => {
-    const companyId = req.headers['x-company-id'];
-    const role = req.headers['x-test-role'];
-    (req as express.Request & { user?: { id: string; companyId?: string; role?: string } }).user = {
-      id: 'user-1',
-      companyId: typeof companyId === 'string' ? companyId : undefined,
-      role: typeof role === 'string' ? role : 'owner',
-    };
-    next();
-  },
+  requireRole:
+    () =>
+    (
+      req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) => {
+      const companyId = req.headers['x-company-id'];
+      const role = req.headers['x-test-role'];
+      (
+        req as express.Request & {
+          user?: { id: string; companyId?: string; role?: string };
+        }
+      ).user = {
+        id: 'user-1',
+        companyId: typeof companyId === 'string' ? companyId : undefined,
+        role: typeof role === 'string' ? role : 'owner',
+      };
+      next();
+    },
 }));
 
 import nlCommandRouter from '../src/routes/nlCommand.js';
@@ -142,26 +152,28 @@ describe('natural language command route', () => {
   });
 
   it('creates a task plan with assignee lookup for a member', async () => {
-    dbMock.query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'company-1',
-          name: 'Acme Labs',
-          mission: 'Ship safely',
-          config: {},
-        },
-      ],
-    }).mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'agent-2',
-          name: 'Ben',
-          role: 'Operator',
-          title: 'Delivery Manager',
-          status: 'idle',
-        },
-      ],
-    });
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'company-1',
+            name: 'Acme Labs',
+            mission: 'Ship safely',
+            config: {},
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'agent-2',
+            name: 'Ben',
+            role: 'Operator',
+            title: 'Delivery Manager',
+            status: 'idle',
+          },
+        ],
+      });
 
     const response = await fetch(baseUrl, {
       method: 'POST',
@@ -199,26 +211,28 @@ describe('natural language command route', () => {
   });
 
   it('refuses management actions for viewers and returns guidance', async () => {
-    dbMock.query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'company-1',
-          name: 'Acme Labs',
-          mission: 'Ship safely',
-          config: {},
-        },
-      ],
-    }).mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'agent-1',
-          name: 'Ada',
-          role: 'Research Lead',
-          title: 'Lead Strategist',
-          status: 'idle',
-        },
-      ],
-    });
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'company-1',
+            name: 'Acme Labs',
+            mission: 'Ship safely',
+            config: {},
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'agent-1',
+            name: 'Ada',
+            role: 'Research Lead',
+            title: 'Lead Strategist',
+            status: 'idle',
+          },
+        ],
+      });
 
     const response = await fetch(baseUrl, {
       method: 'POST',
@@ -237,6 +251,8 @@ describe('natural language command route', () => {
     expect(response.status).toBe(200);
     expect(payload.can_execute).toBe(false);
     expect(payload.actions).toEqual([]);
-    expect(payload.warnings).toContain('Pausing agents requires owner or admin access.');
+    expect(payload.warnings).toContain(
+      'Pausing agents requires owner or admin access.'
+    );
   });
 });

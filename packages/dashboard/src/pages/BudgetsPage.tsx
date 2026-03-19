@@ -84,21 +84,19 @@ export default function BudgetsPage() {
   const [summary, setSummary] = useState<BudgetSummary>(emptySummary);
   const [liveMessage, setLiveMessage] = useState<string | null>(null);
   const [budgetToasts, setBudgetToasts] = useState<BudgetToast[]>([]);
-  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as
-    | {
-        event: string;
-        data?: {
-          daily_cost_usd?: number;
-          delta_cost_usd?: number;
-          message?: string;
-          tone?: 'warning' | 'critical';
-          agentName?: string;
-          agent_name?: string;
-          threshold_pct?: number;
-        };
-        timestamp: string;
-      }
-    | null;
+  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as {
+    event: string;
+    data?: {
+      daily_cost_usd?: number;
+      delta_cost_usd?: number;
+      message?: string;
+      tone?: 'warning' | 'critical';
+      agentName?: string;
+      agent_name?: string;
+      threshold_pct?: number;
+    };
+    timestamp: string;
+  } | null;
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -107,10 +105,14 @@ export default function BudgetsPage() {
         return;
       }
 
-      const data = await request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
+      const data = await request(
+        `/companies/${selectedCompanyId}/budgets-summary`,
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
       setSummary(data);
     };
 
@@ -132,28 +134,39 @@ export default function BudgetsPage() {
         );
       }
 
-      void request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
-        suppressError: true,
-        trackTrace: false,
-      }).then((data) => setSummary(data as BudgetSummary));
+      void request(
+        `/companies/${selectedCompanyId}/budgets-summary`,
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      ).then((data) => setSummary(data as BudgetSummary));
     }
 
     if (lastEvent.event === 'budget.threshold') {
-      const tone: BudgetToast['tone'] = lastEvent.data?.tone === 'critical' ? 'critical' : 'warning';
-      setBudgetToasts((current) => [
+      const tone: BudgetToast['tone'] =
+        lastEvent.data?.tone === 'critical' ? 'critical' : 'warning';
+      setBudgetToasts((current) =>
+        [
+          {
+            id: `${lastEvent.timestamp}-${lastEvent.data?.threshold_pct ?? 80}`,
+            tone,
+            message:
+              lastEvent.data?.message ??
+              `${lastEvent.data?.agent_name ?? lastEvent.data?.agentName ?? 'Agent'} crossed a budget threshold.`,
+          },
+          ...current,
+        ].slice(0, 3)
+      );
+      void request(
+        `/companies/${selectedCompanyId}/budgets-summary`,
+        undefined,
         {
-          id: `${lastEvent.timestamp}-${lastEvent.data?.threshold_pct ?? 80}`,
-          tone,
-          message:
-            lastEvent.data?.message ??
-            `${lastEvent.data?.agent_name ?? lastEvent.data?.agentName ?? 'Agent'} crossed a budget threshold.`,
-        },
-        ...current,
-      ].slice(0, 3));
-      void request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
-        suppressError: true,
-        trackTrace: false,
-      }).then((data) => setSummary(data as BudgetSummary));
+          suppressError: true,
+          trackTrace: false,
+        }
+      ).then((data) => setSummary(data as BudgetSummary));
     }
   }, [lastEvent, request, selectedCompanyId]);
 
@@ -179,10 +192,17 @@ export default function BudgetsPage() {
   }, [budgetToasts]);
 
   if (!selectedCompany) {
-    return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to review budgets.</div>;
+    return (
+      <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
+        Choose a company to review budgets.
+      </div>
+    );
   }
 
-  const maxDailySpend = Math.max(...summary.daily_spend.map((point) => point.total_usd), 0);
+  const maxDailySpend = Math.max(
+    ...summary.daily_spend.map((point) => point.total_usd),
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -207,19 +227,27 @@ export default function BudgetsPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Budgets</h2>
-          <p className="text-sm text-muted-foreground">Current month spend and runway for {selectedCompany.name}</p>
+          <p className="text-sm text-muted-foreground">
+            Current month spend and runway for {selectedCompany.name}
+          </p>
         </div>
         <div className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm text-muted-foreground">
           <WalletCards className="h-4 w-4 text-emerald-600" />
-          Available credits: <span className="font-semibold text-foreground">${summary.balance_usd.toFixed(2)}</span>
+          Available credits:{' '}
+          <span className="font-semibold text-foreground">
+            ${summary.balance_usd.toFixed(2)}
+          </span>
         </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Budget Mode</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Live Budget Mode
+          </div>
           <div className="mt-2 text-sm text-muted-foreground">
-            This page auto-refreshes on heartbeat cost events and budget threshold alerts.
+            This page auto-refreshes on heartbeat cost events and budget
+            threshold alerts.
           </div>
           {liveMessage && (
             <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -229,10 +257,14 @@ export default function BudgetsPage() {
         </div>
 
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Company Budget Gauge</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Company Budget Gauge
+          </div>
           <div className="mt-2 flex items-end justify-between gap-4">
             <div className="text-4xl font-semibold tracking-tight">
-              {summary.totals.utilization_pct === null ? 'No cap' : `${summary.totals.utilization_pct.toFixed(0)}%`}
+              {summary.totals.utilization_pct === null
+                ? 'No cap'
+                : `${summary.totals.utilization_pct.toFixed(0)}%`}
             </div>
             <div className="text-right text-sm text-muted-foreground">
               <div>${summary.totals.spent_usd.toFixed(2)} spent</div>
@@ -242,13 +274,17 @@ export default function BudgetsPage() {
           <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted/30">
             <div
               className={`h-full rounded-full transition-all ${
-                summary.totals.utilization_pct !== null && summary.totals.utilization_pct >= 95
+                summary.totals.utilization_pct !== null &&
+                summary.totals.utilization_pct >= 95
                   ? 'bg-red-500'
-                  : summary.totals.utilization_pct !== null && summary.totals.utilization_pct >= 80
+                  : summary.totals.utilization_pct !== null &&
+                      summary.totals.utilization_pct >= 80
                     ? 'bg-amber-400'
                     : 'bg-emerald-500'
               }`}
-              style={{ width: `${summary.totals.utilization_pct === null ? 0 : Math.max(Math.min(summary.totals.utilization_pct, 100), 4)}%` }}
+              style={{
+                width: `${summary.totals.utilization_pct === null ? 0 : Math.max(Math.min(summary.totals.utilization_pct, 100), 4)}%`,
+              }}
             />
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
@@ -258,15 +294,35 @@ export default function BudgetsPage() {
         </div>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="Allocated This Month" value={`$${summary.totals.limit_usd.toFixed(2)}`} helper="Configured budget across active agents" />
-        <SummaryCard title="Spent So Far" value={`$${summary.totals.spent_usd.toFixed(2)}`} helper="Usage recorded in current monthly budget rows" />
-        <SummaryCard title="Remaining" value={`$${summary.totals.remaining_usd.toFixed(2)}`} helper="Budget still available before caps are hit" />
+        <SummaryCard
+          title="Allocated This Month"
+          value={`$${summary.totals.limit_usd.toFixed(2)}`}
+          helper="Configured budget across active agents"
+        />
+        <SummaryCard
+          title="Spent So Far"
+          value={`$${summary.totals.spent_usd.toFixed(2)}`}
+          helper="Usage recorded in current monthly budget rows"
+        />
+        <SummaryCard
+          title="Remaining"
+          value={`$${summary.totals.remaining_usd.toFixed(2)}`}
+          helper="Budget still available before caps are hit"
+        />
         <SummaryCard
           title="Usage Ratio"
-          value={summary.totals.utilization_pct === null ? 'No cap' : `${summary.totals.utilization_pct.toFixed(0)}%`}
+          value={
+            summary.totals.utilization_pct === null
+              ? 'No cap'
+              : `${summary.totals.utilization_pct.toFixed(0)}%`
+          }
           helper="Share of allocated budget already consumed"
         />
       </div>
@@ -275,7 +331,9 @@ export default function BudgetsPage() {
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <div className="mb-3">
             <h3 className="text-lg font-semibold">End-of-Month Forecast</h3>
-            <p className="text-sm text-muted-foreground">Projection based on the average daily spend from the last 7 days.</p>
+            <p className="text-sm text-muted-foreground">
+              Projection based on the average daily spend from the last 7 days.
+            </p>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             <ForecastMetric
@@ -296,7 +354,8 @@ export default function BudgetsPage() {
                   : `$${summary.totals.forecast.projected_over_limit_usd.toFixed(2)}`
               }
               helper={
-                summary.totals.forecast.projected_over_limit_usd && summary.totals.forecast.projected_over_limit_usd > 0
+                summary.totals.forecast.projected_over_limit_usd &&
+                summary.totals.forecast.projected_over_limit_usd > 0
                   ? 'Current pace would exceed the configured monthly cap'
                   : 'Current pace stays within the configured budget'
               }
@@ -308,10 +367,12 @@ export default function BudgetsPage() {
           <h3 className="text-lg font-semibold">Forecast Notes</h3>
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
             <p>
-              Forecast uses the last 7 calendar days, including zero-spend days, to avoid overreacting to one expensive heartbeat.
+              Forecast uses the last 7 calendar days, including zero-spend days,
+              to avoid overreacting to one expensive heartbeat.
             </p>
             <p>
-              Projection assumes current month-to-date spend stays booked and only the remaining days are extrapolated.
+              Projection assumes current month-to-date spend stays booked and
+              only the remaining days are extrapolated.
             </p>
             <p>
               Treat this as an early warning system, not a billing guarantee.
@@ -325,26 +386,44 @@ export default function BudgetsPage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold">Daily Spend</h3>
-              <p className="text-sm text-muted-foreground">Last 7 days of audit-tracked usage</p>
+              <p className="text-sm text-muted-foreground">
+                Last 7 days of audit-tracked usage
+              </p>
             </div>
-            {loading && <span className="text-xs text-muted-foreground">Refreshing...</span>}
+            {loading && (
+              <span className="text-xs text-muted-foreground">
+                Refreshing...
+              </span>
+            )}
           </div>
 
           <div className="flex h-52 items-end gap-3 rounded-2xl bg-muted/20 p-4">
             {summary.daily_spend.map((point) => {
-              const height = maxDailySpend > 0 ? Math.max((point.total_usd / maxDailySpend) * 100, 8) : 8;
-              const label = new Date(point.day).toLocaleDateString(undefined, { weekday: 'short' });
+              const height =
+                maxDailySpend > 0
+                  ? Math.max((point.total_usd / maxDailySpend) * 100, 8)
+                  : 8;
+              const label = new Date(point.day).toLocaleDateString(undefined, {
+                weekday: 'short',
+              });
 
               return (
-                <div key={point.day} className="flex flex-1 flex-col items-center gap-3">
-                  <div className="text-[11px] font-medium text-muted-foreground">${point.total_usd.toFixed(2)}</div>
+                <div
+                  key={point.day}
+                  className="flex flex-1 flex-col items-center gap-3"
+                >
+                  <div className="text-[11px] font-medium text-muted-foreground">
+                    ${point.total_usd.toFixed(2)}
+                  </div>
                   <div className="flex h-32 w-full items-end rounded-full bg-background px-1 py-1">
                     <div
                       className="w-full rounded-full bg-gradient-to-t from-sky-600 via-cyan-500 to-emerald-400 transition-all"
                       style={{ height: `${height}%` }}
                     />
                   </div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {label}
+                  </div>
                 </div>
               );
             })}
@@ -360,16 +439,24 @@ export default function BudgetsPage() {
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <div className="mb-4">
             <h3 className="text-lg font-semibold">Agent Budget Health</h3>
-            <p className="text-sm text-muted-foreground">Sorted by pressure, so the riskiest budgets float to the top.</p>
+            <p className="text-sm text-muted-foreground">
+              Sorted by pressure, so the riskiest budgets float to the top.
+            </p>
           </div>
 
           <div className="space-y-4">
             {summary.agents.map((agent) => (
-              <div key={agent.id} className="rounded-2xl border bg-muted/20 p-4">
+              <div
+                key={agent.id}
+                className="rounded-2xl border bg-muted/20 p-4"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <Link to={`/agents/${agent.id}`} className="font-semibold text-foreground transition-colors hover:text-primary">
+                      <Link
+                        to={`/agents/${agent.id}`}
+                        className="font-semibold text-foreground transition-colors hover:text-primary"
+                      >
                         {agent.name}
                       </Link>
                       <span className="rounded-full bg-background px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -379,7 +466,9 @@ export default function BudgetsPage() {
                         {agent.status}
                       </span>
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">{agent.title || agent.role}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {agent.title || agent.role}
+                    </div>
                   </div>
 
                   <Link
@@ -394,38 +483,57 @@ export default function BudgetsPage() {
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">
-                      ${agent.spent_usd.toFixed(2)} spent of ${agent.limit_usd.toFixed(2)}
+                      ${agent.spent_usd.toFixed(2)} spent of $
+                      {agent.limit_usd.toFixed(2)}
                     </span>
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-medium uppercase tracking-wide ${
-                      agent.utilization_pct !== null && agent.utilization_pct >= 95
-                        ? 'bg-red-100 text-red-700'
-                        : agent.utilization_pct !== null && agent.utilization_pct >= 80
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      {agent.utilization_pct === null ? 'No limit' : `${agent.utilization_pct.toFixed(0)}% used`}
+                    <span
+                      className={`rounded-full px-2 py-1 text-[11px] font-medium uppercase tracking-wide ${
+                        agent.utilization_pct !== null &&
+                        agent.utilization_pct >= 95
+                          ? 'bg-red-100 text-red-700'
+                          : agent.utilization_pct !== null &&
+                              agent.utilization_pct >= 80
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {agent.utilization_pct === null
+                        ? 'No limit'
+                        : `${agent.utilization_pct.toFixed(0)}% used`}
                     </span>
                   </div>
                   <div className="h-3 overflow-hidden rounded-full bg-background">
                     <div
                       className={`h-full rounded-full transition-all ${
-                        agent.utilization_pct !== null && agent.utilization_pct >= 95
+                        agent.utilization_pct !== null &&
+                        agent.utilization_pct >= 95
                           ? 'bg-red-500'
-                          : agent.utilization_pct !== null && agent.utilization_pct >= 80
+                          : agent.utilization_pct !== null &&
+                              agent.utilization_pct >= 80
                             ? 'bg-amber-400'
                             : 'bg-emerald-500'
                       }`}
-                      style={{ width: `${agent.utilization_pct === null ? 0 : Math.max(Math.min(agent.utilization_pct, 100), 4)}%` }}
+                      style={{
+                        width: `${agent.utilization_pct === null ? 0 : Math.max(Math.min(agent.utilization_pct, 100), 4)}%`,
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Remaining: ${agent.remaining_usd.toFixed(2)}</span>
-                    <span>Configured cap: ${agent.configured_limit_usd.toFixed(2)}</span>
+                    <span>
+                      Configured cap: ${agent.configured_limit_usd.toFixed(2)}
+                    </span>
                   </div>
                   <div className="rounded-xl bg-background px-3 py-2 text-xs text-muted-foreground">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>7-day avg: ${agent.forecast.avg_daily_spend_usd.toFixed(2)}/day</span>
-                      <span>Projected month: ${agent.forecast.projected_month_spend_usd.toFixed(2)}</span>
+                      <span>
+                        7-day avg: $
+                        {agent.forecast.avg_daily_spend_usd.toFixed(2)}/day
+                      </span>
+                      <span>
+                        Projected month: $
+                        {agent.forecast.projected_month_spend_usd.toFixed(2)}
+                      </span>
                     </div>
                     <div className="mt-1">
                       {agent.forecast.projected_over_limit_usd === null
@@ -451,7 +559,15 @@ export default function BudgetsPage() {
   );
 }
 
-function SummaryCard({ title, value, helper }: { title: string; value: string; helper: string }) {
+function SummaryCard({
+  title,
+  value,
+  helper,
+}: {
+  title: string;
+  value: string;
+  helper: string;
+}) {
   return (
     <div className="rounded-2xl border bg-card p-5 shadow-sm">
       <div className="text-sm text-muted-foreground">{title}</div>
@@ -461,7 +577,15 @@ function SummaryCard({ title, value, helper }: { title: string; value: string; h
   );
 }
 
-function ForecastMetric({ label, value, helper }: { label: string; value: string; helper: string }) {
+function ForecastMetric({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+}) {
   return (
     <div className="rounded-2xl border bg-muted/20 p-4">
       <div className="text-sm text-muted-foreground">{label}</div>

@@ -11,7 +11,10 @@ export async function getAgentTools(agentId: string) {
   return res.rows;
 }
 
-export async function canUseTool(agentId: string, toolName: string): Promise<boolean> {
+export async function canUseTool(
+  agentId: string,
+  toolName: string
+): Promise<boolean> {
   const res = await db.query(
     `SELECT at.can_execute 
      FROM tools t

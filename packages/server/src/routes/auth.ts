@@ -15,26 +15,30 @@ const authRateLimit = rateLimit({
   max: env.AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many authentication attempts. Please try again later.' },
+  message: {
+    error: 'Too many authentication attempts. Please try again later.',
+  },
 });
 const SESSION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
-const RegisterSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  fullName: z.string().optional(),
-  companyId: z.string().uuid().optional(),
-  companyName: z.string().min(1).optional(),
-  companyMission: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (!data.companyId && !data.companyName) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['companyName'],
-      message: 'companyName or companyId is required',
-    });
-  }
-});
+const RegisterSchema = z
+  .object({
+    email: z.string().email(),
+    password: z.string().min(8),
+    fullName: z.string().optional(),
+    companyId: z.string().uuid().optional(),
+    companyName: z.string().min(1).optional(),
+    companyMission: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.companyId && !data.companyName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['companyName'],
+        message: 'companyName or companyId is required',
+      });
+    }
+  });
 
 const LoginSchema = z.object({
   email: z.string().email(),
@@ -75,16 +79,20 @@ async function handleRegister(req: AuthRequest, res: any) {
   const result = RegisterSchema.safeParse(req.body);
   if (!result.success) return res.status(400).json({ error: result.error });
 
-  const { email, password, fullName, companyId, companyName, companyMission } = result.data;
+  const { email, password, fullName, companyId, companyName, companyMission } =
+    result.data;
 
   try {
     const payload = await db.transaction(async (client) => {
       const pwdHash = await hashPassword(password);
       const userRes = await client.query(
-        "INSERT INTO users (email, pwd_hash, full_name) VALUES ($1, $2, $3) RETURNING id",
+        'INSERT INTO users (email, pwd_hash, full_name) VALUES ($1, $2, $3) RETURNING id',
         [email, pwdHash, fullName]
       );
       const userId = userRes.rows[0].id;
+      await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [
+        userId,
+      ]);
 
       let effectiveCompanyId = companyId;
       let assignedRole = 'admin';
@@ -119,10 +127,14 @@ async function handleRegister(req: AuthRequest, res: any) {
       return { userId, token };
     });
 
-    return res.status(201).json(await buildSessionPayload(payload.userId, payload.token));
+    return res
+      .status(201)
+      .json(await buildSessionPayload(payload.userId, payload.token));
   } catch (err: any) {
     if (err.code === '23505') {
-      return res.status(409).json({ error: 'User with this email already exists' });
+      return res
+        .status(409)
+        .json({ error: 'User with this email already exists' });
     }
     return res.status(500).json({ error: err.message });
   }
@@ -138,17 +150,24 @@ router.post('/login', authRateLimit, async (req, res) => {
   const { email, password } = result.data;
 
   try {
-    const user = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (user.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+    const user = await db.query('SELECT * FROM users WHERE email = $1', [
+      email,
+    ]);
+    if (user.rows.length === 0)
+      return res.status(401).json({ error: 'Invalid credentials' });
 
     const storedPasswordHash = user.rows[0].pwd_hash as string;
     if (storedPasswordHash.startsWith('hash_')) {
-      logger.warn({ userId: user.rows[0].id }, 'Blocked legacy plaintext-style password hash');
+      logger.warn(
+        { userId: user.rows[0].id },
+        'Blocked legacy plaintext-style password hash'
+      );
       return res.status(403).json({ error: 'Legacy password reset required' });
     }
 
     const validPassword = await verifyPassword(password, storedPasswordHash);
-    if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!validPassword)
+      return res.status(401).json({ error: 'Invalid credentials' });
 
     const token = generateSessionToken();
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);

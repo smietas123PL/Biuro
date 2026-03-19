@@ -33,7 +33,9 @@ function buildAttemptChain(
   availableRuntimes: RuntimeName[],
   fallbackOrderOverride?: RuntimeName[]
 ) {
-  const configuredFallbacks = (fallbackOrderOverride ?? env.LLM_ROUTER_FALLBACK_ORDER.filter(isRuntimeName));
+  const configuredFallbacks =
+    fallbackOrderOverride ??
+    env.LLM_ROUTER_FALLBACK_ORDER.filter(isRuntimeName);
   const preferred = isRuntimeName(preferredRuntime) ? preferredRuntime : null;
   const chain = new Set<RuntimeName>();
 
@@ -77,7 +79,9 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
 
   async execute(context: AgentContext): Promise<AgentResponse> {
     if (!env.LLM_ROUTER_ENABLED) {
-      const runtimeName = isRuntimeName(this.preferredRuntime) ? this.preferredRuntime : 'gemini';
+      const runtimeName = isRuntimeName(this.preferredRuntime)
+        ? this.preferredRuntime
+        : 'gemini';
       const runtime = this.runtimes.get(runtimeName);
       if (!runtime) {
         throw new Error(`Runtime ${runtimeName} not available`);
@@ -88,7 +92,8 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
         ...response,
         routing: {
           selected_runtime: runtimeName,
-          selected_model: context.agent_model || defaultModelsByRuntime[runtimeName],
+          selected_model:
+            context.agent_model || defaultModelsByRuntime[runtimeName],
           attempts: [
             {
               runtime: runtimeName,
@@ -101,7 +106,11 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
     }
 
     const availableRuntimes = Array.from(this.runtimes.keys());
-    const attemptChain = buildAttemptChain(this.preferredRuntime, availableRuntimes, this.options?.fallbackOrder);
+    const attemptChain = buildAttemptChain(
+      this.preferredRuntime,
+      availableRuntimes,
+      this.options?.fallbackOrder
+    );
     if (attemptChain.length === 0) {
       throw new Error('No LLM runtimes available');
     }
@@ -116,7 +125,11 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
         continue;
       }
 
-      const model = resolveAttemptModel(this.preferredRuntime, runtimeName, context.agent_model);
+      const model = resolveAttemptModel(
+        this.preferredRuntime,
+        runtimeName,
+        context.agent_model
+      );
 
       try {
         const response = await startActiveSpan(
@@ -168,7 +181,10 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
         attempts.push({
           runtime: runtimeName,
           model,
-          status: retryable && index < attemptChain.length - 1 ? 'fallback' : 'failed',
+          status:
+            retryable && index < attemptChain.length - 1
+              ? 'fallback'
+              : 'failed',
           reason,
         });
         lastError = error;
@@ -192,6 +208,8 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
       }
     }
 
-    throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'LLM routing failed'));
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError ?? 'LLM routing failed'));
   }
 }

@@ -15,7 +15,9 @@ export type CompanyEventEnvelope = {
   source: string;
 };
 
-type CompanyEventHandler = (envelope: CompanyEventEnvelope) => void | Promise<void>;
+type CompanyEventHandler = (
+  envelope: CompanyEventEnvelope
+) => void | Promise<void>;
 
 class RealtimeEventBus {
   private publisher: RedisClientType | null = null;
@@ -27,7 +29,10 @@ class RealtimeEventBus {
   async initialize(options: { serviceName: string; subscribe?: boolean }) {
     if (!env.REDIS_URL) {
       setEventBusRedisConnected(false);
-      logger.info({ serviceName: options.serviceName }, 'Realtime event bus using in-memory fallback');
+      logger.info(
+        { serviceName: options.serviceName },
+        'Realtime event bus using in-memory fallback'
+      );
       return;
     }
 
@@ -35,7 +40,10 @@ class RealtimeEventBus {
       try {
         this.publisher = createClient({ url: env.REDIS_URL });
         this.publisher.on('error', (err) => {
-          logger.error({ err, serviceName: options.serviceName }, 'Redis event bus publisher error');
+          logger.error(
+            { err, serviceName: options.serviceName },
+            'Redis event bus publisher error'
+          );
         });
         await this.publisher.connect();
         this.redisTransportReady = true;
@@ -64,12 +72,18 @@ class RealtimeEventBus {
       try {
         this.subscriber = this.publisher!.duplicate();
         this.subscriber.on('error', (err) => {
-          logger.error({ err, serviceName: options.serviceName }, 'Redis event bus subscriber error');
+          logger.error(
+            { err, serviceName: options.serviceName },
+            'Redis event bus subscriber error'
+          );
         });
         await this.subscriber.connect();
-        await this.subscriber.subscribe(env.EVENT_BUS_CHANNEL, async (message) => {
-          await this.handleRedisMessage(message);
-        });
+        await this.subscriber.subscribe(
+          env.EVENT_BUS_CHANNEL,
+          async (message) => {
+            await this.handleRedisMessage(message);
+          }
+        );
         this.subscriberOwner = options.serviceName;
       } catch (err) {
         setEventBusRedisConnected(false);
@@ -93,7 +107,12 @@ class RealtimeEventBus {
     };
   }
 
-  async publish(companyId: string, event: string, data: unknown, source = 'app') {
+  async publish(
+    companyId: string,
+    event: string,
+    data: unknown,
+    source = 'app'
+  ) {
     const envelope: CompanyEventEnvelope = {
       companyId,
       event,
@@ -104,7 +123,10 @@ class RealtimeEventBus {
 
     if (this.redisTransportReady && this.publisher) {
       recordEventBusPublishMetric({ event, transport: 'redis' });
-      await this.publisher.publish(env.EVENT_BUS_CHANNEL, JSON.stringify(envelope));
+      await this.publisher.publish(
+        env.EVENT_BUS_CHANNEL,
+        JSON.stringify(envelope)
+      );
       return envelope;
     }
 
@@ -136,7 +158,11 @@ class RealtimeEventBus {
   private async handleRedisMessage(message: string) {
     try {
       const parsed = JSON.parse(message) as CompanyEventEnvelope;
-      if (!parsed || typeof parsed.companyId !== 'string' || typeof parsed.event !== 'string') {
+      if (
+        !parsed ||
+        typeof parsed.companyId !== 'string' ||
+        typeof parsed.event !== 'string'
+      ) {
         logger.warn({ message }, 'Dropping malformed realtime event payload');
         return;
       }
@@ -147,7 +173,10 @@ class RealtimeEventBus {
     }
   }
 
-  private async dispatch(envelope: CompanyEventEnvelope, transport: 'memory' | 'redis') {
+  private async dispatch(
+    envelope: CompanyEventEnvelope,
+    transport: 'memory' | 'redis'
+  ) {
     for (const [handler, consumer] of this.listeners.entries()) {
       recordEventBusDeliveryMetric({
         event: envelope.event,
@@ -161,7 +190,10 @@ class RealtimeEventBus {
 
 export const realtimeEventBus = new RealtimeEventBus();
 
-export async function initializeRealtimeEventBus(options: { serviceName: string; subscribe?: boolean }) {
+export async function initializeRealtimeEventBus(options: {
+  serviceName: string;
+  subscribe?: boolean;
+}) {
   await realtimeEventBus.initialize(options);
 }
 
@@ -172,7 +204,12 @@ export function subscribeToCompanyEvents(
   return realtimeEventBus.subscribe(consumer, handler);
 }
 
-export async function broadcastCompanyEvent(companyId: string, event: string, data: unknown, source = 'app') {
+export async function broadcastCompanyEvent(
+  companyId: string,
+  event: string,
+  data: unknown,
+  source = 'app'
+) {
   return realtimeEventBus.publish(companyId, event, data, source);
 }
 

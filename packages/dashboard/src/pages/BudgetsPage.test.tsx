@@ -40,9 +40,7 @@ describe('BudgetsPage', () => {
           projected_over_limit_usd: 2,
         },
       },
-      daily_spend: [
-        { day: '2026-03-18', total_usd: 4 },
-      ],
+      daily_spend: [{ day: '2026-03-18', total_usd: 4 }],
       agents: [
         {
           id: 'agent-1',
@@ -97,10 +95,14 @@ describe('BudgetsPage', () => {
     );
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('/companies/company-1/budgets-summary', undefined, {
-        suppressError: true,
-        trackTrace: false,
-      });
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/budgets-summary',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
     });
 
     expect(screen.getByText('Live Budget Mode')).toBeTruthy();

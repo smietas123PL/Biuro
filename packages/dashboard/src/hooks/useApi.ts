@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ApiTraceSnapshot } from '@biuro/shared';
-import { AUTH_EVENT, clearAuthToken, getAuthToken, getSelectedCompanyId } from '../lib/session';
+import {
+  AUTH_EVENT,
+  clearAuthToken,
+  getAuthToken,
+  getSelectedCompanyId,
+} from '../lib/session';
 
 const API_BASE = '/api';
 const DEFAULT_RETRY_DELAY_MS = 350;
@@ -46,11 +51,15 @@ function normalizeRequestError(error: unknown) {
   }
 
   if (typeof maybeError.status === 'number' && maybeError.status >= 500) {
-    return new Error('Server is temporarily unavailable. Please try again in a moment.');
+    return new Error(
+      'Server is temporarily unavailable. Please try again in a moment.'
+    );
   }
 
   if (maybeError instanceof TypeError) {
-    return new Error('Network request failed. Check your connection and try again.');
+    return new Error(
+      'Network request failed. Check your connection and try again.'
+    );
   }
 
   return maybeError;
@@ -87,75 +96,91 @@ export function useApi() {
     };
   }, []);
 
-  const request = useCallback(async (path: string, options?: RequestInit, config?: RequestConfig) => {
-    const controller = new AbortController();
-    activeControllersRef.current.add(controller);
-    if (mountedRef.current) {
-      setPendingRequests((count) => count + 1);
-      setError(null);
-    }
+  const request = useCallback(
+    async (path: string, options?: RequestInit, config?: RequestConfig) => {
+      const controller = new AbortController();
+      activeControllersRef.current.add(controller);
+      if (mountedRef.current) {
+        setPendingRequests((count) => count + 1);
+        setError(null);
+      }
 
-    try {
-      const method = options?.method?.toUpperCase();
-      const maxRetries = config?.retries ?? (isSafeToRetry(method) ? 1 : 0);
+      try {
+        const method = options?.method?.toUpperCase();
+        const maxRetries = config?.retries ?? (isSafeToRetry(method) ? 1 : 0);
 
-      for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-        try {
-          const token = getAuthToken();
-          const selectedCompanyId = getSelectedCompanyId();
-          const res = await fetch(`${API_BASE}${path}`, {
-            ...options,
-            signal: controller.signal,
-            headers: {
-              ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              ...(selectedCompanyId ? { 'x-company-id': selectedCompanyId } : {}),
-              ...options?.headers,
-            },
-          });
-          const data = await res.json().catch(() => null);
-          const traceId = res.headers.get('x-trace-id');
-          if (traceId && mountedRef.current && config?.trackTrace !== false) {
-            setLastTrace({
-              traceId,
-              path,
-              method: method || 'GET',
-              status: res.status,
-              capturedAt: new Date().toISOString(),
+        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+          try {
+            const token = getAuthToken();
+            const selectedCompanyId = getSelectedCompanyId();
+            const res = await fetch(`${API_BASE}${path}`, {
+              ...options,
+              signal: controller.signal,
+              headers: {
+                ...(options?.body
+                  ? { 'Content-Type': 'application/json' }
+                  : {}),
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...(selectedCompanyId
+                  ? { 'x-company-id': selectedCompanyId }
+                  : {}),
+                ...options?.headers,
+              },
             });
-          }
-          if (res.status === 401) {
-            clearAuthToken();
-          }
-          if (!res.ok) {
-            const apiError = new Error(data?.error || 'API Error') as Error & { status?: number };
-            apiError.status = res.status;
-            throw apiError;
-          }
-          return data;
-        } catch (err) {
-          if (attempt < maxRetries && isRetriableError(err)) {
-            await waitForRetry(config?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS, controller.signal);
-            continue;
-          }
+            const data = await res.json().catch(() => null);
+            const traceId = res.headers.get('x-trace-id');
+            if (traceId && mountedRef.current && config?.trackTrace !== false) {
+              setLastTrace({
+                traceId,
+                path,
+                method: method || 'GET',
+                status: res.status,
+                capturedAt: new Date().toISOString(),
+              });
+            }
+            if (res.status === 401) {
+              clearAuthToken();
+            }
+            if (!res.ok) {
+              const apiError = new Error(
+                data?.error || 'API Error'
+              ) as Error & { status?: number };
+              apiError.status = res.status;
+              throw apiError;
+            }
+            return data;
+          } catch (err) {
+            if (attempt < maxRetries && isRetriableError(err)) {
+              await waitForRetry(
+                config?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
+                controller.signal
+              );
+              continue;
+            }
 
-          throw normalizeRequestError(err);
+            throw normalizeRequestError(err);
+          }
+        }
+
+        throw new Error('API request exhausted retries');
+      } catch (err: any) {
+        if (
+          err.name !== 'AbortError' &&
+          mountedRef.current &&
+          !config?.suppressError
+        ) {
+          setError(err.message);
+        }
+        throw err;
+      } finally {
+        activeControllersRef.current.delete(controller);
+        if (mountedRef.current) {
+          setPendingRequests((count) => Math.max(0, count - 1));
         }
       }
-
-      throw new Error('API request exhausted retries');
-    } catch (err: any) {
-      if (err.name !== 'AbortError' && mountedRef.current && !config?.suppressError) {
-        setError(err.message);
-      }
-      throw err;
-    } finally {
-      activeControllersRef.current.delete(controller);
-      if (mountedRef.current) {
-        setPendingRequests((count) => Math.max(0, count - 1));
-      }
-    }
-  }, []);
+    },
+    []
+  );
 
   return { request, loading: pendingRequests > 0, error, lastTrace };
 }
@@ -185,7 +210,9 @@ export function useWebSocket(companyId?: string) {
     if (token) {
       params.set('token', token);
     }
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?${params.toString()}`);
+    const ws = new WebSocket(
+      `${protocol}//${window.location.host}/ws?${params.toString()}`
+    );
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);

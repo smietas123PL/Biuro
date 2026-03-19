@@ -9,12 +9,16 @@ export function isRuntimeName(value: unknown): value is RuntimeName {
   return value === 'claude' || value === 'openai' || value === 'gemini';
 }
 
-export function normalizeRuntimeOrder(value: unknown, fallback: RuntimeName[] = ALL_RUNTIMES): RuntimeName[] {
-  const rawValues = typeof value === 'string'
-    ? value.split(',')
-    : Array.isArray(value)
-      ? value
-      : [];
+export function normalizeRuntimeOrder(
+  value: unknown,
+  fallback: RuntimeName[] = ALL_RUNTIMES
+): RuntimeName[] {
+  const rawValues =
+    typeof value === 'string'
+      ? value.split(',')
+      : Array.isArray(value)
+        ? value
+        : [];
 
   const unique = new Set<RuntimeName>();
 
@@ -35,7 +39,10 @@ export function normalizeRuntimeOrder(value: unknown, fallback: RuntimeName[] = 
 export function getDefaultRuntimeSettings() {
   return {
     primaryRuntime: DEFAULT_PRIMARY_RUNTIME,
-    fallbackOrder: normalizeRuntimeOrder(env.LLM_ROUTER_FALLBACK_ORDER, ALL_RUNTIMES),
+    fallbackOrder: normalizeRuntimeOrder(
+      env.LLM_ROUTER_FALLBACK_ORDER,
+      ALL_RUNTIMES
+    ),
   };
 }
 
@@ -54,7 +61,10 @@ export function extractCompanyRuntimeSettings(config: unknown) {
   const primaryRuntime = isRuntimeName(maybeConfig.llm_primary_runtime)
     ? maybeConfig.llm_primary_runtime
     : defaults.primaryRuntime;
-  const fallbackOrder = normalizeRuntimeOrder(maybeConfig.llm_fallback_order, defaults.fallbackOrder);
+  const fallbackOrder = normalizeRuntimeOrder(
+    maybeConfig.llm_fallback_order,
+    defaults.fallbackOrder
+  );
 
   return {
     primaryRuntime,

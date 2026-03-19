@@ -7,14 +7,23 @@ const dbMock = vi.hoisted(() => ({
   transaction: vi.fn(),
 }));
 const runtimeExecuteMock = vi.hoisted(() => vi.fn());
-const getRuntimeMock = vi.hoisted(() => vi.fn(() => ({ execute: runtimeExecuteMock })));
+const getRuntimeMock = vi.hoisted(() =>
+  vi.fn(() => ({ execute: runtimeExecuteMock }))
+);
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
-  requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+  requireRole:
+    () =>
+    (
+      _req: express.Request,
+      _res: express.Response,
+      next: express.NextFunction
+    ) =>
+      next(),
 }));
 
 vi.mock('../src/runtime/registry.js', () => ({
@@ -68,13 +77,15 @@ describe('goals routes', () => {
     runtimeExecuteMock.mockResolvedValue({
       thought: JSON.stringify({
         title: 'Launch the partner program',
-        description: 'Coordinate the partner launch with clear sequencing and ownership.',
+        description:
+          'Coordinate the partner launch with clear sequencing and ownership.',
         goals: [
           {
             ref: 'goal-root',
             parent_ref: null,
             title: 'Launch the partner program',
-            description: 'Coordinate the partner launch with clear sequencing and ownership.',
+            description:
+              'Coordinate the partner launch with clear sequencing and ownership.',
             status: 'active',
           },
           {
@@ -88,7 +99,8 @@ describe('goals routes', () => {
             ref: 'goal-onboarding',
             parent_ref: 'goal-root',
             title: 'Prepare onboarding motion',
-            description: 'Document the path from signed partner to activated partner.',
+            description:
+              'Document the path from signed partner to activated partner.',
             status: 'active',
           },
         ],
@@ -97,7 +109,8 @@ describe('goals routes', () => {
             ref: 'task-1',
             goal_ref: 'goal-ops',
             title: 'Starter: Define the launch scope',
-            description: 'Write the first scope draft and list open launch decisions.',
+            description:
+              'Write the first scope draft and list open launch decisions.',
             priority: 80,
             suggested_agent_id: '11111111-1111-4111-8111-111111111111',
             suggested_agent_name: 'Mina',
@@ -110,7 +123,9 @@ describe('goals routes', () => {
       routing: {
         selected_runtime: 'claude',
         selected_model: 'claude-sonnet',
-        attempts: [{ runtime: 'claude', model: 'claude-sonnet', status: 'success' }],
+        attempts: [
+          { runtime: 'claude', model: 'claude-sonnet', status: 'success' },
+        ],
       },
     });
 
@@ -123,7 +138,10 @@ describe('goals routes', () => {
               id: 'company-1',
               name: 'QA Test Corp',
               mission: 'Scale a reliable operating system',
-              config: { llm_primary_runtime: 'claude', llm_fallback_order: ['openai', 'gemini'] },
+              config: {
+                llm_primary_runtime: 'claude',
+                llm_fallback_order: ['openai', 'gemini'],
+              },
             },
           ],
         };
@@ -225,8 +243,10 @@ describe('goals routes', () => {
       throw new Error(`Unexpected transaction query: ${text}`);
     });
 
-    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof clientQueryMock }) => Promise<unknown>) =>
-      fn({ query: clientQueryMock } as never)
+    dbMock.transaction.mockImplementation(
+      async (
+        fn: (client: { query: typeof clientQueryMock }) => Promise<unknown>
+      ) => fn({ query: clientQueryMock } as never)
     );
     dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
       if (text.includes(`'goal.decomposition_applied'`)) {
@@ -234,7 +254,11 @@ describe('goals routes', () => {
         expect(params?.[1]).toBe('goal-db-root');
         const details = JSON.parse(String(params?.[2]));
         expect(details.created_goal_count).toBe(3);
-        expect(details.created_goal_ids).toEqual(['goal-db-root', 'goal-db-child-1', 'goal-db-child-2']);
+        expect(details.created_goal_ids).toEqual([
+          'goal-db-root',
+          'goal-db-child-1',
+          'goal-db-child-2',
+        ]);
         expect(details.created_task_count).toBe(1);
         expect(details.created_task_ids).toEqual(['task-db-1']);
         return { rows: [], rowCount: 1 };
@@ -257,13 +281,15 @@ describe('goals routes', () => {
       body: JSON.stringify({
         suggestion: {
           title: 'Launch the partner program',
-          description: 'Coordinate the partner launch with clear sequencing and ownership.',
+          description:
+            'Coordinate the partner launch with clear sequencing and ownership.',
           goals: [
             {
               ref: 'goal-root',
               parent_ref: null,
               title: 'Launch the partner program',
-              description: 'Coordinate the partner launch with clear sequencing and ownership.',
+              description:
+                'Coordinate the partner launch with clear sequencing and ownership.',
               status: 'active',
             },
             {
@@ -277,7 +303,8 @@ describe('goals routes', () => {
               ref: 'goal-onboarding',
               parent_ref: 'goal-root',
               title: 'Prepare onboarding motion',
-              description: 'Document the path from signed partner to activated partner.',
+              description:
+                'Document the path from signed partner to activated partner.',
               status: 'active',
             },
           ],
@@ -286,7 +313,8 @@ describe('goals routes', () => {
               ref: 'task-1',
               goal_ref: 'goal-ops',
               title: 'Starter: Define the launch scope',
-              description: 'Write the first scope draft and list open launch decisions.',
+              description:
+                'Write the first scope draft and list open launch decisions.',
               priority: 80,
               suggested_agent_id: '11111111-1111-4111-8111-111111111111',
               suggested_agent_name: 'Mina',

@@ -23,8 +23,13 @@ router.post('/', async (req: AuthRequest, res) => {
   const { title, content, metadata } = parsed.data;
   const companyId = req.user?.companyId;
   if (!companyId) return res.status(400).json({ error: 'Company ID missing' });
-  
-  const id = await KnowledgeService.addDocument(companyId, title, content, metadata);
+
+  const id = await KnowledgeService.addDocument(
+    companyId,
+    title,
+    content,
+    metadata
+  );
   res.json({ id });
 });
 
@@ -36,10 +41,15 @@ router.get('/search', async (req: AuthRequest, res) => {
 
   const companyId = req.user?.companyId;
   if (!companyId) return res.status(400).json({ error: 'Company ID missing' });
-  
-  const results = await KnowledgeService.search(companyId, parsed.data.q, parsed.data.limit, {
-    consumer: 'knowledge_api',
-  });
+
+  const results = await KnowledgeService.search(
+    companyId,
+    parsed.data.q,
+    parsed.data.limit,
+    {
+      consumer: 'knowledge_api',
+    }
+  );
   res.json(results);
 });
 

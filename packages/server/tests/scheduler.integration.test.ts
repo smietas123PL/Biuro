@@ -7,6 +7,7 @@ const dbMock = vi.hoisted(() => ({
 const envMock = vi.hoisted(() => ({
   HEARTBEAT_INTERVAL_MS: 1000,
   MAX_CONCURRENT_HEARTBEATS: 2,
+  DAILY_DIGEST_SWEEP_INTERVAL_MS: 60000,
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ const acknowledgeSchedulerWakeupMock = vi.hoisted(() => vi.fn());
 const enqueueCompanyWakeupMock = vi.hoisted(() => vi.fn());
 const closeSchedulerQueueMock = vi.hoisted(() => vi.fn());
 const isSchedulerQueueEnabledMock = vi.hoisted(() => vi.fn(() => false));
+const dispatchDueDailyDigestsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -47,6 +49,10 @@ vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
   enqueueCompanyWakeup: enqueueCompanyWakeupMock,
   closeSchedulerQueue: closeSchedulerQueueMock,
   isSchedulerQueueEnabled: isSchedulerQueueEnabledMock,
+}));
+
+vi.mock('../src/services/dailyDigest.js', () => ({
+  dispatchDueDailyDigests: dispatchDueDailyDigestsMock,
 }));
 
 import { getActiveHeartbeatCount, startOrchestrator, stopOrchestrator } from '../src/orchestrator/scheduler.js';
@@ -75,9 +81,12 @@ describe('scheduler orchestration', () => {
     enqueueCompanyWakeupMock.mockReset();
     closeSchedulerQueueMock.mockReset();
     isSchedulerQueueEnabledMock.mockReset();
+    dispatchDueDailyDigestsMock.mockReset();
     isSchedulerQueueEnabledMock.mockReturnValue(false);
     envMock.HEARTBEAT_INTERVAL_MS = 1000;
     envMock.MAX_CONCURRENT_HEARTBEATS = 2;
+    envMock.DAILY_DIGEST_SWEEP_INTERVAL_MS = 60000;
+    dispatchDueDailyDigestsMock.mockResolvedValue([]);
   });
 
   afterEach(async () => {
@@ -103,6 +112,7 @@ describe('scheduler orchestration', () => {
     expect(processAgentHeartbeatMock).toHaveBeenCalledTimes(2);
     expect(processAgentHeartbeatMock).toHaveBeenNthCalledWith(1, 'agent-1');
     expect(processAgentHeartbeatMock).toHaveBeenNthCalledWith(2, 'agent-2');
+    expect(dispatchDueDailyDigestsMock).toHaveBeenCalledTimes(1);
   });
 
   it('reduces the next scheduler batch when heartbeats are still in flight', async () => {

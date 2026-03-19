@@ -17,8 +17,7 @@ const autoPauseAgentMock = vi.hoisted(() => vi.fn());
 const broadcastCompanyEventMock = vi.hoisted(() => vi.fn());
 const findRelatedMemoriesMock = vi.hoisted(() => vi.fn());
 const storeMemoryMock = vi.hoisted(() => vi.fn());
-const alertSlackMock = vi.hoisted(() => vi.fn());
-const alertDiscordMock = vi.hoisted(() => vi.fn());
+const deliverOutgoingWebhooksMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -64,11 +63,8 @@ vi.mock('../src/orchestrator/memory.js', () => ({
   storeMemory: storeMemoryMock,
 }));
 
-vi.mock('../src/services/notifications.js', () => ({
-  NotificationService: {
-    alertSlack: alertSlackMock,
-    alertDiscord: alertDiscordMock,
-  },
+vi.mock('../src/services/outgoingWebhooks.js', () => ({
+  deliverOutgoingWebhooks: deliverOutgoingWebhooksMock,
 }));
 
 import { applyAgentBudgetSpend, processAgentHeartbeat } from '../src/orchestrator/heartbeat.js';
@@ -89,8 +85,7 @@ describe('heartbeat integration flows', () => {
     broadcastCompanyEventMock.mockReset();
     findRelatedMemoriesMock.mockReset();
     storeMemoryMock.mockReset();
-    alertSlackMock.mockReset();
-    alertDiscordMock.mockReset();
+    deliverOutgoingWebhooksMock.mockReset();
   });
 
   it('keeps budget updates atomic and reports a capped spend path', async () => {
@@ -215,6 +210,16 @@ describe('heartbeat integration flows', () => {
       expect.objectContaining({
         agentId: 'agent-1',
         taskId: 'task-1',
+      }),
+      'worker'
+    );
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      'company-1',
+      'agent.thought',
+      expect.objectContaining({
+        agent_id: 'agent-1',
+        task_id: 'task-1',
+        thought: 'Done.',
       }),
       'worker'
     );
@@ -351,7 +356,9 @@ describe('heartbeat integration flows', () => {
 
       return { rows: [] };
     });
-    alertSlackMock.mockResolvedValue({ ok: true });
+    deliverOutgoingWebhooksMock.mockResolvedValue([
+      { target: 'slack', status: 'success', error: null },
+    ]);
 
     await processAgentHeartbeat('agent-1');
 
@@ -384,9 +391,14 @@ describe('heartbeat integration flows', () => {
       }),
       'worker'
     );
-    expect(alertSlackMock).toHaveBeenCalledWith(
-      'https://hooks.slack.test/services/alerts',
-      expect.stringContaining('Ada reached 82.0% of monthly budget')
+    expect(deliverOutgoingWebhooksMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: 'company-1',
+        agentId: 'agent-1',
+        event: 'budget.threshold',
+        slackWebhookUrl: 'https://hooks.slack.test/services/alerts',
+        slackText: expect.stringContaining('Ada reached 82.0% of monthly budget'),
+      })
     );
   });
 

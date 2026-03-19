@@ -2,6 +2,8 @@ export type {
   RuntimeName,
   CompanyRuntimeSettingsResponse,
   CompanyRuntimeSettingsUpdate,
+  CompanyDigestSettingsResponse,
+  CompanyDigestSettingsUpdate,
 } from './runtime.js';
 export type {
   ApiTraceSnapshot,
@@ -21,4 +23,15 @@ export type {
   TemplateMarketplaceListResponse,
   TemplateImportDryRun,
   TemplateMarketplaceDryRunResponse,
+  TemplateAISuggestion,
+  TemplateAISuggestPlanner,
+  TemplateAISuggestResponse,
 } from './templates.js';
+export type {
+  GoalDecompositionDraftGoal,
+  GoalDecompositionDraftTask,
+  GoalDecompositionSuggestion,
+  GoalDecompositionPlanner,
+  GoalDecompositionSuggestResponse,
+  GoalDecompositionApplyResponse,
+} from './goals.js';

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const dbMock = vi.hoisted(() => ({
   query: vi.fn(),
 }));
+const enqueueCompanyWakeupMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -12,6 +13,10 @@ vi.mock('../src/db/client.js', () => ({
 
 vi.mock('../src/middleware/auth.js', () => ({
   requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+}));
+
+vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
+  enqueueCompanyWakeup: enqueueCompanyWakeupMock,
 }));
 
 import agentsRouter from '../src/routes/agents.js';
@@ -203,6 +208,7 @@ describe('agent routes', () => {
 
   beforeEach(async () => {
     dbMock.query.mockReset();
+    enqueueCompanyWakeupMock.mockReset();
 
     const app = express();
     app.use(express.json());
@@ -377,5 +383,164 @@ describe('agent routes', () => {
     );
 
     expect(dbMock.query).toHaveBeenCalledTimes(10);
+  });
+
+  it('creates a replay fork task from a historical event and enqueues a rerun', async () => {
+    dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
+      if (text === 'SELECT id, company_id, name, role, status FROM agents WHERE id = $1') {
+        return {
+          rows: [{ id: 'agent-1', company_id: 'company-1', name: 'Ada', role: 'Research Lead', status: 'active' }],
+        };
+      }
+
+      if (String(text).includes('FROM heartbeats h')) {
+        return {
+          rows: [
+            {
+              id: 'heartbeat-1',
+              task_id: 'task-1',
+              task_title: 'Research customer pain points',
+              status: 'completed',
+              duration_ms: 4200,
+              cost_usd: '1.75',
+              details: { thought: 'Summarized the interview notes.' },
+              created_at: '2026-03-18T10:02:00.000Z',
+            },
+          ],
+        };
+      }
+
+      if (String(text).includes('FROM audit_log')) {
+        return {
+          rows: [
+            {
+              id: 'audit-1',
+              action: 'task.started',
+              details: { reason: 'Picked the highest-priority queued task.' },
+              cost_usd: null,
+              created_at: '2026-03-18T10:00:00.000Z',
+            },
+          ],
+        };
+      }
+
+      if (String(text).includes('FROM messages m')) {
+        return {
+          rows: [
+            {
+              id: 'message-1',
+              task_id: 'task-1',
+              task_title: 'Research customer pain points',
+              from_agent: 'agent-1',
+              to_agent: 'agent-2',
+              content: 'Initial findings are ready for review.',
+              type: 'message',
+              metadata: { channel: 'internal' },
+              created_at: '2026-03-18T10:01:00.000Z',
+            },
+          ],
+        };
+      }
+
+      if (String(text).includes('FROM agent_sessions s')) {
+        return {
+          rows: [
+            {
+              id: 'session-1',
+              task_id: 'task-1',
+              task_title: 'Research customer pain points',
+              state: { summary: 'Paused pending product sign-off.', cursor: 3 },
+              updated_at: '2026-03-18T10:01:30.000Z',
+            },
+          ],
+        };
+      }
+
+      if (String(text).includes('FROM tasks') && String(text).includes('WHERE id = $1')) {
+        return {
+          rows: [
+            {
+              id: 'task-1',
+              company_id: 'company-1',
+              goal_id: null,
+              parent_id: null,
+              title: 'Research customer pain points',
+              description: 'Talk to customers and summarize themes.',
+              priority: 7,
+            },
+          ],
+        };
+      }
+
+      if (String(text).includes('FROM messages') && String(text).includes('created_at <=')) {
+        return {
+          rows: [
+            {
+              company_id: 'company-1',
+              from_agent: 'agent-1',
+              to_agent: null,
+              content: 'Initial findings are ready for review.',
+              type: 'message',
+              metadata: { copied: true },
+            },
+          ],
+        };
+      }
+
+      if (String(text).includes('INSERT INTO tasks')) {
+        expect(params?.[0]).toBe('company-1');
+        expect(params?.[2]).toBe('task-1');
+        expect(params?.[3]).toBe('Research customer pain points (Fork)');
+        expect(params?.[5]).toBe('agent-1');
+        return {
+          rows: [{ id: 'task-fork-1', title: 'Research customer pain points (Fork)', company_id: 'company-1' }],
+        };
+      }
+
+      if (String(text).includes('INSERT INTO messages')) {
+        return { rows: [] };
+      }
+
+      if (String(text).includes('INSERT INTO agent_sessions')) {
+        expect(String(params?.[2])).toContain('forked_from');
+        expect(String(params?.[2])).toContain('Try a more decisive recommendation');
+        return { rows: [] };
+      }
+
+      if (String(text).includes('INSERT INTO audit_log')) {
+        return { rows: [] };
+      }
+
+      throw new Error(`Unexpected query: ${text}`);
+    });
+
+    const response = await fetch(`${baseUrl}/agent-1/replay/fork`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        replay_event_id: 'heartbeat:heartbeat-1',
+        task_id: 'task-1',
+        types: ['heartbeat'],
+        prompt_override: 'Try a more decisive recommendation.',
+      }),
+    });
+
+    expect(response.status).toBe(201);
+
+    const payload = await response.json();
+    expect(payload).toMatchObject({
+      ok: true,
+      task_id: 'task-fork-1',
+      task_title: 'Research customer pain points (Fork)',
+      source_task_id: 'task-1',
+      source_event_id: 'heartbeat:heartbeat-1',
+      restored_message_count: 1,
+      seeded_session: true,
+      prompt_override_applied: true,
+    });
+    expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith('company-1', 'replay_fork_created', {
+      taskId: 'task-fork-1',
+      agentId: 'agent-1',
+    });
   });
 });

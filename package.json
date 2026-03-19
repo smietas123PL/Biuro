@@ -12,6 +12,8 @@
     "build": "pnpm recursive run build",
     "start": "pnpm --filter @biuro/server start",
     "worker": "pnpm --filter @biuro/server worker",
+    "test:cli": "pnpm --filter @biuro/cli test",
+    "test:dashboard": "pnpm --filter @biuro/dashboard test",
     "migrate": "pnpm --filter @biuro/server migrate",
     "migrate:status": "pnpm --filter @biuro/server migrate:status",
     "migrate:verify": "pnpm --filter @biuro/server migrate:verify",

@@ -138,6 +138,25 @@ describe('integration routes', () => {
       base_url: 'https://biuro.example.com',
       slack: {
         interactions_url: 'https://biuro.example.com/api/integrations/slack/interactions',
+        approval_actions: {
+          ready: true,
+          status: 'Ready for one-click approvals',
+          requirements: [
+            {
+              label:
+                'Interactivity endpoint exposed at https://biuro.example.com/api/integrations/slack/interactions',
+              met: true,
+            },
+            {
+              label: 'SLACK_SIGNING_SECRET configured on the server',
+              met: true,
+            },
+            {
+              label: 'Outgoing Slack webhook saved for this company',
+              met: true,
+            },
+          ],
+        },
       },
       outgoing: {
         slack_webhook_url: 'https://hooks.slack.test/services/current',
@@ -442,6 +461,7 @@ describe('integration routes', () => {
     const payloadResponse = await response.json();
     expect(payloadResponse).toMatchObject({
       replace_original: true,
+      response_type: 'in_channel',
       text: 'Approved: Prepare launch notes',
     });
     expect(payloadResponse.blocks[0]).toMatchObject({
@@ -451,11 +471,70 @@ describe('integration routes', () => {
         text: '*Approved* for *Prepare launch notes*',
       },
     });
+    expect(payloadResponse.blocks[1]).toMatchObject({
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: '*Status*\nApproved' },
+        { type: 'mrkdwn', text: '*Resolved by*\nops-lead' },
+      ],
+    });
 
     expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('FROM approvals a');
     expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('UPDATE approvals');
     expect(String(dbMock.query.mock.calls[2]?.[0])).toContain("SET status = CASE WHEN assigned_to IS NULL THEN 'backlog' ELSE 'assigned' END");
     expect(String(dbMock.query.mock.calls[3]?.[0])).toContain('INSERT INTO messages');
     expect(String(dbMock.query.mock.calls[4]?.[0])).toContain('approval.resolved');
+  });
+
+  it('handles Slack reject actions for already resolved approvals without mutating state again', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'approval-9',
+          company_id: 'company-1',
+          task_id: 'task-9',
+          reason: 'High-risk production deploy',
+          status: 'approved',
+          task_title: 'Ship migration rollback',
+        },
+      ],
+    });
+
+    const payload = JSON.stringify({
+      type: 'block_actions',
+      user: {
+        id: 'U999',
+        name: 'release-manager',
+      },
+      actions: [
+        {
+          action_id: 'approval.reject',
+          value: JSON.stringify({ approval_id: 'approval-9' }),
+        },
+      ],
+    });
+    const body = new URLSearchParams({ payload }).toString();
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = `v0=${createHmac('sha256', 'slack-secret')
+      .update(`v0:${timestamp}:${body}`)
+      .digest('hex')}`;
+
+    const response = await fetch(`${baseUrl}/slack/interactions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-slack-request-timestamp': timestamp,
+        'x-slack-signature': signature,
+      },
+      body,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      replace_original: true,
+      response_type: 'in_channel',
+      text: 'Rejected: Ship migration rollback',
+    });
+    expect(dbMock.query).toHaveBeenCalledTimes(1);
   });
 });

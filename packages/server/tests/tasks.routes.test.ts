@@ -79,13 +79,14 @@ describe('task routes', () => {
             depth: 0,
             created_at: '2026-03-18T10:00:00.000Z',
             updated_at: '2026-03-18T10:05:00.000Z',
+            completed_at: null,
           },
           {
             id: 'task-child',
             parent_id: 'task-root',
             title: 'Delegated: Validate messaging',
             description: 'Pressure-test the headline hierarchy.',
-            status: 'assigned',
+            status: 'done',
             assigned_to: 'agent-2',
             assigned_to_name: 'Ben',
             assigned_to_role: 'Messaging Specialist',
@@ -94,6 +95,7 @@ describe('task routes', () => {
             depth: 1,
             created_at: '2026-03-18T10:02:00.000Z',
             updated_at: '2026-03-18T10:04:00.000Z',
+            completed_at: '2026-03-18T10:04:00.000Z',
           },
         ],
       })
@@ -147,6 +149,12 @@ describe('task routes', () => {
             created_at: '2026-03-18T10:01:30.000Z',
           },
         ],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
       });
 
     const response = await fetch(`${baseUrl}/task-child/collaboration`);
@@ -172,6 +180,10 @@ describe('task routes', () => {
     expect(payload.timeline[0]).toMatchObject({
       agent_name: 'Ada',
       content: 'Ben should challenge the narrative before we lock copy.',
+    });
+    expect(payload.tasks.find((item: any) => item.id === 'task-child')).toMatchObject({
+      completed_at: '2026-03-18T10:04:00.000Z',
+      status: 'done',
     });
   });
 

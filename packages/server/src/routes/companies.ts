@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import type { CompanyRuntimeSettingsResponse, RuntimeName } from '@biuro/shared';
+import type {
+  CompanyDigestSettingsResponse,
+  CompanyRuntimeSettingsResponse,
+  RuntimeName,
+} from '@biuro/shared';
 import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../middleware/auth.js';
@@ -11,6 +15,8 @@ import {
   getDefaultRuntimeSettings,
   normalizeRuntimeOrder,
 } from '../runtime/preferences.js';
+import { extractCompanyDigestSettings, getDefaultDailyDigestSettings } from '../services/dailyDigest.js';
+import { getMemoryInsights } from '../services/memoryInsights.js';
 
 const router: Router = Router();
 
@@ -37,9 +43,17 @@ const auditLogFilterSchema = z.object({
 const retrievalMetricsSchema = z.object({
   days: z.coerce.number().int().min(1).max(90).default(7),
 });
+const memoryInsightsSchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(30),
+});
 const runtimeSettingsSchema = z.object({
   primary_runtime: z.enum(['claude', 'openai', 'gemini']),
   fallback_order: z.array(z.enum(['claude', 'openai', 'gemini'])).min(1).max(3),
+});
+const digestSettingsSchema = z.object({
+  enabled: z.boolean(),
+  hour_utc: z.number().int().min(0).max(23),
+  minute_utc: z.number().int().min(0).max(59),
 });
 
 function clampLimit(value: unknown, fallback: number, max: number) {
@@ -74,6 +88,23 @@ function buildRuntimeSettingsPayload(config: unknown) {
       fallback_order: defaults.fallbackOrder,
     },
     available_runtimes: ALL_RUNTIMES,
+  };
+}
+
+function buildDigestSettingsPayload(company: { id: string; name: string; config?: unknown }): CompanyDigestSettingsResponse {
+  const resolved = extractCompanyDigestSettings(company.config);
+  const defaults = getDefaultDailyDigestSettings();
+  return {
+    company_id: company.id,
+    company_name: company.name,
+    enabled: resolved.enabled,
+    hour_utc: resolved.hourUtc,
+    minute_utc: resolved.minuteUtc,
+    system_defaults: {
+      enabled: defaults.enabled,
+      hour_utc: defaults.hourUtc,
+      minute_utc: defaults.minuteUtc,
+    },
   };
 }
 
@@ -249,6 +280,75 @@ router.patch('/:id/runtime-settings', requireRole(['owner', 'admin']), async (re
   }
 });
 
+router.get('/:id/digest-settings', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
+  try {
+    const result = await db.query('SELECT id, name, config FROM companies WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    res.json(buildDigestSettingsPayload(result.rows[0]));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/:id/digest-settings', requireRole(['owner', 'admin']), async (req: AuthRequest, res, next) => {
+  try {
+    const parsed = digestSettingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error });
+    }
+
+    const result = await db.transaction(async (client) => {
+      const companyRes = await client.query('SELECT id, name, config FROM companies WHERE id = $1', [req.params.id]);
+      if (companyRes.rows.length === 0) {
+        return null;
+      }
+
+      const currentConfig = companyRes.rows[0].config && typeof companyRes.rows[0].config === 'object'
+        ? companyRes.rows[0].config
+        : {};
+
+      const mergedConfig = {
+        ...currentConfig,
+        daily_digest_enabled: parsed.data.enabled,
+        daily_digest_hour_utc: parsed.data.hour_utc,
+        daily_digest_minute_utc: parsed.data.minute_utc,
+      };
+
+      const updateRes = await client.query(
+        'UPDATE companies SET config = $2 WHERE id = $1 RETURNING id, name, config',
+        [req.params.id, JSON.stringify(mergedConfig)]
+      );
+
+      await client.query(
+        `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
+         VALUES ($1, 'company.digest_settings_updated', 'company', $1, $2)`,
+        [
+          req.params.id,
+          JSON.stringify({
+            enabled: parsed.data.enabled,
+            hour_utc: parsed.data.hour_utc,
+            minute_utc: parsed.data.minute_utc,
+            updated_by: req.user?.id ?? null,
+          }),
+        ]
+      );
+
+      return updateRes.rows[0];
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    res.json(buildDigestSettingsPayload(result));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Stats
 router.get('/:id/stats', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
   try {
@@ -336,6 +436,7 @@ router.get('/:id/activity-feed', requireRole(['owner', 'admin', 'member', 'viewe
         agent_name: row.agent_name,
         task_id: row.task_id,
         task_title: row.task_title,
+        thought: row.details?.thought || null,
         summary:
           row.details?.thought ||
           (row.status === 'worked' ? 'Completed a heartbeat cycle.' : `Heartbeat status: ${row.status}`),
@@ -503,6 +604,25 @@ router.get('/:id/retrieval-metrics', requireRole(['owner', 'admin', 'member', 'v
       recent: recentRes.rows,
     });
   } catch (err) { next(err); }
+});
+
+router.get('/:id/memory-insights', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
+  try {
+    const parsed = memoryInsightsSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error });
+    }
+
+    const companyId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    if (!companyId) {
+      return res.status(400).json({ error: 'Invalid company ID' });
+    }
+
+    const insights = await getMemoryInsights(companyId, parsed.data.days);
+    res.json(insights);
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Org Chart

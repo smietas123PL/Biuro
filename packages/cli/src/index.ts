@@ -36,7 +36,7 @@ program
   .description('Show current status')
   .action(async () => {
     try {
-      const res = await client.get('/companies/stats'); // Assuming this exists or using a generic one
+      const res = await client.get('/companies');
       console.log(chalk.cyan('--- Biuro Status ---'));
       console.log(JSON.stringify(res.data, null, 2));
     } catch (err: any) {
@@ -77,4 +77,4 @@ program
      }
   });
 
-program.parse();
+await program.parseAsync(process.argv);

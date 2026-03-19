@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  TemplateAISuggestResponse,
+  TemplateAISuggestion,
   CompanyTemplate,
   TemplateImportDryRun,
   TemplateMarketplaceListResponse,
@@ -37,6 +39,15 @@ type Detail = {
 };
 type DryRun = TemplateImportDryRun;
 type MarketplaceResponse = TemplateMarketplaceListResponse;
+type AISuggestResponse = TemplateAISuggestResponse;
+type AIDraft = TemplateAISuggestion;
+type AgentOption = {
+  id: string;
+  name: string;
+  role: string;
+  title?: string | null;
+  status?: string | null;
+};
 
 function endpoints(source: TemplateSource, id: string) {
   return source === 'marketplace'
@@ -72,21 +83,31 @@ export default function TemplatesPage() {
   const [savingPreview, setSavingPreview] = useState(false);
   const [confirmationText, setConfirmationText] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [agentOptions, setAgentOptions] = useState<AgentOption[]>([]);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiDraft, setAiDraft] = useState<AIDraft | null>(null);
+  const [aiPlanner, setAiPlanner] = useState<AISuggestResponse['planner'] | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [creatingTask, setCreatingTask] = useState(false);
 
   const activeItems = source === 'marketplace' ? marketItems : localItems;
   const activeSummary = useMemo(() => activeItems.find((item) => item.id === selectedId) ?? null, [activeItems, selectedId]);
 
   useEffect(() => {
     const load = async () => {
-      const [local, marketplace] = await Promise.all([
+      const [local, marketplace, agents] = await Promise.all([
         request('/templates/presets') as Promise<Array<Omit<Summary, 'source'>>>,
         request('/templates/marketplace') as Promise<MarketplaceResponse>,
+        selectedCompanyId
+          ? (request(`/agents?company_id=${selectedCompanyId}`, undefined, { suppressError: true }) as Promise<AgentOption[]>)
+          : Promise.resolve([] as AgentOption[]),
       ]);
       const normalizedLocal = local.map((item) => ({ ...item, source: 'local' as const }));
       const normalizedMarket = marketplace.templates.map((item) => ({ ...item, source: 'marketplace' as const }));
       setLocalItems(normalizedLocal);
       setMarketItems(normalizedMarket);
       setCatalog(marketplace.catalog);
+      setAgentOptions(agents);
       if (!selectedId) {
         const first = normalizedMarket[0] ?? normalizedLocal[0];
         if (first) {
@@ -96,7 +117,7 @@ export default function TemplatesPage() {
       }
     };
     void load();
-  }, [request]);
+  }, [request, selectedCompanyId]);
 
   useEffect(() => {
     if (!selectedId || activeItems.length === 0) {
@@ -150,6 +171,49 @@ export default function TemplatesPage() {
     }
   };
 
+  const suggestWithAI = async () => {
+    if (!aiPrompt.trim()) {
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const result = await request('/templates/ai-suggest', {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt: aiPrompt.trim(),
+        }),
+      }) as AISuggestResponse;
+      setAiDraft(result.suggestion);
+      setAiPlanner(result.planner);
+      setSuccessMessage(null);
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const createTaskFromDraft = async () => {
+    if (!selectedCompanyId || !aiDraft) {
+      return;
+    }
+    setCreatingTask(true);
+    try {
+      await request('/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          company_id: selectedCompanyId,
+          title: aiDraft.title,
+          description: aiDraft.description,
+          assigned_to: aiDraft.suggested_agent_id || undefined,
+          priority: Number(aiDraft.priority) || 0,
+        }),
+      });
+      setSuccessMessage(`Created task "${aiDraft.title}" from AI draft.`);
+      setAiPrompt('');
+    } finally {
+      setCreatingTask(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -165,6 +229,176 @@ export default function TemplatesPage() {
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {successMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{successMessage}</div>}
+
+      <div className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">AI Pre-fill</h3>
+            <p className="text-sm text-muted-foreground">
+              Describe a task in natural language and get an editable draft with suggested owner and priority.
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border bg-amber-50 px-3 py-1 text-xs text-amber-700">
+            <Sparkles className="h-3.5 w-3.5" />
+            Smart Templates MVP
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+          <div className="space-y-4">
+            <label className="block text-sm font-medium text-foreground" htmlFor="ai-template-prompt">
+              Describe the work in plain language
+            </label>
+            <textarea
+              id="ai-template-prompt"
+              value={aiPrompt}
+              onChange={(event) => setAiPrompt(event.target.value)}
+              placeholder='Example: sprawdz czy konkurencja obniżyła ceny i przygotuj krótkie podsumowanie dla zespołu'
+              className="min-h-[148px] w-full rounded-2xl border bg-background px-4 py-3 text-sm leading-7 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void suggestWithAI()}
+                disabled={aiBusy || aiPrompt.trim().length === 0}
+                className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {aiBusy ? 'Generating...' : 'Generate AI Draft'}
+              </button>
+              <div className="text-xs text-muted-foreground">
+                Uses company runtime routing first, then falls back to a deterministic draft if needed.
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-muted/20 p-5">
+            {aiDraft ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-sm font-medium text-foreground">AI-generated draft</div>
+                  {aiPlanner && (
+                    <span className="rounded-full border bg-background px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {aiPlanner.mode === 'llm'
+                        ? `Planned by ${aiPlanner.runtime || 'LLM'}`
+                        : 'Fallback draft'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">Title</label>
+                    <input
+                      value={aiDraft.title}
+                      onChange={(event) => setAiDraft((current) => (current ? { ...current, title: event.target.value } : current))}
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">Description</label>
+                    <textarea
+                      value={aiDraft.description}
+                      onChange={(event) => setAiDraft((current) => (current ? { ...current, description: event.target.value } : current))}
+                      className="min-h-[132px] w-full rounded-md border bg-background px-3 py-2 text-sm leading-7"
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">Priority</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={aiDraft.priority}
+                        onChange={(event) =>
+                          setAiDraft((current) =>
+                            current
+                              ? { ...current, priority: Math.max(0, Math.min(100, Number(event.target.value) || 0)) }
+                              : current
+                          )
+                        }
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">Suggested owner</label>
+                      <select
+                        value={aiDraft.suggested_agent_id || ''}
+                        onChange={(event) => {
+                          const nextId = event.target.value || null;
+                          const nextAgent = agentOptions.find((agent) => agent.id === nextId) ?? null;
+                          setAiDraft((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  suggested_agent_id: nextId,
+                                  suggested_agent_name: nextAgent?.name ?? null,
+                                  default_role: nextAgent?.role ?? current.default_role,
+                                }
+                              : current
+                          );
+                        }}
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="">No assignee</option>
+                        {agentOptions.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name} - {agent.title || agent.role}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Chip>Confidence: {aiDraft.confidence}</Chip>
+                  <Chip>Role: {aiDraft.default_role || 'Unassigned'}</Chip>
+                  {aiDraft.suggested_agent_name ? <Chip>Agent: {aiDraft.suggested_agent_name}</Chip> : null}
+                </div>
+
+                {aiDraft.warnings.length > 0 && (
+                  <div className="rounded-2xl border bg-amber-50/70 p-4">
+                    <div className="text-sm font-medium text-amber-900">Draft warnings</div>
+                    <div className="mt-2 space-y-2">
+                      {aiDraft.warnings.map((warning) => (
+                        <div key={warning} className="text-sm text-amber-900">
+                          {warning}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void createTaskFromDraft()}
+                    disabled={creatingTask || aiDraft.title.trim().length === 0}
+                    className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {creatingTask ? 'Creating...' : 'Create Task From Draft'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiDraft(null);
+                      setAiPlanner(null);
+                    }}
+                    className="rounded-md border bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+                  >
+                    Clear Draft
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+                No AI draft yet. Describe the work on the left to generate a pre-filled task draft.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_1.45fr]">
         <div className="rounded-2xl border bg-card p-6 shadow-sm">

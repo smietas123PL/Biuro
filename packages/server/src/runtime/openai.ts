@@ -3,6 +3,7 @@ import { env } from '../env.js';
 import { AgentContext, AgentResponse, IAgentRuntime } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 import { defaultModelsByRuntime } from './defaultModels.js';
+import { estimateUsageCostUsd } from './pricing.js';
 import {
   buildStructuredRuntimeSystemPrompt,
   parseStructuredAgentResponse,
@@ -28,8 +29,9 @@ export class OpenAIRuntime implements IAgentRuntime {
     ];
 
     try {
+      const model = context.agent_model || defaultModelsByRuntime.openai;
       const response = await this.client.chat.completions.create({
-        model: context.agent_model || defaultModelsByRuntime.openai,
+        model,
         messages,
         response_format: {
           type: 'json_schema',
@@ -51,7 +53,12 @@ export class OpenAIRuntime implements IAgentRuntime {
         usage: {
           input_tokens: response.usage?.prompt_tokens || 0,
           output_tokens: response.usage?.completion_tokens || 0,
-          cost_usd: (response.usage?.prompt_tokens || 0) * 0.000005 + (response.usage?.completion_tokens || 0) * 0.000015,
+          cost_usd: estimateUsageCostUsd({
+            runtime: 'openai',
+            model,
+            inputTokens: response.usage?.prompt_tokens || 0,
+            outputTokens: response.usage?.completion_tokens || 0,
+          }),
         },
       };
     } catch (err) {

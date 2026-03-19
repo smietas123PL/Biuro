@@ -9,6 +9,7 @@ import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
 type RawBodyRequest = Request & { rawBody?: string };
+type IntegrationRequirement = { label: string; met: boolean };
 
 const integrationConfigSchema = z.object({
   slack_webhook_url: z.union([z.string().url(), z.literal(''), z.null()]).optional(),
@@ -153,13 +154,28 @@ router.get('/overview', requireRole(['owner', 'admin']), async (req, res, next) 
         configured: Boolean(env.SLACK_SIGNING_SECRET),
         signing_secret_configured: Boolean(env.SLACK_SIGNING_SECRET),
         events_url: `${baseUrl}/api/integrations/slack/events`,
-      slash_command_url: `${baseUrl}/api/integrations/slack/command`,
-      interactions_url: `${baseUrl}/api/integrations/slack/interactions`,
-      slash_command_name: '/biuro-task',
-      example_payload: {
-        command: '/biuro-task',
-        text: 'Analyze Q4 revenue patterns',
-        company_id: companyId,
+        slash_command_url: `${baseUrl}/api/integrations/slack/command`,
+        interactions_url: `${baseUrl}/api/integrations/slack/interactions`,
+        slash_command_name: '/biuro-task',
+        example_payload: {
+          command: '/biuro-task',
+          text: 'Analyze Q4 revenue patterns',
+          company_id: companyId,
+        },
+        approval_actions: {
+          ready:
+            Boolean(env.SLACK_SIGNING_SECRET) &&
+            Boolean(outgoing.slack_webhook_url) &&
+            Boolean(`${baseUrl}/api/integrations/slack/interactions`),
+          status: getSlackApprovalStatus({
+            signingSecretConfigured: Boolean(env.SLACK_SIGNING_SECRET),
+            slackWebhookConfigured: Boolean(outgoing.slack_webhook_url),
+          }),
+          requirements: buildSlackApprovalRequirements({
+            baseUrl,
+            signingSecretConfigured: Boolean(env.SLACK_SIGNING_SECRET),
+            slackWebhookConfigured: Boolean(outgoing.slack_webhook_url),
+          }),
         },
       },
       discord: {
@@ -178,6 +194,46 @@ router.get('/overview', requireRole(['owner', 'admin']), async (req, res, next) 
     next(err);
   }
 });
+
+function buildSlackApprovalRequirements(args: {
+  baseUrl: string;
+  signingSecretConfigured: boolean;
+  slackWebhookConfigured: boolean;
+}): IntegrationRequirement[] {
+  return [
+    {
+      label: `Interactivity endpoint exposed at ${args.baseUrl}/api/integrations/slack/interactions`,
+      met: true,
+    },
+    {
+      label: 'SLACK_SIGNING_SECRET configured on the server',
+      met: args.signingSecretConfigured,
+    },
+    {
+      label: 'Outgoing Slack webhook saved for this company',
+      met: args.slackWebhookConfigured,
+    },
+  ];
+}
+
+function getSlackApprovalStatus(args: {
+  signingSecretConfigured: boolean;
+  slackWebhookConfigured: boolean;
+}) {
+  if (args.signingSecretConfigured && args.slackWebhookConfigured) {
+    return 'Ready for one-click approvals';
+  }
+
+  if (!args.signingSecretConfigured && !args.slackWebhookConfigured) {
+    return 'Missing signing secret and outgoing webhook';
+  }
+
+  if (!args.signingSecretConfigured) {
+    return 'Missing signing secret';
+  }
+
+  return 'Missing outgoing Slack webhook';
+}
 
 router.patch('/config', requireRole(['owner', 'admin']), async (req, res, next) => {
   const companyId = req.header('x-company-id');

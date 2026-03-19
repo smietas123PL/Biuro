@@ -46,6 +46,7 @@ function buildSlackApprovalResponse(args: {
   title: string;
   reason: string;
   notes: string;
+  resolvedBy: string;
   alreadyResolved?: boolean;
 }) {
   const statusLabel = args.status === 'approved' ? 'Approved' : 'Rejected';
@@ -55,6 +56,7 @@ function buildSlackApprovalResponse(args: {
 
   return {
     replace_original: true,
+    response_type: 'in_channel',
     text: `${statusLabel}: ${args.title}`,
     blocks: [
       {
@@ -63,6 +65,19 @@ function buildSlackApprovalResponse(args: {
           type: 'mrkdwn',
           text: `*${statusLabel}* for *${args.title}*`,
         },
+      },
+      {
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: `*Status*\n${statusLabel}`,
+          },
+          {
+            type: 'mrkdwn',
+            text: `*Resolved by*\n${args.resolvedBy}`,
+          },
+        ],
       },
       {
         type: 'context',
@@ -106,19 +121,15 @@ export const IntegrationService = {
     const action = payload?.actions?.[0];
     if (!action?.action_id || typeof action.value !== 'string') {
       return {
-        response_action: 'errors',
-        errors: {
-          default: 'Unsupported Slack interaction payload.',
-        },
+        response_type: 'ephemeral',
+        text: 'Unsupported Slack interaction payload.',
       };
     }
 
     if (action.action_id !== 'approval.approve' && action.action_id !== 'approval.reject') {
       return {
-        response_action: 'errors',
-        errors: {
-          default: `Unknown action: ${action.action_id}`,
-        },
+        response_type: 'ephemeral',
+        text: `Unknown action: ${action.action_id}`,
       };
     }
 
@@ -132,15 +143,19 @@ export const IntegrationService = {
 
     if (!approvalId) {
       return {
-        response_action: 'errors',
-        errors: {
-          default: 'Missing approval id in Slack action payload.',
-        },
+        response_type: 'ephemeral',
+        text: 'Missing approval id in Slack action payload.',
       };
     }
 
     const status = action.action_id === 'approval.approve' ? 'approved' : 'rejected';
-    const notes = `Resolved in Slack by ${payload.user?.username ?? payload.user?.name ?? 'unknown-user'}`;
+    const resolvedBy =
+      payload.user?.username ??
+      payload.user?.name ??
+      payload.user?.real_name ??
+      payload.user?.id ??
+      'unknown-user';
+    const notes = `Resolved in Slack by ${resolvedBy}`;
     const resolution = await resolveApproval(approvalId, status, notes, {
       source: 'slack',
       resolvedBy: payload.user?.id ?? null,
@@ -158,6 +173,7 @@ export const IntegrationService = {
       title: resolution.task_title ?? 'Approval request',
       reason: resolution.reason,
       notes,
+      resolvedBy,
       alreadyResolved: Boolean((resolution as { already_resolved?: boolean }).already_resolved),
     });
   },

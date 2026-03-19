@@ -60,6 +60,18 @@ describe('SettingsPage', () => {
       .mockResolvedValueOnce({
         company_id: 'company-1',
         company_name: 'QA Test Corp',
+        enabled: true,
+        hour_utc: 18,
+        minute_utc: 0,
+        system_defaults: {
+          enabled: true,
+          hour_utc: 18,
+          minute_utc: 0,
+        },
+      })
+      .mockResolvedValueOnce({
+        company_id: 'company-1',
+        company_name: 'QA Test Corp',
         primary_runtime: 'openai',
         fallback_order: ['claude', 'openai', 'gemini'],
         system_defaults: {
@@ -67,14 +79,30 @@ describe('SettingsPage', () => {
           fallback_order: ['gemini', 'claude', 'openai'],
         },
         available_runtimes: ['gemini', 'claude', 'openai'],
+      })
+      .mockResolvedValueOnce({
+        company_id: 'company-1',
+        company_name: 'QA Test Corp',
+        enabled: false,
+        hour_utc: 19,
+        minute_utc: 15,
+        system_defaults: {
+          enabled: true,
+          hour_utc: 18,
+          minute_utc: 0,
+        },
       });
 
     render(<SettingsPage />);
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenNthCalledWith(
-        1,
+      expect(requestMock).toHaveBeenCalledWith(
         '/companies/company-1/runtime-settings',
+        undefined,
+        { suppressError: true }
+      );
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/digest-settings',
         undefined,
         { suppressError: true }
       );
@@ -88,8 +116,7 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save runtime settings' }));
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenNthCalledWith(
-        2,
+      expect(requestMock).toHaveBeenCalledWith(
         '/companies/company-1/runtime-settings',
         {
           method: 'PATCH',
@@ -103,5 +130,31 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('Runtime routing settings saved for this company.')).toBeTruthy();
     expect(screen.getByText('Primary runtime: OpenAI')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.change(screen.getByDisplayValue('18'), {
+      target: { value: '19' },
+    });
+    fireEvent.change(screen.getByDisplayValue('00'), {
+      target: { value: '15' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save daily digest settings' }));
+
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenCalledWith(
+        '/companies/company-1/digest-settings',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            enabled: false,
+            hour_utc: 19,
+            minute_utc: 15,
+          }),
+        }
+      );
+    });
+
+    expect(screen.getByText('Daily digest settings saved for this company.')).toBeTruthy();
+    expect(screen.getByText('Digest disabled')).toBeTruthy();
   });
 });

@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomiczne Biuro — Roadmapa 2025</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --surface: #13131a;
+    --border: rgba(255,255,255,0.07);
+    --text: #e8e6df;
+    --muted: #6e6c66;
+    --accent-wow: #c084fc;
+    --accent-ui: #34d399;
+    --accent-core: #fb923c;
+    --wow-bg: rgba(192,132,252,0.07);
+    --ui-bg: rgba(52,211,153,0.07);
+    --core-bg: rgba(251,146,60,0.07);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 80px 40px 120px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    margin-bottom: 80px;
+    border-bottom: 0.5px solid var(--border);
+    padding-bottom: 48px;
+  }
+
+  .eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  .header h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(36px, 6vw, 64px);
+    line-height: 1.05;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 24px;
+  }
+
+  .header h1 em {
+    font-style: italic;
+    color: var(--accent-wow);
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 32px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .header-meta span { display: flex; align-items: center; gap: 6px; }
+  .header-meta span::before { content: '—'; }
+
+  /* Section labels */
+  .section {
+    margin-top: 64px;
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 0.5px;
+    background: var(--border);
+  }
+
+  .label-wow  { color: var(--accent-wow); }
+  .label-ui   { color: var(--accent-ui); }
+  .label-core { color: var(--accent-core); }
+
+  /* Cards */
+  .card {
+    border: 0.5px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .2s, transform .2s;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+  }
+
+  .card-wow  { background: var(--wow-bg);  border-color: rgba(192,132,252,0.15); }
+  .card-ui   { background: var(--ui-bg);   border-color: rgba(52,211,153,0.15); }
+  .card-core { background: var(--core-bg); border-color: rgba(251,146,60,0.15); }
+
+  .card-wow:hover  { border-color: rgba(192,132,252,0.35); }
+  .card-ui:hover   { border-color: rgba(52,211,153,0.35); }
+  .card-core:hover { border-color: rgba(251,146,60,0.35); }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .card-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 4px;
+    min-width: 24px;
+  }
+
+  .card-title-wrap { flex: 1; }
+
+  .card-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.2;
+    margin-bottom: 6px;
+  }
+
+  .card-wow  .card-title { color: var(--accent-wow); }
+  .card-ui   .card-title { color: var(--accent-ui); }
+  .card-core .card-title { color: var(--accent-core); }
+
+  .badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    margin-top: 2px;
+    display: inline-block;
+  }
+
+  .badge-wow  { background: rgba(192,132,252,0.15); color: var(--accent-wow); border: 0.5px solid rgba(192,132,252,0.3); }
+  .badge-ui   { background: rgba(52,211,153,0.15);  color: var(--accent-ui);  border: 0.5px solid rgba(52,211,153,0.3); }
+  .badge-core { background: rgba(251,146,60,0.15);  color: var(--accent-core);border: 0.5px solid rgba(251,146,60,0.3); }
+
+  .card-body { color: #b0ae a7; }
+
+  .card-body p {
+    color: #b0aea7;
+    font-size: 15px;
+    line-height: 1.7;
+    margin-bottom: 20px;
+  }
+
+  .card-body p:last-child { margin-bottom: 0; }
+
+  /* Sub-sections inside card */
+  .sub-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .sub-grid { grid-template-columns: 1fr; }
+    .container { padding: 48px 20px 80px; }
+    .card { padding: 24px; }
+  }
+
+  .sub-block {
+    background: rgba(255,255,255,0.03);
+    border: 0.5px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .sub-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .sub-content {
+    font-size: 13px;
+    color: #9e9c96;
+    line-height: 1.6;
+  }
+
+  .tech-pill {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    background: rgba(255,255,255,0.05);
+    border: 0.5px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    margin: 2px;
+    color: var(--muted);
+  }
+
+  /* Effort / impact badges */
+  .meta-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .meta-item {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .dot-high { background: #ef4444; }
+  .dot-med  { background: #f59e0b; }
+  .dot-low  { background: #22c55e; }
+
+  /* Divider line between header and num */
+  .card-header-inner {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 80px;
+    padding-top: 32px;
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Glow accents */
+  .glow-wow  { position: absolute; top: -60px; right: -60px; width: 180px; height: 180px; background: radial-gradient(circle, rgba(192,132,252,0.12) 0%, transparent 70%); pointer-events: none; }
+  .glow-ui   { position: absolute; top: -60px; right: -60px; width: 180px; height: 180px; background: radial-gradient(circle, rgba(52,211,153,0.10) 0%, transparent 70%); pointer-events: none; }
+  .glow-core { position: absolute; top: -60px; right: -60px; width: 180px; height: 180px; background: radial-gradient(circle, rgba(251,146,60,0.10) 0%, transparent 70%); pointer-events: none; }
+
+  /* Animation */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .card {
+    animation: fadeUp .4s ease both;
+  }
+
+  .card:nth-child(1) { animation-delay: .05s; }
+  .card:nth-child(2) { animation-delay: .10s; }
+  .card:nth-child(3) { animation-delay: .15s; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="eyebrow">Raport strategiczny · Autonomiczne Biuro · 2025</div>
+    <h1>10 kierunków<br><em>rozwoju</em> platformy</h1>
+    <div class="header-meta">
+      <span>3 efekty WOW</span>
+      <span>3 ulepszenia UI/UX</span>
+      <span>4 elementy core</span>
+    </div>
+  </div>
+
+  <!-- WOW SECTION -->
+  <div class="section">
+    <div class="section-label label-wow">⚡ Efekt WOW</div>
+
+    <!-- 01 -->
+    <div class="card card-wow">
+      <div class="glow-wow"></div>
+      <div class="card-header">
+        <div class="card-num">01</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Live Agent Replay</div>
+        </div>
+        <div class="badge badge-wow">WOW</div>
+      </div>
+      <div class="card-body">
+        <p>Możliwość "przewinięcia" całej historii pracy dowolnego agenta — krok po kroku, jak debugger, ale dla AI. Każda decyzja, każde wywołanie narzędzia, każda myśl LLM widoczna w interaktywnej osi czasu z możliwością pauzy, przyspieszenia i skoku do dowolnego momentu.</p>
+        <p>To nie jest funkcja dla developerów — to narzędzie sprzedażowe i audytowe. Pokazanie klientowi "oto co twoi agenci zrobili przez ostatnie 8 godzin" jest nieporównanie bardziej przekonujące niż lista logów. Kluczowe przy onboardingu enterprise i podczas incydentów ("dlaczego agent X to zrobił?").</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Dlaczego teraz?</div>
+            <div class="sub-content">Dane już istnieją. Tabele <code>heartbeats</code>, <code>audit_log</code>, <code>messages</code> i <code>agent_sessions</code> zawierają pełną historię. Brakuje jedynie warstwy prezentacji — odtwarzacza który przegląda rekordy w kolejności <code>created_at</code> i animuje stan.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Implementacja</div>
+            <div class="sub-content">Endpoint <code>GET /api/agents/:id/replay?from=&amp;to=</code> zwraca posortowane eventy. Frontend: komponent TimelineScrubber z kontrolkami play/pause/speed. Każdy event renderuje się jako karta z ikoną, timestampem i kosztorem LLM.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">React</span>
+              <span class="tech-pill">requestAnimationFrame</span>
+              <span class="tech-pill">PostgreSQL cursor</span>
+              <span class="tech-pill">Server-Sent Events</span>
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Efekt biznesowy</div>
+            <div class="sub-content">Skrócenie czasu debug sesji z godzin do minut. Materiał do demo dla enterprise. Podstawa pod compliance audit w regulowanych branżach (fintech, healthcare).</div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-low"></span> Nakład: 3–5 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: bardzo wysoki</div>
+          <div class="meta-item"><span class="dot dot-low"></span> Ryzyko: niskie</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 02 -->
+    <div class="card card-wow">
+      <div class="glow-wow"></div>
+      <div class="card-header">
+        <div class="card-num">02</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Natural Language Control Panel</div>
+        </div>
+        <div class="badge badge-wow">WOW</div>
+      </div>
+      <div class="card-body">
+        <p>Jedno pole tekstowe w górnej belce dashboardu. Piszesz: <em>"zatrzymaj wszystkich agentów i zrób snapshot stanu"</em> — system rozumie, pyta o potwierdzenie i wykonuje. Albo: <em>"przydziel 3 najstarsze taski agentowi Marta, priorytet wysoki"</em>. Zero nawigacji po menu, pełna kontrola przez język naturalny.</p>
+        <p>To Command Palette, ale napędzane Claude. Istniejący komponent <code>CommandPalette.tsx</code> jest już zaczątkiem — wystarczy podpiąć pod endpoint który tłumaczy free-text na sekwencję wywołań API. Dla użytkowników nietech to jedyna warstwa której potrzebują.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Architektura</div>
+            <div class="sub-content">POST <code>/api/nl-command</code> przyjmuje tekst → Claude z function calling mapuje na akcje REST → serwer zwraca plan do zatwierdzenia → user klika "Wykonaj" → akcje leciał sekwencyjnie z websocket feed postępu.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Bezpieczeństwo</div>
+            <div class="sub-content">Wszystkie destruktywne akcje (pause, terminate, delete) wymagają explicit confirmation step. Każda komenda ląduje w <code>audit_log</code> z <code>source: "nl_command"</code>. Governance policies stosują się normalnie.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Przykładowe komendy</div>
+            <div class="sub-content">
+              "pokaż agentów którzy przekroczyli budżet"<br>
+              "utwórz taska z opisu maila który wklejam"<br>
+              "jaki był koszt operacji w tym tygodniu?"<br>
+              "cofnij ostatnią delegację do agenta HR"
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">Claude tool use</span>
+              <span class="tech-pill">WebSocket feedback</span>
+              <span class="tech-pill">CommandPalette.tsx</span>
+              <span class="tech-pill">Zod validation</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-med"></span> Nakład: 5–8 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: bardzo wysoki</div>
+          <div class="meta-item"><span class="dot dot-med"></span> Ryzyko: średnie</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 03 -->
+    <div class="card card-wow">
+      <div class="glow-wow"></div>
+      <div class="card-header">
+        <div class="card-num">03</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Autonomous Goal Decomposition</div>
+        </div>
+        <div class="badge badge-wow">WOW</div>
+      </div>
+      <div class="card-body">
+        <p>Wpisujesz cel wysokiego poziomu: <em>"pozyskaj 50 leadów B2B z branży fintech w Q3"</em>. System rozbija go na hierarchię subtasków, przydziela każdy do odpowiedniego agenta na podstawie roli i historii, monitoruje postęp i automatycznie adaptuje plan gdy coś się nie powiedzie.</p>
+        <p>To moment w którym Autonomiczne Biuro przestaje być narzędziem do zarządzania agentami i staje się platformą do realizacji celów biznesowych. Struktura <code>goals → tasks → subtasks</code> już jest w schemacie bazy. Brakuje silnika który planuje w górę, nie tylko w dół.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Jak to działa</div>
+            <div class="sub-content">Goal Planner Agent (specjalny agent systemowy) otrzymuje cel i profil firmy. Generuje drzewo tasków z szacowanym kosztem i SLA. Manager Agent nadzoruje wykonanie, reaguje na blokady redelegacją i raportuje postęp do celu.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Adaptacja</div>
+            <div class="sub-content">Gdy task zostaje zablokowany lub przekracza budżet, Goal Planner jest wzywany ponownie z kontekstem niepowodzenia. Może wygenerować alternatywne podejście, eskalować do human approval lub oznaczyć cel jako "wymaga interwencji".</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Zależności</div>
+            <div class="sub-content">Wymaga dojrzałego systemu delegacji (już jest), budżetów per goal (do dodania), i mechanizmu "goal health score" widocznego w dashboardzie. Powinno być zbudowane po NL Control Panel.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">Goal Planner Agent</span>
+              <span class="tech-pill">Tree-of-Thoughts</span>
+              <span class="tech-pill">goal_budgets table</span>
+              <span class="tech-pill">GoalsPage.tsx</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-high"></span> Nakład: 2–3 tygodnie</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: przełomowy</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Ryzyko: wysokie</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UI/UX SECTION -->
+  <div class="section">
+    <div class="section-label label-ui">🎨 UI / UX</div>
+
+    <!-- 04 -->
+    <div class="card card-ui">
+      <div class="glow-ui"></div>
+      <div class="card-header">
+        <div class="card-num">04</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Real-time Activity Feed z kontekstem</div>
+        </div>
+        <div class="badge badge-ui">UI/UX</div>
+      </div>
+      <div class="card-body">
+        <p>Obecny dashboard pokazuje statyczne liczby (aktywni agenci: 3, taski: 47). Potrzebny jest żywy, chronologiczny feed "co dzieje się teraz" — z awatarem agenta, skrótem wykonywanego taska, typem akcji (tool call, delegation, memory store) i kosztem w czasie rzeczywistym.</p>
+        <p>WebSocket już jest w <code>ws.ts</code> i broadcast <code>agent.working</code> jest już emitowany przy heartbeacie. Brakuje komponentu który subskrybuje te eventy i renderuje je jako płynny stream bez full-page refresh. Użytkownik powinien widzieć biuro "oddychające" — żywe, nie zamrożone.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Komponenty do zbudowania</div>
+            <div class="sub-content">
+              <code>ActivityFeed.tsx</code> — pionowy stream eventów z scroll-to-bottom<br>
+              <code>AgentPulse.tsx</code> — pulsujący wskaźnik przy aktywnym agencie<br>
+              <code>CostTicker.tsx</code> — licznik kosztu dnia aktualizowany co heartbeat
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Grupowanie eventów</div>
+            <div class="sub-content">Eventy tego samego agenta z tego samego taska w oknie 30s grupują się w jeden wiersz rozwijany kliknięciem. Zapobiega zalewaniu feedu gdy agent działa intensywnie. Nagłówek grupy pokazuje "Agent X · 12 akcji · Task Y".</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Filtrowanie</div>
+            <div class="sub-content">Chipy filtrów nad feedem: Wszystko / Błędy / Koszty / Delegacje / Tool calls. Persistent w localStorage. Brak filtru = widok dla managera. Tylko błędy = widok dla on-call.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">useWebSocket hook</span>
+              <span class="tech-pill">React.memo</span>
+              <span class="tech-pill">IntersectionObserver</span>
+              <span class="tech-pill">ws.ts broadcast</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-low"></span> Nakład: 2–3 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: wysoki</div>
+          <div class="meta-item"><span class="dot dot-low"></span> Ryzyko: niskie</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 05 -->
+    <div class="card card-ui">
+      <div class="glow-ui"></div>
+      <div class="card-header">
+        <div class="card-num">05</div>
+        <div class="card-title-wrap">
+          <div class="card-title">OrgChart jako centrum dowodzenia</div>
+        </div>
+        <div class="badge badge-ui">UI/UX</div>
+      </div>
+      <div class="card-body">
+        <p>Strona <code>OrgChartPage.tsx</code> istnieje, ale prawdopodobnie renderuje statyczne drzewo. Powinna być interaktywnym centrum dowodzenia: drag-and-drop przydzielania tasków między agentami, kolory węzłów kodujące obciążenie (zielony = idle, żółty = busy, czerwony = error/paused), sidepanel z detalami agenta po kliknięciu.</p>
+        <p>Dla managera zarządzającego 20+ agentami widok org-chartu jest jedyną nawigacją której potrzebuje. Chce jednym spojrzeniem ocenić czy system działa — bez przechodzenia między zakładkami Agents → Tasks → AgentDetail.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Drag & Drop</div>
+            <div class="sub-content">Przeciągnięcie taska (z listy po prawej) na węzeł agenta = przydzielenie. Przeciągnięcie agenta pod innego agenta = zmiana <code>reports_to</code>. Konfirmacja modalem z podglądem zmiany zanim trafi do API.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Status encoding</div>
+            <div class="sub-content">
+              🟢 idle — gotowy na task<br>
+              🟡 working — aktualnie przetwarza<br>
+              🔴 paused — zablokowany, wymaga uwagi<br>
+              ⚫ terminated — nieaktywny<br>
+              Pulsujący border = jest w trakcie heartbeatu
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Sidepanel</div>
+            <div class="sub-content">Kliknięcie węzła = szuflada z prawej: aktualny task, ostatnie 5 heartbeatów, koszt miesięczny vs budżet, przycisk "Pause/Resume" i "Assign Task". Zero nawigacji na inną stronę.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">d3-hierarchy</span>
+              <span class="tech-pill">@dnd-kit/core</span>
+              <span class="tech-pill">WebSocket live status</span>
+              <span class="tech-pill">Framer Motion</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-med"></span> Nakład: 5–7 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: wysoki</div>
+          <div class="meta-item"><span class="dot dot-med"></span> Ryzyko: średnie</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 06 -->
+    <div class="card card-ui">
+      <div class="glow-ui"></div>
+      <div class="card-header">
+        <div class="card-num">06</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Spójny system błędów i powiadomień</div>
+        </div>
+        <div class="badge badge-ui">UI/UX</div>
+      </div>
+      <div class="card-body">
+        <p>Największa dziura UX w obecnym dashboardzie: brak <code>ErrorBoundary</code>, brak toast systemu, brak retry przy błędach sieciowych. Błędy API albo milczą (użytkownik nie wie że coś się nie zapisało) albo crashują cały komponent z białym ekranem.</p>
+        <p>W systemie gdzie agenci wykonują autonomiczne akcje za prawdziwe pieniądze, każdy błąd musi być widoczny i actionable. "Failed to pause agent" bez żadnego feedbacku to katastrofa UX — użytkownik klika trzy razy, wysyła zduplikowane requesty i nie wie czy akcja zadziałała.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Architektura powiadomień</div>
+            <div class="sub-content">
+              <strong>Toast</strong> — sukces/info/warning (auto-dismiss 4s)<br>
+              <strong>Inline error</strong> — przy polach formularza<br>
+              <strong>Banner</strong> — degradacja serwisu, utrata WS<br>
+              <strong>Full-page fallback</strong> — crash krytycznego komponentu
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Smart retry</div>
+            <div class="sub-content">Każdy <code>useApi</code> hook dostaje <code>retryCount: 3, backoff: exponential</code> dla GET requestów. Przy 429/503 automatyczny retry z informacją "Ponawiam za 5s...". PUT/POST/DELETE bez retry — tylko confirm dialog przy błędzie.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Connection status</div>
+            <div class="sub-content">Pasek w nagłówku: zielona kropka = WS connected, szara = offline. Przy utracie połączenia banner "Połączenie przerwane — dane mogą być nieaktualne" z przyciskiem "Odśwież". Bez białych ekranów.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">React ErrorBoundary</span>
+              <span class="tech-pill">Sonner / react-hot-toast</span>
+              <span class="tech-pill">useOnlineStatus hook</span>
+              <span class="tech-pill">axios interceptors</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-low"></span> Nakład: 2–3 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: wysoki</div>
+          <div class="meta-item"><span class="dot dot-low"></span> Ryzyko: niskie</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CORE SECTION -->
+  <div class="section">
+    <div class="section-label label-core">🔧 Core — fundament produkcji</div>
+
+    <!-- 07 -->
+    <div class="card card-core">
+      <div class="glow-core"></div>
+      <div class="card-header">
+        <div class="card-num">07</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Pipeline migracji bazy danych</div>
+        </div>
+        <div class="badge badge-core">Core</div>
+      </div>
+      <div class="card-body">
+        <p>12 plików <code>schema_vN.sql</code> bez automatycznego runnera który śledzi wersję w tabeli to bomba zegarowa. Każdy deployment jest zakładem — czy migrations zostały zastosowane w odpowiedniej kolejności, czy środowisko deweloperskie nie zdesynchonizowało się z produkcją?</p>
+        <p>Potrzebny runner który: przechowuje wersję schematu w tabeli <code>schema_migrations</code>, egzekwuje kolejność plików, blokuje start serwera gdy baza jest za stara, loguje każdą migrację z timestampem i checksumą. Wzorzec Flyway / Liquibase, zaimplementowany natywnie w TypeScript.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Tabela migrations</div>
+            <div class="sub-content">
+              <code>CREATE TABLE schema_migrations (<br>
+              &nbsp;&nbsp;version INT PRIMARY KEY,<br>
+              &nbsp;&nbsp;name TEXT NOT NULL,<br>
+              &nbsp;&nbsp;checksum TEXT,<br>
+              &nbsp;&nbsp;applied_at TIMESTAMPTZ DEFAULT now()<br>
+              );</code>
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Runner logic</div>
+            <div class="sub-content">Skanuje <code>/db/migrations/*.sql</code> sortując po numerze prefiksu. Porównuje z tabelą. Stosuje brakujące w transakcji — rollback przy błędzie. Jeśli checksum istniejącej migracji się zmienił: fatal error, nie kontynuuje.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Integracja z serwerem</div>
+            <div class="sub-content"><code>migrate.ts</code> już istnieje. Trzeba wymusić jego uruchomienie w <code>start()</code> przed <code>db.query('SELECT 1')</code>. W docker-compose: osobny <code>migrate</code> service jako init container który musi skończyć przed startem <code>server</code>.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">native TypeScript</span>
+              <span class="tech-pill">pg transactions</span>
+              <span class="tech-pill">schema_migrations table</span>
+              <span class="tech-pill">SHA256 checksum</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-low"></span> Nakład: 1–2 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: krytyczny</div>
+          <div class="meta-item"><span class="dot dot-low"></span> Ryzyko: niskie</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 08 -->
+    <div class="card card-core">
+      <div class="glow-core"></div>
+      <div class="card-header">
+        <div class="card-num">08</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Dokończyć integracje Slack / Discord</div>
+        </div>
+        <div class="badge badge-core">Core</div>
+      </div>
+      <div class="card-body">
+        <p><code>IntegrationService.handleDiscordEvent</code> zawiera komentarz <em>"// Similar logic to Slack..."</em> — to nieukończony stub. Slack i Discord to potencjalnie kluczowy kanał dla nietech użytkowników którzy chcą przydzielać taski i dostać raport bez otwierania dashboardu.</p>
+        <p>Dokończenie integracji oznacza: weryfikację podpisów przychodzących webhooków, pełny zestaw slash komend, dwukierunkową komunikację (agent może zapytać użytkownika o decyzję przez wiadomość), i status thread dla każdego aktywnego taska.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Slack slash commands</div>
+            <div class="sub-content">
+              <code>/biuro task [opis]</code> — tworzy task<br>
+              <code>/biuro status [id]</code> — status taska<br>
+              <code>/biuro agents</code> — lista z obciążeniem<br>
+              <code>/biuro approve [id]</code> — zatwierdza approval request<br>
+              <code>/biuro budget</code> — dzienny koszt
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Weryfikacja webhooków</div>
+            <div class="sub-content"><code>SLACK_SIGNING_SECRET</code> jest już w env schema — brakuje middleware który weryfikuje <code>X-Slack-Signature</code> przez HMAC SHA256. Bez tego endpoint jest publiczny dla każdego kto zgadnie URL.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Agent → Slack</div>
+            <div class="sub-content">Gdy agent tworzy <code>approval_request</code>, NotificationService wysyła wiadomość do kanału Slack z przyciskami Approve/Reject. Kliknięcie = webhook do API = rozwiązanie approval. Pętla zamknięta bez dashboardu.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">@slack/bolt</span>
+              <span class="tech-pill">discord.js</span>
+              <span class="tech-pill">HMAC webhook verify</span>
+              <span class="tech-pill">Block Kit UI</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-med"></span> Nakład: 4–6 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: wysoki</div>
+          <div class="meta-item"><span class="dot dot-med"></span> Ryzyko: średnie</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 09 -->
+    <div class="card card-core">
+      <div class="glow-core"></div>
+      <div class="card-header">
+        <div class="card-num">09</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Row Level Security dla multi-tenancy</div>
+        </div>
+        <div class="badge badge-core">Core</div>
+      </div>
+      <div class="card-body">
+        <p>Każda tabela ma <code>company_id</code>, ale izolacja odbywa się wyłącznie przez <code>WHERE company_id = $1</code> w kodzie aplikacji. Jeden błąd w zapytaniu — pominięty warunek, zły parametr, copy-paste — i tenant A widzi dane tenanta B. To naruszenie które kończy firmę.</p>
+        <p>Row Level Security w PostgreSQL przenosi izolację na poziom bazy danych, niezależny od kodu aplikacji. Nawet jeśli developer popełni błąd w query, baza odmówi zwrócenia cudzych rekordów. To warstwa bezpieczeństwa której nie można przypadkowo wyłączyć.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Implementacja RLS</div>
+            <div class="sub-content">
+              <code>ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;<br>
+              CREATE POLICY tenant_isolation ON tasks<br>
+              &nbsp;&nbsp;USING (company_id = current_setting(<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;'app.current_company_id')::uuid);</code><br>
+              Powtórzone dla każdej tabeli z company_id.
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Ustawianie kontekstu</div>
+            <div class="sub-content">Middleware Express po autentykacji: <code>SET LOCAL app.current_company_id = '...'</code> w każdej transakcji. Connection pool musi używać <code>BEGIN</code>/<code>COMMIT</code> żeby LOCAL scope działał poprawnie — przegląd użycia <code>db.query</code> kontra <code>db.transaction</code>.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Wyjątki</div>
+            <div class="sub-content">Tabele systemowe (<code>schema_migrations</code>, <code>companies</code>) bez RLS — dostęp przez superuser role. Agenty worker-a muszą mieć <code>BYPASSRLS</code> lub ustawiać company_id przed każdą operacją heartbeatu.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">PostgreSQL RLS</span>
+              <span class="tech-pill">SET LOCAL</span>
+              <span class="tech-pill">connection pool review</span>
+              <span class="tech-pill">migration schema_v13</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-med"></span> Nakład: 3–5 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: krytyczny</div>
+          <div class="meta-item"><span class="dot dot-med"></span> Ryzyko: średnie</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10 -->
+    <div class="card card-core">
+      <div class="glow-core"></div>
+      <div class="card-header">
+        <div class="card-num">10</div>
+        <div class="card-title-wrap">
+          <div class="card-title">Observability — metryki i distributed tracing</div>
+        </div>
+        <div class="badge badge-core">Core</div>
+      </div>
+      <div class="card-body">
+        <p>System loguje przez <code>pino</code> i ma <code>audit_log</code>, ale brakuje metryk i tracingu między <code>heartbeat → LLM call → tool execution → db write</code>. Gdy agent "utyka" lub nagle drożeje, nie wiadomo na którym etapie i dlaczego. Bez tego SLA dla klientów biznesowych jest nieosiągalne.</p>
+        <p>Observability to nie luksus — to warunek konieczny do prowadzenia systemu który autonomicznie wydaje pieniądze klientów. Musisz wiedzieć w czasie rzeczywistym: ile kosztuje każdy runtime, który tool call trwa najdłużej, gdzie są bottlenecki przy 20 równoległych heartbeatach.</p>
+        <div class="sub-grid">
+          <div class="sub-block">
+            <div class="sub-title">Metryki Prometheus</div>
+            <div class="sub-content">
+              <code>biuro_heartbeats_total</code> (by status, agent)<br>
+              <code>biuro_llm_cost_usd_total</code> (by runtime, model)<br>
+              <code>biuro_llm_latency_ms</code> (histogram)<br>
+              <code>biuro_tasks_completed_total</code><br>
+              Endpoint <code>GET /metrics</code> dla Prometheus scrape.
+            </div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Distributed tracing</div>
+            <div class="sub-content">OpenTelemetry trace od HTTP request przez processAgentHeartbeat → buildAgentContext → runtime.run → executeTool → db.query. Każdy span z atrybutami: agentId, taskId, model, cost. Eksport do Jaeger lub Honeycomb.</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Alerty</div>
+            <div class="sub-content">Alertmanager reguły: agent error rate > 20% w oknie 5min, LLM p99 latency > 30s, dzienny koszt > 80% miesięcznego budżetu, brak heartbeatów przez > 2 minuty. Notyfikacja przez... Slack integration (punkt 08).</div>
+          </div>
+          <div class="sub-block">
+            <div class="sub-title">Stack techniczny</div>
+            <div class="sub-content">
+              <span class="tech-pill">OpenTelemetry SDK</span>
+              <span class="tech-pill">prom-client</span>
+              <span class="tech-pill">Jaeger / Honeycomb</span>
+              <span class="tech-pill">Grafana dashboard</span>
+            </div>
+          </div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-item"><span class="dot dot-med"></span> Nakład: 4–6 dni</div>
+          <div class="meta-item"><span class="dot dot-high"></span> Impact: wysoki</div>
+          <div class="meta-item"><span class="dot dot-low"></span> Ryzyko: niskie</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span>Autonomiczne Biuro · Raport strategiczny 2025</span>
+    <span>10 kierunków · wygenerowano przez Claude</span>
+  </div>
+
+</div>
+</body>
+</html>

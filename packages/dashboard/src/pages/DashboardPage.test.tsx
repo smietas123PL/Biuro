@@ -1,15 +1,16 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DashboardPage from './DashboardPage';
 
 const requestMock = vi.hoisted(() => vi.fn());
 const useApiMock = vi.hoisted(() => vi.fn());
+const useWebSocketMock = vi.hoisted(() => vi.fn());
 const useCompanyMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../hooks/useApi', () => ({
   useApi: () => useApiMock(),
-  useWebSocket: () => null,
+  useWebSocket: () => useWebSocketMock(),
 }));
 
 vi.mock('../context/CompanyContext', () => ({
@@ -20,6 +21,7 @@ describe('DashboardPage', () => {
   beforeEach(() => {
     requestMock.mockReset();
     useApiMock.mockReset();
+    useWebSocketMock.mockReset();
     useCompanyMock.mockReset();
 
     requestMock.mockImplementation(async (path: string) => {
@@ -40,7 +42,20 @@ describe('DashboardPage', () => {
       }
 
       if (path === '/companies/company-1/activity-feed?limit=12') {
-        return [];
+        return [
+          {
+            id: 'heartbeat-1',
+            type: 'heartbeat.worked',
+            created_at: '2026-03-19T10:01:00.000Z',
+            cost_usd: 0.42,
+            agent_id: 'agent-1',
+            agent_name: 'Ada',
+            task_id: 'task-1',
+            task_title: 'Investigate churn',
+            thought: 'We should verify retention cohorts before changing the headline.',
+            summary: 'We should verify retention cohorts before changing the headline.',
+          },
+        ];
       }
 
       if (path === '/companies/company-1/budgets-summary') {
@@ -69,6 +84,50 @@ describe('DashboardPage', () => {
           by_source: [],
           by_consumer: [],
           recent: [],
+        };
+      }
+
+      if (path === '/companies/company-1/memory-insights?days=30') {
+        return {
+          range_days: 30,
+          summary: {
+            total_memories: 9,
+            recent_memories: 3,
+            agents_with_memories: 2,
+            tasks_with_memories: 3,
+            memory_reuse_searches: 4,
+          },
+          recurring_topics: [
+            {
+              label: 'retention cohorts',
+              count: 2,
+            },
+          ],
+          top_agents: [
+            {
+              agent_id: 'agent-1',
+              agent_name: 'Ada',
+              total_memories: 2,
+              latest_memory_at: '2026-03-19T10:01:00.000Z',
+            },
+          ],
+          revisited_queries: [
+            {
+              query: 'retention cohorts',
+              total: 3,
+            },
+          ],
+          recent_lessons: [
+            {
+              id: 'memory-1',
+              content: 'Retention cohorts are more predictive than signup totals for this segment.',
+              created_at: '2026-03-19T09:58:00.000Z',
+              agent_id: 'agent-1',
+              agent_name: 'Ada',
+              task_id: 'task-1',
+              task_title: 'Investigate churn',
+            },
+          ],
         };
       }
 
@@ -124,6 +183,7 @@ describe('DashboardPage', () => {
         capturedAt: '2026-03-19T10:00:00.000Z',
       },
     });
+    useWebSocketMock.mockReturnValue(null);
 
     useCompanyMock.mockReturnValue({
       selectedCompany: {
@@ -156,6 +216,19 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Trace Drilldown')).toBeTruthy();
     expect(screen.getByText('Live Cost Ticker')).toBeTruthy();
     expect(screen.getByText('Budget Gauge')).toBeTruthy();
+    const thoughtSection = screen.getByText('Live Thought Stream').closest('div.rounded-2xl.border.bg-card.p-6.shadow-sm') as HTMLElement | null;
+    if (!thoughtSection) {
+      throw new Error('Expected Live Thought Stream section');
+    }
+    const thoughtPanel = within(thoughtSection);
+    expect(thoughtPanel.getByText('Live Thought Stream')).toBeTruthy();
+    expect(thoughtPanel.getByText('We should verify retention cohorts before changing the headline.')).toBeTruthy();
+    expect(thoughtPanel.getByText('Recent heartbeat')).toBeTruthy();
+    expect(screen.getByText('Memory Insights')).toBeTruthy();
+    expect(screen.getByText('Recurring lessons')).toBeTruthy();
+    expect(screen.getAllByText('retention cohorts').length).toBeGreaterThan(0);
+    expect(screen.getByText('Most revisited questions')).toBeTruthy();
+    expect(screen.getByText('Retention cohorts are more predictive than signup totals for this segment.')).toBeTruthy();
     expect(screen.getByText('$12.5000 today')).toBeTruthy();
     expect(screen.getByText('$27.50 remaining')).toBeTruthy();
     expect(screen.getByText(/Latest trace/)).toBeTruthy();
@@ -165,5 +238,32 @@ describe('DashboardPage', () => {
     const grafanaLink = screen.getByRole('link', { name: 'Open in Grafana' });
     expect(grafanaLink.getAttribute('href')).toContain('trace-1234abcd');
     expect(grafanaLink.getAttribute('href')).toContain('/explore?');
+  });
+
+  it('updates the live thought stream when an agent.thought websocket event arrives', async () => {
+    useWebSocketMock.mockReturnValue({
+      event: 'agent.thought',
+      timestamp: '2026-03-19T10:02:00.000Z',
+      data: {
+        agent_id: 'agent-2',
+        agent_name: 'Ben',
+        task_id: 'task-2',
+        task_title: 'Polish onboarding',
+        thought: 'The current friction is around the second confirmation step.',
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Live Thought Stream')).toBeTruthy();
+      expect(screen.getByText('The current friction is around the second confirmation step.')).toBeTruthy();
+      expect(screen.getByText('Live now')).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Open task' }).getAttribute('href')).toContain('/tasks/task-2');
+    });
   });
 });

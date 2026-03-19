@@ -1,8 +1,39 @@
 import { db } from '../db/client.js';
-import { NotificationService } from '../services/notifications.js';
+import { deliverOutgoingWebhooks } from '../services/outgoingWebhooks.js';
 import { enqueueCompanyWakeup } from '../orchestrator/schedulerQueue.js';
 
 type ApprovalResolutionSource = 'dashboard' | 'slack' | 'api' | 'system';
+
+function buildSlackApprovalConfirm(args: {
+  status: 'approved' | 'rejected';
+  taskTitle: string;
+}) {
+  const approving = args.status === 'approved';
+
+  return {
+    title: {
+      type: 'plain_text',
+      text: approving ? 'Approve request?' : 'Reject request?',
+      emoji: true,
+    },
+    text: {
+      type: 'mrkdwn',
+      text: approving
+        ? `Approve *${args.taskTitle}* and let the task continue?`
+        : `Reject *${args.taskTitle}* and block the task?`,
+    },
+    confirm: {
+      type: 'plain_text',
+      text: approving ? 'Approve' : 'Reject',
+      emoji: true,
+    },
+    deny: {
+      type: 'plain_text',
+      text: 'Cancel',
+      emoji: true,
+    },
+  };
+}
 
 function buildSlackApprovalBlocks(args: {
   approvalId: string;
@@ -50,6 +81,19 @@ function buildSlackApprovalBlocks(args: {
       },
     },
     {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `Approval ID: \`${args.approvalId}\``,
+        },
+        {
+          type: 'mrkdwn',
+          text: 'One click here resolves the approval in Biuro and writes an audit entry.',
+        },
+      ],
+    },
+    {
       type: 'actions',
       elements: [
         {
@@ -62,6 +106,10 @@ function buildSlackApprovalBlocks(args: {
           },
           action_id: 'approval.approve',
           value: actionValue,
+          confirm: buildSlackApprovalConfirm({
+            status: 'approved',
+            taskTitle: args.taskTitle,
+          }),
         },
         {
           type: 'button',
@@ -73,6 +121,10 @@ function buildSlackApprovalBlocks(args: {
           },
           action_id: 'approval.reject',
           value: actionValue,
+          confirm: buildSlackApprovalConfirm({
+            status: 'rejected',
+            taskTitle: args.taskTitle,
+          }),
         },
       ],
     },
@@ -137,8 +189,12 @@ export async function createApprovalRequest(
 
   const discordMessage = `Approval required\nCompany: ${company.name}\nTask: ${taskTitle}\nReason: ${reason}\nPayload: ${JSON.stringify(payload)}`;
 
-  if (company.slack_webhook_url) {
-    await NotificationService.sendSlackMessage(company.slack_webhook_url, {
+  await deliverOutgoingWebhooks({
+    companyId,
+    agentId,
+    event: 'approval.requested',
+    slackWebhookUrl: company.slack_webhook_url,
+    slackPayload: {
       text: `Approval required for ${taskTitle}`,
       blocks: buildSlackApprovalBlocks({
         approvalId: approval.id,
@@ -147,12 +203,17 @@ export async function createApprovalRequest(
         reason,
         payload,
       }),
-    });
-  }
-
-  if (company.discord_webhook_url) {
-    await NotificationService.alertDiscord(company.discord_webhook_url, discordMessage);
-  }
+    },
+    discordWebhookUrl: company.discord_webhook_url,
+    discordMessage,
+    metadata: {
+      approval_id: approval.id,
+      task_id: taskId,
+      task_title: taskTitle,
+      reason,
+      policy_id: policyId ?? null,
+    },
+  });
 
   return approval;
 }

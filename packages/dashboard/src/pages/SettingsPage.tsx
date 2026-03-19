@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { CompanyRuntimeSettingsResponse, RuntimeName } from '@biuro/shared';
+import type {
+  CompanyDigestSettingsResponse,
+  CompanyRuntimeSettingsResponse,
+  RuntimeName,
+} from '@biuro/shared';
 import { ArrowDown, ArrowUp, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useCompany } from '../context/CompanyContext';
@@ -23,10 +27,16 @@ export default function SettingsPage() {
   const { selectedCompany, selectedCompanyId, companies } = useCompany();
   const { request, loading, error } = useApi();
   const [runtimeSettings, setRuntimeSettings] = useState<CompanyRuntimeSettingsResponse | null>(null);
+  const [digestSettings, setDigestSettings] = useState<CompanyDigestSettingsResponse | null>(null);
   const [draftPrimary, setDraftPrimary] = useState<RuntimeName>('gemini');
   const [draftFallback, setDraftFallback] = useState<RuntimeName[]>(['gemini', 'claude', 'openai']);
+  const [draftDigestEnabled, setDraftDigestEnabled] = useState(true);
+  const [draftDigestHour, setDraftDigestHour] = useState(18);
+  const [draftDigestMinute, setDraftDigestMinute] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [savingDigest, setSavingDigest] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [digestSaveMessage, setDigestSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +64,38 @@ export default function SettingsPage() {
     }
 
     void loadRuntimeSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, [request, selectedCompanyId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDigestSettings() {
+      if (!selectedCompanyId) {
+        setDigestSettings(null);
+        setDigestSaveMessage(null);
+        return;
+      }
+
+      try {
+        const data = (await request(`/companies/${selectedCompanyId}/digest-settings`, undefined, { suppressError: true })) as CompanyDigestSettingsResponse;
+        if (cancelled) {
+          return;
+        }
+        setDigestSettings(data);
+        setDraftDigestEnabled(data.enabled);
+        setDraftDigestHour(data.hour_utc);
+        setDraftDigestMinute(data.minute_utc);
+      } catch {
+        if (!cancelled) {
+          setDigestSettings(null);
+        }
+      }
+    }
+
+    void loadDigestSettings();
     return () => {
       cancelled = true;
     };
@@ -111,6 +153,46 @@ export default function SettingsPage() {
       setSaveMessage(err.message || 'Failed to save runtime settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDigestReset = () => {
+    if (!digestSettings) {
+      return;
+    }
+
+    setDraftDigestEnabled(digestSettings.system_defaults.enabled);
+    setDraftDigestHour(digestSettings.system_defaults.hour_utc);
+    setDraftDigestMinute(digestSettings.system_defaults.minute_utc);
+    setDigestSaveMessage(null);
+  };
+
+  const handleDigestSave = async () => {
+    if (!selectedCompanyId) {
+      return;
+    }
+
+    setSavingDigest(true);
+    setDigestSaveMessage(null);
+    try {
+      const data = (await request(`/companies/${selectedCompanyId}/digest-settings`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          enabled: draftDigestEnabled,
+          hour_utc: draftDigestHour,
+          minute_utc: draftDigestMinute,
+        }),
+      })) as CompanyDigestSettingsResponse;
+
+      setDigestSettings(data);
+      setDraftDigestEnabled(data.enabled);
+      setDraftDigestHour(data.hour_utc);
+      setDraftDigestMinute(data.minute_utc);
+      setDigestSaveMessage('Daily digest settings saved for this company.');
+    } catch (err: any) {
+      setDigestSaveMessage(err.message || 'Failed to save daily digest settings.');
+    } finally {
+      setSavingDigest(false);
     }
   };
 
@@ -273,6 +355,116 @@ export default function SettingsPage() {
                   Reset to defaults
                 </button>
                 {saveMessage && <span className="text-sm text-muted-foreground">{saveMessage}</span>}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">Daily Digest</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Configure whether this company sends an end-of-day summary to Slack or Discord and when it becomes eligible.
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
+            <Sparkles className="h-4 w-4" />
+            {draftDigestEnabled ? `Digest at ${String(draftDigestHour).padStart(2, '0')}:${String(draftDigestMinute).padStart(2, '0')} UTC` : 'Digest disabled'}
+          </div>
+        </div>
+
+        {!selectedCompanyId ? (
+          <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+            Select a company to configure daily digest settings.
+          </div>
+        ) : !digestSettings && loading ? (
+          <div className="mt-4 text-sm text-muted-foreground">Loading digest settings...</div>
+        ) : !digestSettings ? (
+          <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-red-600">
+            {error || 'Daily digest settings are currently unavailable.'}
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1.1fr]">
+            <div className="space-y-4">
+              <label className="flex items-start gap-3 rounded-xl border bg-muted/20 px-4 py-4">
+                <input
+                  type="checkbox"
+                  checked={draftDigestEnabled}
+                  onChange={(event) => setDraftDigestEnabled(event.target.checked)}
+                  className="mt-1 h-4 w-4"
+                />
+                <div>
+                  <div className="text-sm font-medium text-foreground">Enable daily digest</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    When enabled, the worker sends one daily summary after the configured UTC time if the company has a Slack or Discord webhook.
+                  </div>
+                </div>
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Hour (UTC)</label>
+                  <select
+                    value={draftDigestHour}
+                    onChange={(event) => setDraftDigestHour(Number(event.target.value))}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  >
+                    {Array.from({ length: 24 }, (_, value) => (
+                      <option key={value} value={value}>
+                        {String(value).padStart(2, '0')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Minute (UTC)</label>
+                  <select
+                    value={draftDigestMinute}
+                    onChange={(event) => setDraftDigestMinute(Number(event.target.value))}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  >
+                    {[0, 15, 30, 45].map((value) => (
+                      <option key={value} value={value}>
+                        {String(value).padStart(2, '0')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-dashed bg-muted/10 p-4 text-sm">
+                <div className="font-medium">System defaults</div>
+                <div className="mt-1 text-muted-foreground">
+                  {digestSettings.system_defaults.enabled ? 'Enabled' : 'Disabled'} at {String(digestSettings.system_defaults.hour_utc).padStart(2, '0')}:{String(digestSettings.system_defaults.minute_utc).padStart(2, '0')} UTC.
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+                Daily digest includes completed tasks today, currently blocked tasks, daily cost vs budget, and top heartbeat errors.
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleDigestSave}
+                  disabled={savingDigest}
+                  className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingDigest ? 'Saving...' : 'Save daily digest settings'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDigestReset}
+                  disabled={savingDigest}
+                  className="rounded-md border px-4 py-2 text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Reset to defaults
+                </button>
+                {digestSaveMessage && <span className="text-sm text-muted-foreground">{digestSaveMessage}</span>}
               </div>
             </div>
           </div>

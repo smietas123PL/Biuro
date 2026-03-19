@@ -15,7 +15,7 @@ import { findRelatedMemories, storeMemory } from './memory.js';
 import { broadcastCollaborationSignal, findDelegateAgent } from '../services/collaboration.js';
 import { activeHeartbeatsGauge, recordHeartbeatMetric } from '../observability/metrics.js';
 import { startActiveSpan } from '../observability/tracing.js';
-import { NotificationService } from '../services/notifications.js';
+import { deliverOutgoingWebhooks } from '../services/outgoingWebhooks.js';
 import { enqueueCompanyWakeup } from './schedulerQueue.js';
 
 export type HeartbeatOutcome = {
@@ -245,6 +245,13 @@ export async function processAgentHeartbeat(agentId: string) {
       );
 
       if (typeof response.thought === 'string' && response.thought.trim().length > 0) {
+        await broadcastCompanyEvent(task.company_id, 'agent.thought', {
+          agent_id: agentId,
+          agent_name: agentName,
+          task_id: task.id,
+          task_title: task.title,
+          thought: response.thought,
+        }, 'worker');
         await broadcastCollaborationSignal(task.company_id, task.id, 'thought', {
           agent_id: agentId,
           task_title: task.title,
@@ -712,11 +719,22 @@ async function emitBudgetThresholdAlert(args: {
   );
   const company = companyRes.rows[0];
 
-  if (company?.slack_webhook_url) {
-    await NotificationService.alertSlack(company.slack_webhook_url, `Budget alert: ${message}`);
-  }
-
-  if (company?.discord_webhook_url) {
-    await NotificationService.alertDiscord(company.discord_webhook_url, `Budget alert: ${message}`);
-  }
+  await deliverOutgoingWebhooks({
+    companyId: args.companyId,
+    agentId: args.agentId,
+    event: 'budget.threshold',
+    slackWebhookUrl: company?.slack_webhook_url ?? null,
+    slackText: `Budget alert: ${message}`,
+    discordWebhookUrl: company?.discord_webhook_url ?? null,
+    discordMessage: `Budget alert: ${message}`,
+    metadata: {
+      task_id: args.taskId,
+      task_title: args.taskTitle,
+      threshold_pct: thresholdPct,
+      utilization_pct: utilizationPct,
+      spent_usd: args.budget.spent_usd,
+      limit_usd: args.budget.limit_usd,
+      tone,
+    },
+  });
 }

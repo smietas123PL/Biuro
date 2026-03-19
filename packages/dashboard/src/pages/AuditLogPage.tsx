@@ -81,6 +81,31 @@ type TemplateImportDetails = {
   };
 };
 
+type NLCommandPlannerDetails = {
+  mode: 'llm' | 'rules';
+  runtime?: string;
+  model?: string;
+  attempts?: Array<{
+    runtime: string;
+    model: string;
+    status: 'success' | 'fallback' | 'failed';
+    reason?: string;
+  }>;
+  fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_plan' | null;
+};
+
+type PlannerAttemptStatus = 'success' | 'fallback' | 'failed';
+
+type NLCommandAuditDetails = {
+  input?: string;
+  source?: 'llm' | 'rules';
+  can_execute?: boolean;
+  action_count?: number;
+  action_types?: string[];
+  planner?: NLCommandPlannerDetails;
+  user_id?: string | null;
+};
+
 type AuditFilter = {
   id: string;
   label: string;
@@ -94,8 +119,14 @@ type AuditRange = {
   days: number | null;
 };
 
+type ControlPanelFacet = {
+  id: 'all' | 'llm-only' | 'rules-fallback' | 'executable' | 'failed-planning';
+  label: string;
+};
+
 const auditFilters: AuditFilter[] = [
   { id: 'all', label: 'All Events' },
+  { id: 'control-panel', label: 'Control Panel', actionPrefix: 'nl_command.' },
   { id: 'templates', label: 'Template Events', actionPrefix: 'template.' },
   { id: 'template-previews', label: 'Template Previews', action: 'template.previewed' },
   { id: 'template-imports', label: 'Template Imports', action: 'template.imported' },
@@ -106,6 +137,14 @@ const auditRanges: AuditRange[] = [
   { id: '7d', label: 'Last 7 days', days: 7 },
   { id: '30d', label: 'Last 30 days', days: 30 },
   { id: 'all-time', label: 'All time', days: null },
+];
+
+const controlPanelFacets: ControlPanelFacet[] = [
+  { id: 'all', label: 'All Plans' },
+  { id: 'llm-only', label: 'LLM Only' },
+  { id: 'rules-fallback', label: 'Rules Fallback' },
+  { id: 'executable', label: 'Executable' },
+  { id: 'failed-planning', label: 'Failed Planning' },
 ];
 
 function buildAuditLogQuery(
@@ -139,6 +178,22 @@ function buildAuditLogQuery(
   return `?${params.toString()}`;
 }
 
+function getRuntimeLabel(runtime?: string) {
+  if (runtime === 'claude') {
+    return 'Claude';
+  }
+
+  if (runtime === 'openai') {
+    return 'OpenAI';
+  }
+
+  if (runtime === 'gemini') {
+    return 'Gemini';
+  }
+
+  return runtime ?? 'Rules';
+}
+
 function getAuditRouting(details?: Record<string, unknown> | null): AuditRoutingDetails | null {
   const routing = details?.llm_routing;
   if (!routing || typeof routing !== 'object') {
@@ -156,7 +211,8 @@ function getAuditRouting(details?: Record<string, unknown> | null): AuditRouting
     selected_runtime: selectedRuntime,
     selected_model: selectedModel,
     attempts: Array.isArray(attempts)
-      ? attempts.filter((attempt) => attempt && typeof attempt === 'object')
+      ? attempts
+        .filter((attempt) => attempt && typeof attempt === 'object')
         .map((attempt) => ({
           runtime: String((attempt as { runtime?: unknown }).runtime ?? 'unknown'),
           model: String((attempt as { model?: unknown }).model ?? 'unknown'),
@@ -169,14 +225,128 @@ function getAuditRouting(details?: Record<string, unknown> | null): AuditRouting
   };
 }
 
+function getNLCommandDetails(details?: Record<string, unknown> | null): NLCommandAuditDetails | null {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+
+  const plannerRaw = (details as { planner?: unknown }).planner;
+  const planner = plannerRaw && typeof plannerRaw === 'object'
+    ? {
+        mode: ((plannerRaw as { mode?: unknown }).mode as NLCommandPlannerDetails['mode']) ?? 'rules',
+        runtime: typeof (plannerRaw as { runtime?: unknown }).runtime === 'string'
+          ? String((plannerRaw as { runtime?: unknown }).runtime)
+          : undefined,
+        model: typeof (plannerRaw as { model?: unknown }).model === 'string'
+          ? String((plannerRaw as { model?: unknown }).model)
+          : undefined,
+        attempts: Array.isArray((plannerRaw as { attempts?: unknown }).attempts)
+          ? ((plannerRaw as { attempts?: unknown }).attempts as unknown[])
+            .filter((attempt) => attempt && typeof attempt === 'object')
+            .map((attempt) => ({
+              runtime: String((attempt as { runtime?: unknown }).runtime ?? 'unknown'),
+              model: String((attempt as { model?: unknown }).model ?? 'unknown'),
+              status: ((attempt as { status?: unknown }).status as PlannerAttemptStatus) ?? 'failed',
+              reason: typeof (attempt as { reason?: unknown }).reason === 'string'
+                ? String((attempt as { reason?: unknown }).reason)
+                : undefined,
+            }))
+          : undefined,
+        fallback_reason: ((plannerRaw as { fallback_reason?: unknown }).fallback_reason as NLCommandPlannerDetails['fallback_reason']) ?? null,
+      }
+    : undefined;
+
+  return {
+    input: typeof (details as { input?: unknown }).input === 'string'
+      ? String((details as { input?: unknown }).input)
+      : undefined,
+    source: ((details as { source?: unknown }).source as NLCommandAuditDetails['source']) ?? undefined,
+    can_execute: typeof (details as { can_execute?: unknown }).can_execute === 'boolean'
+      ? Boolean((details as { can_execute?: unknown }).can_execute)
+      : undefined,
+    action_count: typeof (details as { action_count?: unknown }).action_count === 'number'
+      ? Number((details as { action_count?: unknown }).action_count)
+      : undefined,
+    action_types: Array.isArray((details as { action_types?: unknown }).action_types)
+      ? ((details as { action_types?: unknown }).action_types as unknown[]).map((item) => String(item))
+      : undefined,
+    planner,
+    user_id: typeof (details as { user_id?: unknown }).user_id === 'string'
+      ? String((details as { user_id?: unknown }).user_id)
+      : null,
+  };
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return <>{text}</>;
+  }
+
+  const matcher = new RegExp(`(${escapeRegExp(normalizedQuery)})`, 'ig');
+  const parts = text.split(matcher);
+  const normalizedNeedle = normalizedQuery.toLowerCase();
+
+  return (
+    <>
+      {parts.map((part, index) => (
+        part.toLowerCase() === normalizedNeedle
+          ? (
+            <mark key={`${part}-${index}`} className="rounded bg-amber-200/70 px-1 text-foreground">
+              {part}
+            </mark>
+          )
+          : <span key={`${part}-${index}`}>{part}</span>
+      ))}
+    </>
+  );
+}
+
+function matchesControlPanelFacet(log: AuditLogItem, facetId: ControlPanelFacet['id']) {
+  if (facetId === 'all') {
+    return true;
+  }
+
+  const details = log.action === 'nl_command.planned' ? getNLCommandDetails(log.details) : null;
+  if (!details) {
+    return false;
+  }
+
+  if (facetId === 'llm-only') {
+    return details.source === 'llm' && !details.planner?.fallback_reason;
+  }
+
+  if (facetId === 'rules-fallback') {
+    return details.source === 'rules' && Boolean(details.planner?.fallback_reason);
+  }
+
+  if (facetId === 'executable') {
+    return details.can_execute === true;
+  }
+
+  if (facetId === 'failed-planning') {
+    return details.can_execute === false;
+  }
+
+  return true;
+}
+
 export default function AuditLogPage() {
   const { request, loading } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
+  const [controlPanelLogs, setControlPanelLogs] = useState<AuditLogItem[]>([]);
   const [recentTraces, setRecentTraces] = useState<ApiTraceSnapshot[]>([]);
   const [recentTraceError, setRecentTraceError] = useState<string | null>(null);
+  const [controlPanelError, setControlPanelError] = useState<string | null>(null);
   const [activeFilterId, setActiveFilterId] = useState<AuditFilter['id']>('all');
   const [activeRangeId, setActiveRangeId] = useState<AuditRange['id']>('7d');
+  const [activeControlPanelFacetId, setActiveControlPanelFacetId] = useState<ControlPanelFacet['id']>('all');
+  const [controlPanelSearch, setControlPanelSearch] = useState('');
   const [nextCursor, setNextCursor] = useState<AuditLogResponse['next_cursor']>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -202,6 +372,18 @@ export default function AuditLogPage() {
   useEffect(() => {
     void loadLogs();
   }, [activeFilterId, activeRangeId, selectedCompanyId]);
+
+  useEffect(() => {
+    if (activeFilterId !== 'control-panel' && activeControlPanelFacetId !== 'all') {
+      setActiveControlPanelFacetId('all');
+    }
+  }, [activeControlPanelFacetId, activeFilterId]);
+
+  useEffect(() => {
+    if (activeFilterId !== 'control-panel' && controlPanelSearch) {
+      setControlPanelSearch('');
+    }
+  }, [activeFilterId, controlPanelSearch]);
 
   useEffect(() => {
     const loadRecentTraces = async () => {
@@ -236,9 +418,63 @@ export default function AuditLogPage() {
     void loadRecentTraces();
   }, [request, selectedCompanyId]);
 
+  useEffect(() => {
+    const loadControlPanelActivity = async () => {
+      if (!selectedCompanyId) {
+        setControlPanelLogs([]);
+        setControlPanelError(null);
+        return;
+      }
+
+      try {
+        const data = (await request(
+          `/companies/${selectedCompanyId}/audit-log?limit=5&action_prefix=nl_command.`,
+          undefined,
+          { suppressError: true, trackTrace: false }
+        )) as AuditLogResponse;
+        setControlPanelLogs(data.items ?? []);
+        setControlPanelError(null);
+      } catch (err) {
+        setControlPanelLogs([]);
+        setControlPanelError(err instanceof Error ? err.message : 'Control Panel activity is unavailable.');
+      }
+    };
+
+    void loadControlPanelActivity();
+  }, [request, selectedCompanyId]);
+
   if (!selectedCompany) {
     return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to inspect the audit log.</div>;
   }
+
+  const normalizedControlPanelSearch = controlPanelSearch.trim().toLowerCase();
+  const matchesControlPanelSearch = (log: AuditLogItem) => {
+    if (!normalizedControlPanelSearch) {
+      return true;
+    }
+
+    const details = log.action === 'nl_command.planned' ? getNLCommandDetails(log.details) : null;
+    const haystack = [
+      log.action,
+      details?.input,
+      details?.source,
+      details?.planner?.mode,
+      details?.planner?.runtime,
+      details?.planner?.model,
+      details?.planner?.fallback_reason,
+      ...(details?.action_types ?? []),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return haystack.includes(normalizedControlPanelSearch);
+  };
+
+  const filteredLogs = activeFilterId === 'control-panel'
+    ? logs.filter((log) => matchesControlPanelFacet(log, activeControlPanelFacetId) && matchesControlPanelSearch(log))
+    : logs;
+  const filteredControlPanelLogs = controlPanelLogs.filter(matchesControlPanelSearch);
 
   return (
     <div className="space-y-6">
@@ -279,17 +515,56 @@ export default function AuditLogPage() {
             </button>
           ))}
         </div>
+
+        {activeFilterId === 'control-panel' && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {controlPanelFacets.map((facet) => {
+                const count = logs.filter((log) => matchesControlPanelFacet(log, facet.id)).length;
+                return (
+                  <button
+                    key={facet.id}
+                    onClick={() => setActiveControlPanelFacetId(facet.id)}
+                    className={`rounded-full border px-4 py-2 text-sm transition-colors ${
+                      facet.id === activeControlPanelFacetId
+                        ? 'border-sky-600 bg-sky-600 text-white'
+                        : 'bg-card text-muted-foreground hover:bg-accent'
+                    }`}
+                  >
+                    {facet.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="max-w-md">
+              <input
+                type="search"
+                value={controlPanelSearch}
+                onChange={(event) => setControlPanelSearch(event.target.value)}
+                placeholder="Search Control Panel commands..."
+                className="w-full rounded-xl border bg-card px-4 py-3 text-sm text-foreground outline-none transition-colors focus:border-sky-500"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="overflow-hidden rounded-xl border bg-card">
           <div className="divide-y">
-            {logs.map((log) => (
-              <AuditLogRow key={log.id} log={log} />
+            {filteredLogs.map((log) => (
+              <AuditLogRow
+                key={log.id}
+                log={log}
+                controlPanelSearch={activeFilterId === 'control-panel' ? controlPanelSearch : ''}
+              />
             ))}
-            {logs.length === 0 && !loading && (
+            {filteredLogs.length === 0 && !loading && (
               <div className="p-12 text-center italic text-muted-foreground">
-                No events logged for this filter and date range yet.
+                {activeFilterId === 'control-panel'
+                  ? 'No Control Panel events match this facet and date range yet.'
+                  : 'No events logged for this filter and date range yet.'}
               </div>
             )}
           </div>
@@ -311,6 +586,64 @@ export default function AuditLogPage() {
         </div>
 
         <aside className="space-y-4">
+          <section className="rounded-2xl border bg-card p-6 shadow-sm">
+            <div>
+              <h3 className="text-lg font-semibold">Control Panel Activity</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Latest natural-language planning requests, including runtime source and fallback status.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {filteredControlPanelLogs.map((log) => {
+                const details = getNLCommandDetails(log.details);
+                const planner = details?.planner;
+                return (
+                  <div key={log.id} className="rounded-2xl border bg-muted/20 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">
+                        {planner?.mode === 'llm' && planner.runtime ? `Planned by ${getRuntimeLabel(planner.runtime)}` : 'Planned by Rules'}
+                      </span>
+                      {planner?.fallback_reason && (
+                        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+                          Fallback: {planner.fallback_reason}
+                        </span>
+                      )}
+                      {typeof details?.action_count === 'number' && (
+                        <span className="rounded-full bg-background px-3 py-1 text-xs text-muted-foreground">
+                          {details.action_count} steps
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-3 text-sm font-medium text-foreground">
+                      {details?.input
+                        ? <HighlightedText text={details.input} query={controlPanelSearch} />
+                        : 'Natural language control request'}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {new Date(log.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredControlPanelLogs.length === 0 && !controlPanelError && (
+                <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+                  {normalizedControlPanelSearch
+                    ? 'No Control Panel activity matches this search yet.'
+                    : 'Natural-language planning events will appear here after the first Control Panel request.'}
+                </div>
+              )}
+
+              {controlPanelError && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  {controlPanelError}
+                </div>
+              )}
+            </div>
+          </section>
+
           <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -351,14 +684,11 @@ export default function AuditLogPage() {
   );
 }
 
-function AuditLogRow({ log }: { log: AuditLogItem }) {
+function AuditLogRow({ log, controlPanelSearch = '' }: { log: AuditLogItem; controlPanelSearch?: string }) {
   const routing = getAuditRouting(log.details);
-  const templatePreview = log.action === 'template.previewed'
-    ? (log.details as TemplatePreviewDetails | null)
-    : null;
-  const templateImport = log.action === 'template.imported'
-    ? (log.details as TemplateImportDetails | null)
-    : null;
+  const nlCommand = log.action === 'nl_command.planned' ? getNLCommandDetails(log.details) : null;
+  const templatePreview = log.action === 'template.previewed' ? (log.details as TemplatePreviewDetails | null) : null;
+  const templateImport = log.action === 'template.imported' ? (log.details as TemplateImportDetails | null) : null;
 
   return (
     <div className="flex gap-4 p-4 transition-colors hover:bg-accent/30">
@@ -374,7 +704,9 @@ function AuditLogRow({ log }: { log: AuditLogItem }) {
                 ? `Preview snapshot for preset ${templatePreview.preset_name}`
                 : templateImport
                   ? `Import event from ${templateImport.source === 'preset' ? `preset ${templateImport.preset_name}` : 'custom template'}`
-                  : 'Operational event'}
+                  : nlCommand
+                    ? 'Natural language Control Panel request'
+                    : 'Operational event'}
             </div>
           </div>
           <div className="text-xs text-muted-foreground">
@@ -441,6 +773,44 @@ function AuditLogRow({ log }: { log: AuditLogItem }) {
               ]}
             />
           </div>
+        ) : nlCommand ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">
+                {nlCommand.planner?.mode === 'llm' && nlCommand.planner.runtime
+                  ? `Planned by ${getRuntimeLabel(nlCommand.planner.runtime)}`
+                  : 'Planned by Rules'}
+              </span>
+              {typeof nlCommand.action_count === 'number' && (
+                <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+                  {nlCommand.action_count} steps
+                </span>
+              )}
+              <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+                executable: {nlCommand.can_execute ? 'yes' : 'no'}
+              </span>
+              {nlCommand.planner?.fallback_reason && (
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">
+                  fallback: {nlCommand.planner.fallback_reason}
+                </span>
+              )}
+            </div>
+
+            {nlCommand.input && (
+              <div className="rounded-2xl border bg-muted/20 px-4 py-3 text-sm text-foreground">
+                <HighlightedText text={nlCommand.input} query={controlPanelSearch} />
+              </div>
+            )}
+
+            {nlCommand.planner?.attempts && nlCommand.planner.attempts.length > 0 && (
+              <AuditMetricBlock
+                title="Planner routing"
+                lines={nlCommand.planner.attempts.map((attempt) => (
+                  `${attempt.runtime} / ${attempt.model} | ${attempt.status}${attempt.reason ? ` | ${attempt.reason}` : ''}`
+                ))}
+              />
+            )}
+          </div>
         ) : (
           <>
             <div className="text-sm text-muted-foreground">
@@ -463,7 +833,7 @@ function AuditLogRow({ log }: { log: AuditLogItem }) {
                 <AuditMetricBlock
                   title="LLM routing"
                   lines={routing.attempts.map((attempt) => (
-                    `${attempt.runtime} / ${attempt.model} • ${attempt.status}${attempt.reason ? ` • ${attempt.reason}` : ''}`
+                    `${attempt.runtime} / ${attempt.model} | ${attempt.status}${attempt.reason ? ` | ${attempt.reason}` : ''}`
                   ))}
                 />
               </div>

@@ -156,3 +156,26 @@ export type TemplateMarketplaceDryRunResponse = {
   };
   preview: TemplateImportDryRun;
 };
+
+export type TemplateAISuggestion = {
+  title: string;
+  description: string;
+  priority: number;
+  default_role: string | null;
+  suggested_agent_id: string | null;
+  suggested_agent_name: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  warnings: string[];
+};
+
+export type TemplateAISuggestPlanner = {
+  mode: 'llm' | 'rules';
+  runtime?: string;
+  model?: string;
+  fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_output' | null;
+};
+
+export type TemplateAISuggestResponse = {
+  suggestion: TemplateAISuggestion;
+  planner: TemplateAISuggestPlanner;
+};

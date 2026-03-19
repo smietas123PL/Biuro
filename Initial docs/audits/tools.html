@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tools — Instrukcja wdrożenia dla Codex</title>
+<style>
+  :root {
+    --bg: #0f0f11;
+    --surface: #17171c;
+    --surface2: #1e1e25;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e2e0d8;
+    --muted: #6b6966;
+    --dim: #9e9c97;
+    --green: #4ade80;
+    --green-bg: rgba(74,222,128,0.08);
+    --blue: #60a5fa;
+    --blue-bg: rgba(96,165,250,0.08);
+    --amber: #fbbf24;
+    --amber-bg: rgba(251,191,36,0.08);
+    --red: #f87171;
+    --red-bg: rgba(248,113,113,0.08);
+    --purple: #a78bfa;
+    --purple-bg: rgba(167,139,250,0.08);
+    --code-bg: #0d0d10;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 240px;
+    min-width: 240px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .sidebar-logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+
+  .sidebar-logo .proj { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  .sidebar-logo .title { font-size: 15px; font-weight: 600; color: var(--text); margin-top: 4px; }
+
+  .sidebar-section { padding: 8px 12px 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+  .sidebar a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 20px;
+    font-size: 13px;
+    color: var(--dim);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+
+  .sidebar a:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .sidebar a.active { color: var(--text); border-left-color: var(--blue); background: var(--blue-bg); }
+
+  .sidebar .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot-green { background: var(--green); }
+  .dot-blue  { background: var(--blue); }
+  .dot-amber { background: var(--amber); }
+  .dot-red   { background: var(--red); }
+
+  /* Main */
+  .main { flex: 1; max-width: 860px; padding: 48px 56px 100px; overflow-x: hidden; }
+
+  /* Header */
+  .page-header { margin-bottom: 48px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
+  .page-header .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 11px;
+    background: var(--blue-bg); color: var(--blue);
+    border: 1px solid rgba(96,165,250,0.2);
+    border-radius: 4px; padding: 3px 8px; margin-bottom: 16px;
+  }
+  .page-header h1 { font-size: 28px; font-weight: 600; line-height: 1.2; margin-bottom: 12px; }
+  .page-header p { color: var(--dim); font-size: 15px; max-width: 580px; line-height: 1.7; }
+
+  /* Section */
+  .section { margin-bottom: 56px; scroll-margin-top: 32px; }
+  .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .section-num {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    flex-shrink: 0;
+  }
+  .section-title { font-size: 18px; font-weight: 600; }
+
+  /* Alert boxes */
+  .alert {
+    border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .alert-body { font-size: 13px; line-height: 1.65; }
+  .alert-body strong { font-weight: 600; display: block; margin-bottom: 3px; }
+  .alert-critical { background: var(--red-bg); border: 1px solid rgba(248,113,113,0.2); color: #fca5a5; }
+  .alert-info     { background: var(--blue-bg); border: 1px solid rgba(96,165,250,0.2); color: #93c5fd; }
+  .alert-success  { background: var(--green-bg); border: 1px solid rgba(74,222,128,0.2); color: #86efac; }
+  .alert-warn     { background: var(--amber-bg); border: 1px solid rgba(251,191,36,0.2); color: #fcd34d; }
+
+  /* File pill */
+  .file-target {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 6px; padding: 4px 10px 4px 8px;
+    font-family: var(--mono); font-size: 12px; color: var(--blue);
+    margin-bottom: 12px;
+  }
+  .file-target .arrow { color: var(--muted); }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-lang {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+
+  .copy-btn {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: none; border: 1px solid var(--border2); border-radius: 4px;
+    padding: 3px 8px; cursor: pointer; transition: all .15s;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--border2); }
+  .copy-btn.copied { color: var(--green); border-color: rgba(74,222,128,0.3); }
+
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    padding: 20px; overflow-x: auto; color: #c9c7c0;
+    tab-size: 2;
+  }
+
+  /* Inline code */
+  code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; color: var(--blue);
+  }
+
+  /* Prose */
+  p { margin-bottom: 14px; color: var(--dim); font-size: 14px; line-height: 1.75; }
+  p strong { color: var(--text); font-weight: 500; }
+
+  /* Step list */
+  .steps { list-style: none; counter-reset: steps; margin-bottom: 20px; }
+  .steps li {
+    counter-increment: steps;
+    padding: 14px 16px 14px 52px;
+    position: relative;
+    border-left: 1px solid var(--border);
+    margin-left: 16px;
+    color: var(--dim);
+    font-size: 14px;
+  }
+  .steps li::before {
+    content: counter(steps);
+    position: absolute; left: -14px; top: 14px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--surface2); border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .steps li:last-child { border-left-color: transparent; }
+  .steps li strong { color: var(--text); font-weight: 500; display: block; margin-bottom: 4px; }
+
+  /* Tag grid */
+  .tag-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .tag {
+    border-radius: 6px; padding: 4px 10px;
+    font-size: 12px; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .tag-builtin { background: var(--blue-bg); color: var(--blue); border-color: rgba(96,165,250,.2); }
+  .tag-http    { background: var(--green-bg); color: var(--green); border-color: rgba(74,222,128,.2); }
+  .tag-bash    { background: var(--amber-bg); color: var(--amber); border-color: rgba(251,191,36,.2); }
+  .tag-mcp     { background: var(--purple-bg); color: var(--purple); border-color: rgba(167,139,250,.2); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border2); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--dim); vertical-align: top; }
+  td:first-child { font-family: var(--mono); font-size: 12px; color: var(--blue); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+
+  /* Divider */
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  /* Checklist */
+  .checklist { list-style: none; margin-bottom: 20px; }
+  .checklist li {
+    padding: 8px 0 8px 32px;
+    position: relative;
+    color: var(--dim); font-size: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before {
+    content: '○';
+    position: absolute; left: 0;
+    color: var(--muted); font-size: 16px; top: 6px;
+  }
+  .checklist li strong { color: var(--text); font-weight: 500; }
+
+  /* Syntax highlight (simple) */
+  .kw { color: #c792ea; }
+  .fn { color: #82aaff; }
+  .st { color: #c3e88d; }
+  .cm { color: #546e7a; font-style: italic; }
+  .nm { color: #f78c6c; }
+  .op { color: #89ddff; }
+
+  /* Scroll fix */
+  html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="proj">Autonomiczne Biuro</div>
+    <div class="title">Tools — Codex Brief</div>
+  </div>
+
+  <div class="sidebar-section">Przegląd</div>
+  <a href="#problem" class="active"><span class="dot dot-red"></span> Problem</a>
+  <a href="#architektura"><span class="dot dot-blue"></span> Architektura</a>
+
+  <div class="sidebar-section">Pliki do zmiany</div>
+  <a href="#executor"><span class="dot dot-amber"></span> executor.ts</a>
+  <a href="#context"><span class="dot dot-red"></span> context.ts (krytyczny)</a>
+  <a href="#routes"><span class="dot dot-blue"></span> routes/tools.ts</a>
+  <a href="#seed"><span class="dot dot-green"></span> seed-tools.ts</a>
+  <a href="#frontend"><span class="dot dot-blue"></span> ToolsPage.tsx</a>
+
+  <div class="sidebar-section">Wdrożenie</div>
+  <a href="#checklist"><span class="dot dot-green"></span> Checklist</a>
+  <a href="#test"><span class="dot dot-amber"></span> Weryfikacja</a>
+</nav>
+
+<!-- Main -->
+<main class="main">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="badge">📋 Instrukcja dla Codex · Autonomiczne Biuro · Tools</div>
+    <h1>Pełna implementacja systemu Tools</h1>
+    <p>Zakładka Tools jest pusta — brakuje danych w bazie, UI do zarządzania i (krytycznie) wstrzykiwania listy tools do prompt agenta. Ten brief zawiera kompletny kod gotowy do wklejenia.</p>
+  </div>
+
+  <!-- PROBLEM -->
+  <section class="section" id="problem">
+    <div class="section-header">
+      <div class="section-num">!</div>
+      <div class="section-title">Diagnoza — co jest zepsute</div>
+    </div>
+
+    <div class="alert alert-critical">
+      <div class="alert-icon">🔴</div>
+      <div class="alert-body">
+        <strong>Bug krytyczny: agenci nie wiedzą o dostępnych toolach</strong>
+        <code>context.ts</code> buduje prompt dla LLM ale <strong>nigdy nie pobiera listy tools</strong> z tabeli <code>agent_tools</code>. Agent dostaje zadanie, ale Claude nie wie że może wywołać <code>web_search</code> czy <code>send_email</code>. Efekt: agenci używają tylko <code>continue</code> i <code>complete_task</code>, całkowicie ignorując tools.
+      </div>
+    </div>
+
+    <div class="alert alert-warn">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-body">
+        <strong>Builtiny to mocki</strong>
+        <code>handleBuiltin()</code> w <code>executor.ts</code> zawiera tylko <code>// Mock web search for skeleton</code>. Żadne narzędzie nie działa naprawdę.
+      </div>
+    </div>
+
+    <div class="alert alert-warn">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-body">
+        <strong>Brak UI i danych</strong>
+        Tabela <code>tools</code> jest pusta (brak seedów), brak przycisku "Add Tool" w dashboardzie, brak endpointów do przypisywania agentów i historii wywołań.
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITEKTURA -->
+  <section class="section" id="architektura">
+    <div class="section-header">
+      <div class="section-num">0</div>
+      <div class="section-title">Architektura — jak tools działają</div>
+    </div>
+
+    <p>Schemat przepływu od heartbeatu do wykonania toola:</p>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">flow</span></div>
+      <pre>Worker tick
+  → processAgentHeartbeat(agentId)
+      → buildAgentContext(agentId, taskId)   ← <span class="cm">tu dodajemy AVAILABLE TOOLS</span>
+          → query agent_tools JOIN tools
+          → formatToolForPrompt() dla każdego
+          → wstrzyknięcie do additional_context
+      → runtime.execute(context)             ← LLM wie o toolach
+          → Claude zwraca action: use_tool
+      → switch action.type
+          case 'use_tool':
+            → canUseTool(agentId, toolName)  ← sprawdź uprawnienia
+            → evaluatePolicy(...)            ← sprawdź policies
+            → executeTool(agentId, taskId, toolName, params)
+                → switch tool.type
+                    builtin → handleBuiltin()
+                    http    → executeHttp()
+                    bash    → execPromise() z whitelistą
+                    mcp     → MCPService.callTool()
+                → INSERT INTO tool_calls     ← log każdego wywołania</pre>
+    </div>
+
+    <p>Typy tools obsługiwane przez system:</p>
+    <div class="tag-grid">
+      <span class="tag tag-builtin">builtin — natywne funkcje (web_search, send_email…)</span>
+      <span class="tag tag-http">http — zewnętrzne REST API</span>
+      <span class="tag tag-bash">bash — shell z whitelistą komend</span>
+      <span class="tag tag-mcp">mcp — Model Context Protocol servers</span>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- EXECUTOR -->
+  <section class="section" id="executor">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <div class="section-title">executor.ts — prawdziwe implementacje builtinów</div>
+    </div>
+
+    <div class="file-target">
+      <span>📄</span>
+      <span>packages/server/src/tools/</span>
+      <span class="arrow">→</span>
+      <span>executor.ts</span>
+      <span style="color:var(--muted)">(zastąp cały plik)</span>
+    </div>
+
+    <p>Oryginał ma mocki z komentarzem <code>// Mock web search for skeleton</code>. Nowa wersja implementuje: <strong>web_search</strong> (Brave API z fallback na mock), <strong>send_email</strong> (SendGrid), <strong>create_document</strong>, <strong>read_knowledge</strong>, <strong>wait</strong>, plus właściwy <strong>HTTP executor z timeout</strong> i <strong>Bash z whitelistą</strong>.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">typescript · packages/server/src/tools/executor.ts</span>
+        <button class="copy-btn" onclick="copyBlock(this)">copy</button>
+      </div>
+      <pre><span class="kw">import</span> { exec } <span class="kw">from</span> <span class="st">'child_process'</span>;
+<span class="kw">import</span> { promisify } <span class="kw">from</span> <span class="st">'util'</span>;
+<span class="kw">import</span> { db } <span class="kw">from</span> <span class="st">'../db/client.js'</span>;
+<span class="kw">import</span> { logger } <span class="kw">from</span> <span class="st">'../utils/logger.js'</span>;
+<span class="kw">import</span> { MCPService } <span class="kw">from</span> <span class="st">'../services/mcp.js'</span>;
+
+<span class="kw">const</span> execPromise = <span class="fn">promisify</span>(exec);
+
+<span class="cm">// ─── Bash helpers ─────────────────────────────────────────────────────────────</span>
+
+<span class="kw">function</span> <span class="fn">getAllowedBashCommands</span>(config: any): string[] {
+  <span class="kw">const</span> cmds = config?.allowed_commands ?? config?.allowedCommands;
+  <span class="kw">if</span> (!Array.isArray(cmds)) <span class="kw">return</span> [];
+  <span class="kw">return</span> cmds.filter((v): v is string => <span class="kw">typeof</span> v === <span class="st">'string'</span>)
+             .map((c) => c.trim()).filter(Boolean);
+}
+
+<span class="kw">function</span> <span class="fn">validateBashCommand</span>(tool: any, params: any): string {
+  <span class="kw">const</span> command = <span class="kw">typeof</span> params?.command === <span class="st">'string'</span> ? params.command.trim() : <span class="st">''</span>;
+  <span class="kw">if</span> (!command) <span class="kw">throw new</span> Error(<span class="st">'Bash tool requires a non-empty command'</span>);
+  <span class="kw">const</span> allowed = <span class="fn">getAllowedBashCommands</span>(tool.config);
+  <span class="kw">if</span> (allowed.length === <span class="nm">0</span>)
+    <span class="kw">throw new</span> Error(<span class="st">`Bash tool "${tool.name}" is missing allowed_commands`</span>);
+  <span class="kw">const</span> ok = allowed.some((a) => command === a || command.startsWith(<span class="st">`${a} `</span>));
+  <span class="kw">if</span> (!ok) <span class="kw">throw new</span> Error(<span class="st">`Command not in whitelist: "${command}"`</span>);
+  <span class="kw">return</span> command;
+}
+
+<span class="cm">// ─── HTTP helper ──────────────────────────────────────────────────────────────</span>
+
+<span class="kw">async function</span> <span class="fn">executeHttp</span>(tool: any, params: any): <span class="kw">Promise</span>&lt;any&gt; {
+  <span class="kw">const</span> { url: baseUrl, method: defaultMethod = <span class="st">'GET'</span>,
+          headers: defaultHeaders = {}, timeout_ms = <span class="nm">15000</span> } = tool.config;
+  <span class="kw">const</span> url = params.url ?? baseUrl;
+  <span class="kw">const</span> method = (params.method ?? defaultMethod).toUpperCase();
+  <span class="kw">const</span> headers = { <span class="st">'Content-Type'</span>: <span class="st">'application/json'</span>, ...defaultHeaders, ...params.headers };
+  <span class="kw">const</span> controller = <span class="kw">new</span> AbortController();
+  <span class="kw">const</span> timer = <span class="fn">setTimeout</span>(() => controller.abort(), timeout_ms);
+  <span class="kw">try</span> {
+    <span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(url, {
+      method, headers,
+      body: [<span class="st">'GET'</span>, <span class="st">'HEAD'</span>].includes(method) ? undefined : JSON.stringify(params.body ?? params.data),
+      signal: controller.signal,
+    });
+    <span class="fn">clearTimeout</span>(timer);
+    <span class="kw">const</span> ct = res.headers.get(<span class="st">'content-type'</span>) ?? <span class="st">''</span>;
+    <span class="kw">const</span> body = ct.includes(<span class="st">'application/json'</span>) ? <span class="kw">await</span> res.json() : <span class="kw">await</span> res.text();
+    <span class="kw">if</span> (!res.ok) <span class="kw">throw new</span> Error(<span class="st">`HTTP ${res.status}: ${JSON.stringify(body).slice(0, 200)}`</span>);
+    <span class="kw">return</span> { status: res.status, body };
+  } <span class="kw">finally</span> { <span class="fn">clearTimeout</span>(timer); }
+}
+
+<span class="cm">// ─── Builtin implementations ──────────────────────────────────────────────────</span>
+
+<span class="kw">async function</span> <span class="fn">handleBuiltin</span>(tool: any, params: any): <span class="kw">Promise</span>&lt;any&gt; {
+  <span class="kw">switch</span> (tool.name) {
+
+    <span class="kw">case</span> <span class="st">'web_search'</span>: {
+      <span class="kw">const</span> query = params.query;
+      <span class="kw">if</span> (!query) <span class="kw">throw new</span> Error(<span class="st">'web_search requires params.query'</span>);
+      <span class="kw">const</span> apiKey = tool.config?.api_key ?? process.env.BRAVE_API_KEY;
+      <span class="kw">if</span> (!apiKey) {
+        logger.warn({ tool: tool.name }, <span class="st">'No API key — returning mock results'</span>);
+        <span class="kw">return</span> { query, results: [{ title: <span class="st">`Mock: ${query}`</span>, url: <span class="st">'https://example.com'</span>,
+          snippet: <span class="st">'Set BRAVE_API_KEY in tool config for real results.'</span> }] };
+      }
+      <span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="st">`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${params.count ?? 5}`</span>,
+        { headers: { <span class="st">'Accept'</span>: <span class="st">'application/json'</span>, <span class="st">'X-Subscription-Token'</span>: apiKey } });
+      <span class="kw">if</span> (!res.ok) <span class="kw">throw new</span> Error(<span class="st">`Brave Search error: ${res.status}`</span>);
+      <span class="kw">const</span> data = <span class="kw">await</span> res.json();
+      <span class="kw">return</span> { query, results: (data.web?.results ?? []).map((r: any) =>
+        ({ title: r.title, url: r.url, snippet: r.description })) };
+    }
+
+    <span class="kw">case</span> <span class="st">'send_email'</span>: {
+      <span class="kw">const</span> { to, subject, body } = params;
+      <span class="kw">if</span> (!to || !subject || !body) <span class="kw">throw new</span> Error(<span class="st">'send_email requires: to, subject, body'</span>);
+      <span class="kw">const</span> apiKey = tool.config?.api_key ?? process.env.SENDGRID_API_KEY;
+      <span class="kw">const</span> from = tool.config?.from ?? process.env.EMAIL_FROM;
+      <span class="kw">if</span> (!apiKey || !from) <span class="kw">throw new</span> Error(<span class="st">'send_email: missing api_key or from in config'</span>);
+      <span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="st">'https://api.sendgrid.com/v3/mail/send'</span>, {
+        method: <span class="st">'POST'</span>,
+        headers: { Authorization: <span class="st">`Bearer ${apiKey}`</span>, <span class="st">'Content-Type'</span>: <span class="st">'application/json'</span> },
+        body: JSON.stringify({ personalizations: [{ to: [{ email: to }] }],
+          from: { email: from }, subject,
+          content: [{ type: <span class="st">'text/plain'</span>, value: body }] }),
+      });
+      <span class="kw">if</span> (!res.ok) <span class="kw">throw new</span> Error(<span class="st">`SendGrid error: ${res.status} ${await res.text()}`</span>);
+      <span class="kw">return</span> { ok: <span class="kw">true</span>, to, subject };
+    }
+
+    <span class="kw">case</span> <span class="st">'create_document'</span>: {
+      <span class="kw">const</span> { title, content, format = <span class="st">'markdown'</span> } = params;
+      <span class="kw">if</span> (!title || !content) <span class="kw">throw new</span> Error(<span class="st">'create_document requires: title, content'</span>);
+      <span class="kw">const</span> result = <span class="kw">await</span> db.query(
+        <span class="st">`INSERT INTO documents (company_id, title, content, format, created_by_tool)
+         VALUES ((SELECT company_id FROM tools WHERE id = $1), $2, $3, $4, true)
+         RETURNING id, title`</span>,
+        [tool.id, title, content, format]
+      ).catch(() => <span class="kw">null</span>);
+      <span class="kw">return</span> result
+        ? { ok: <span class="kw">true</span>, document_id: result.rows[<span class="nm">0</span>]?.id, title }
+        : { ok: <span class="kw">true</span>, title, content_length: content.length, note: <span class="st">'documents table not yet created'</span> };
+    }
+
+    <span class="kw">case</span> <span class="st">'read_knowledge'</span>: {
+      <span class="kw">const</span> { query, limit = <span class="nm">5</span> } = params;
+      <span class="kw">if</span> (!query) <span class="kw">throw new</span> Error(<span class="st">'read_knowledge requires params.query'</span>);
+      <span class="kw">const</span> res = <span class="kw">await</span> db.query(
+        <span class="st">`SELECT title, content, source FROM knowledge_items
+         WHERE company_id = (SELECT company_id FROM tools WHERE id = $1)
+           AND (title ILIKE $2 OR content ILIKE $2) LIMIT $3`</span>,
+        [tool.id, <span class="st">`%${query}%`</span>, limit]
+      );
+      <span class="kw">return</span> { query, results: res.rows };
+    }
+
+    <span class="kw">case</span> <span class="st">'wait'</span>: {
+      <span class="kw">const</span> { reason = <span class="st">'Waiting for external event'</span>, until } = params;
+      <span class="kw">return</span> { ok: <span class="kw">true</span>, reason, until, note: <span class="st">'Agent will be re-invoked at next heartbeat.'</span> };
+    }
+
+    <span class="kw">default</span>:
+      <span class="kw">throw new</span> Error(<span class="st">`Unknown builtin: "${tool.name}". Register in executor.ts or use type "http".`</span>);
+  }
+}
+
+<span class="cm">// ─── Main executor ────────────────────────────────────────────────────────────</span>
+
+<span class="kw">export async function</span> <span class="fn">executeTool</span>(agentId: string, taskId: string, toolName: string, params: any): <span class="kw">Promise</span>&lt;any&gt; {
+  <span class="kw">const</span> startTime = Date.now();
+  <span class="kw">const</span> toolRes = <span class="kw">await</span> db.query(
+    <span class="st">`SELECT t.* FROM tools t
+     WHERE t.name = $1 AND t.company_id = (SELECT company_id FROM agents WHERE id = $2)`</span>,
+    [toolName, agentId]
+  );
+  <span class="kw">if</span> (toolRes.rows.length === <span class="nm">0</span>) <span class="kw">throw new</span> Error(<span class="st">`Tool "${toolName}" not found. Register it in Tools → Add Tool.`</span>);
+
+  <span class="kw">const</span> tool = toolRes.rows[<span class="nm">0</span>];
+  logger.info({ agentId, toolName, toolType: tool.type }, <span class="st">'Executing tool'</span>);
+
+  <span class="kw">let</span> output: any;
+  <span class="kw">let</span> status: <span class="st">'success'</span> | <span class="st">'error'</span> = <span class="st">'success'</span>;
+
+  <span class="kw">try</span> {
+    <span class="kw">switch</span> (tool.type) {
+      <span class="kw">case</span> <span class="st">'builtin'</span>: output = <span class="kw">await</span> <span class="fn">handleBuiltin</span>(tool, params); <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="st">'bash'</span>: {
+        <span class="kw">const</span> command = <span class="fn">validateBashCommand</span>(tool, params);
+        <span class="kw">const</span> { stdout, stderr } = <span class="kw">await</span> <span class="fn">execPromise</span>(command, {
+          timeout: tool.config?.timeout_ms ?? <span class="nm">10_000</span>, maxBuffer: <span class="nm">1024</span> * <span class="nm">1024</span> });
+        output = { stdout: stdout.trim(), stderr: stderr.trim() }; <span class="kw">break</span>;
+      }
+      <span class="kw">case</span> <span class="st">'http'</span>: output = <span class="kw">await</span> <span class="fn">executeHttp</span>(tool, params); <span class="kw">break</span>;
+      <span class="kw">case</span> <span class="st">'mcp'</span>:
+        output = <span class="kw">await</span> MCPService.<span class="fn">callTool</span>(tool.config.serverName,
+          { command: tool.config.command, args: tool.config.args, env: tool.config.env },
+          toolName, params); <span class="kw">break</span>;
+      <span class="kw">default</span>: <span class="kw">throw new</span> Error(<span class="st">`Unsupported tool type: "${tool.type}"`</span>);
+    }
+  } <span class="kw">catch</span> (err: any) {
+    status = <span class="st">'error'</span>; output = { error: err.message };
+    logger.error({ err, toolName, agentId }, <span class="st">'Tool execution failed'</span>);
+  }
+
+  <span class="kw">const</span> duration_ms = Date.now() - startTime;
+  <span class="kw">await</span> db.query(
+    <span class="st">`INSERT INTO tool_calls (agent_id, task_id, tool_id, input, output, status, duration_ms)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`</span>,
+    [agentId, taskId, tool.id, JSON.stringify(params), JSON.stringify(output), status, duration_ms]
+  );
+  <span class="kw">if</span> (status === <span class="st">'error'</span>) <span class="kw">throw new</span> Error(output.error);
+  <span class="kw">return</span> output;
+}</pre>
+    </div>
+  </section>
+
+  <!-- CONTEXT -->
+  <section class="section" id="context">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <div class="section-title">context.ts — wstrzyknięcie tools do promptu (bug krytyczny)</div>
+    </div>
+
+    <div class="file-target">
+      <span>📄</span>
+      <span>packages/server/src/orchestrator/</span>
+      <span class="arrow">→</span>
+      <span>context.ts</span>
+      <span style="color:var(--red)">(KRYTYCZNY — zastąp cały plik)</span>
+    </div>
+
+    <div class="alert alert-critical">
+      <div class="alert-icon">🔴</div>
+      <div class="alert-body">
+        <strong>To jest najważniejsza zmiana w całym wdrożeniu.</strong>
+        Oryginał buduje AgentContext bez sekcji tools. Nowa wersja dodaje krok 6: query na <code>agent_tools JOIN tools WHERE agent_id = $1 AND can_execute = true</code> i formatuje wynik jako sekcję <code>AVAILABLE TOOLS</code> w <code>additional_context</code>. Bez tej zmiany żaden agent nigdy nie użyje żadnego toola.
+      </div>
+    </div>
+
+    <p>Nowa funkcja <code>formatToolForPrompt()</code> generuje dla każdego toola opis z przykładem wywołania dostosowanym do jego typu:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">typescript · packages/server/src/orchestrator/context.ts</span>
+        <button class="copy-btn" onclick="copyBlock(this)">copy</button>
+      </div>
+      <pre><span class="kw">import</span> { db } <span class="kw">from</span> <span class="st">'../db/client.js'</span>;
+<span class="kw">import</span> { AgentContext } <span class="kw">from</span> <span class="st">'../types/agent.js'</span>;
+<span class="kw">import</span> { KnowledgeService } <span class="kw">from</span> <span class="st">'../services/knowledge.js'</span>;
+
+<span class="kw">function</span> <span class="fn">formatToolForPrompt</span>(tool: { name: string; description: string | null; type: string; config: any }): string {
+  <span class="kw">const</span> lines = [<span class="st">`- **${tool.name}** (type: ${tool.type})`</span>, <span class="st">`  ${tool.description ?? 'No description.'}`</span>];
+  <span class="kw">const</span> paramHints: Record&lt;string, string&gt; = {
+    web_search: <span class="st">'{ "query": "search term", "count": 5 }'</span>,
+    send_email: <span class="st">'{ "to": "user@example.com", "subject": "...", "body": "..." }'</span>,
+    create_document: <span class="st">'{ "title": "...", "content": "...", "format": "markdown" }'</span>,
+    read_knowledge: <span class="st">'{ "query": "topic", "limit": 5 }'</span>,
+    wait: <span class="st">'{ "reason": "Waiting...", "until": "2025-01-01T00:00:00Z" }'</span>,
+  };
+  <span class="kw">switch</span> (tool.type) {
+    <span class="kw">case</span> <span class="st">'bash'</span>:
+      <span class="kw">const</span> allowed = tool.config?.allowed_commands ?? [];
+      <span class="kw">if</span> (allowed.length) lines.push(<span class="st">`  Allowed commands: ${allowed.join(', ')}`</span>);
+      lines.push(<span class="st">`  Usage: { "type": "use_tool", "tool_name": "${tool.name}", "params": { "command": "ls -la" } }`</span>);
+      <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="st">'http'</span>:
+      lines.push(<span class="st">`  Calls: ${tool.config?.url ?? 'configured URL'} [${tool.config?.method ?? 'GET'}]`</span>);
+      lines.push(<span class="st">`  Usage: { "type": "use_tool", "tool_name": "${tool.name}", "params": { "body": {} } }`</span>);
+      <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="st">'builtin'</span>:
+      <span class="kw">const</span> hint = paramHints[tool.name];
+      <span class="kw">if</span> (hint) lines.push(<span class="st">`  Params: ${hint}`</span>);
+      lines.push(<span class="st">`  Usage: { "type": "use_tool", "tool_name": "${tool.name}", "params": ${hint ?? '{}'} }`</span>);
+      <span class="kw">break</span>;
+    <span class="kw">case</span> <span class="st">'mcp'</span>:
+      lines.push(<span class="st">`  MCP Server: ${tool.config?.serverName ?? 'configured'}`</span>);
+      lines.push(<span class="st">`  Usage: { "type": "use_tool", "tool_name": "${tool.name}", "params": { ... } }`</span>);
+      <span class="kw">break</span>;
+  }
+  <span class="kw">return</span> lines.join(<span class="st">'\n'</span>);
+}
+
+<span class="kw">function</span> <span class="fn">buildToolsContext</span>(tools: Array&lt;{ name: string; description: string | null; type: string; config: any }&gt;): string {
+  <span class="kw">if</span> (tools.length === <span class="nm">0</span>) <span class="kw">return</span> <span class="st">`AVAILABLE TOOLS:\nNo tools assigned. You can only complete tasks, delegate, or send messages.`</span>;
+  <span class="kw">return</span> [
+    <span class="st">`AVAILABLE TOOLS (${tools.length} total):`</span>,
+    <span class="st">`To use a tool, emit: { "type": "use_tool", "tool_name": "&lt;name&gt;", "params": { ... } }`</span>,
+    <span class="st">''</span>,
+    ...tools.map(formatToolForPrompt),
+    <span class="st">''</span>,
+    <span class="st">`TOOL USAGE RULES:`</span>,
+    <span class="st">`- Always check tool results before proceeding`</span>,
+    <span class="st">`- If a tool returns an error, try an alternative or request_approval`</span>,
+    <span class="st">`- Do not call the same tool with identical params more than 3 times`</span>,
+    <span class="st">`- Prefer complete_task when you already have enough information`</span>,
+  ].join(<span class="st">'\n'</span>);
+}
+
+<span class="kw">export async function</span> <span class="fn">buildAgentContext</span>(agentId: string, taskId: string): <span class="kw">Promise</span>&lt;AgentContext&gt; {
+  <span class="cm">// 1. Agent + Company</span>
+  <span class="kw">const</span> agentRes = <span class="kw">await</span> db.query(
+    <span class="st">`SELECT a.*, c.name AS company_name, c.mission AS company_mission
+     FROM agents a JOIN companies c ON a.company_id = c.id WHERE a.id = $1`</span>, [agentId]);
+  <span class="kw">if</span> (!agentRes.rows.length) <span class="kw">throw new</span> Error(<span class="st">'Agent not found'</span>);
+  <span class="kw">const</span> agent = agentRes.rows[<span class="nm">0</span>];
+
+  <span class="cm">// 2. Task</span>
+  <span class="kw">const</span> taskRes = <span class="kw">await</span> db.query(<span class="st">'SELECT * FROM tasks WHERE id = $1'</span>, [taskId]);
+  <span class="kw">if</span> (!taskRes.rows.length) <span class="kw">throw new</span> Error(<span class="st">'Task not found'</span>);
+  <span class="kw">const</span> task = taskRes.rows[<span class="nm">0</span>];
+
+  <span class="cm">// 3. Goal hierarchy</span>
+  <span class="kw">const</span> hierarchy: string[] = [];
+  <span class="kw">if</span> (task.goal_id) {
+    <span class="kw">const</span> r = <span class="kw">await</span> db.query(
+      <span class="st">`WITH RECURSIVE goal_path AS (
+         SELECT id, parent_id, title, 0 AS depth FROM goals WHERE id = $1
+         UNION ALL
+         SELECT g.id, g.parent_id, g.title, gp.depth + 1
+         FROM goals g JOIN goal_path gp ON gp.parent_id = g.id
+       ) SELECT title FROM goal_path ORDER BY depth DESC`</span>, [task.goal_id]);
+    hierarchy.push(...r.rows.map((row: any) => row.title));
+  }
+
+  <span class="cm">// 4. Message history (last 20)</span>
+  <span class="kw">const</span> messagesRes = <span class="kw">await</span> db.query(
+    <span class="st">`SELECT * FROM messages WHERE task_id = $1 ORDER BY created_at DESC LIMIT 20`</span>, [taskId]);
+  <span class="kw">const</span> history = messagesRes.rows.reverse().map((m: any) => ({
+    role: (m.from_agent === agentId ? <span class="st">'assistant'</span> : <span class="st">'user'</span>) as <span class="st">'assistant'</span> | <span class="st">'user'</span>,
+    content: m.content, metadata: m.metadata,
+  }));
+
+  <span class="cm">// 5. Knowledge base</span>
+  <span class="kw">const</span> knowledgeRes = <span class="kw">await</span> KnowledgeService.search(agent.company_id, task.description || task.title, <span class="nm">5</span>,
+    { agentId, taskId, consumer: <span class="st">'agent_context'</span> });
+  <span class="kw">const</span> knowledge_context = knowledgeRes.length > <span class="nm">0</span>
+    ? <span class="st">`COMPANY KNOWLEDGE:\n${knowledgeRes.map((k: any) => `--- ${k.title} ---\n${k.content}`).join('\n')}`</span>
+    : undefined;
+
+  <span class="cm">// 6. ── KLUCZOWE: Pobierz dostępne tools agenta ──────────────────────────────</span>
+  <span class="kw">const</span> toolsRes = <span class="kw">await</span> db.query(
+    <span class="st">`SELECT t.name, t.description, t.type, t.config
+     FROM tools t
+     JOIN agent_tools at ON at.tool_id = t.id
+     WHERE at.agent_id = $1 AND at.can_execute = true
+     ORDER BY t.type, t.name`</span>, [agentId]);
+
+  <span class="kw">return</span> {
+    company_name: agent.company_name, company_mission: agent.company_mission,
+    agent_name: agent.name, agent_role: agent.role, agent_model: agent.model,
+    agent_system_prompt: agent.system_prompt, knowledge_context, goal_hierarchy: hierarchy,
+    current_task: { title: task.title, description: task.description },
+    history,
+    additional_context: <span class="fn">buildToolsContext</span>(toolsRes.rows),  <span class="cm">// ← nowe pole</span>
+  };
+}</pre>
+    </div>
+  </section>
+
+  <!-- ROUTES -->
+  <section class="section" id="routes">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <div class="section-title">routes/tools.ts — pełne API (CRUD + assign + test + calls)</div>
+    </div>
+
+    <div class="file-target">
+      <span>📄</span>
+      <span>packages/server/src/routes/</span>
+      <span class="arrow">→</span>
+      <span>tools.ts</span>
+      <span style="color:var(--muted)">(zastąp cały plik)</span>
+    </div>
+
+    <p>Oryginał ma tylko <code>GET /</code> i <code>POST /</code>. Nowa wersja dodaje:</p>
+
+    <table>
+      <thead><tr><th>Endpoint</th><th>Opis</th></tr></thead>
+      <tbody>
+        <tr><td>GET /companies/:id/tools</td><td>Lista z liczbą agentów, total_calls, success_rate, last_called_at</td></tr>
+        <tr><td>POST /companies/:id/tools</td><td>Utwórz tool (walidacja Zod, unikalna nazwa per company)</td></tr>
+        <tr><td>GET /companies/:id/tools/:toolId</td><td>Szczegóły + assigned_agents + recent_calls (5)</td></tr>
+        <tr><td>PATCH /companies/:id/tools/:toolId</td><td>Edytuj opis / config</td></tr>
+        <tr><td>DELETE /companies/:id/tools/:toolId</td><td>Usuń tool</td></tr>
+        <tr><td>POST /companies/:id/tools/:toolId/assign</td><td>Przypisz agenta do toola (upsert agent_tools)</td></tr>
+        <tr><td>DELETE /companies/:id/tools/:toolId/assign/:agentId</td><td>Odepnij agenta od toola</td></tr>
+        <tr><td>POST /companies/:id/tools/:toolId/test</td><td>Przetestuj HTTP tool bez agenta (admin only)</td></tr>
+        <tr><td>GET /companies/:id/tools/:toolId/calls</td><td>Historia wywołań z paginacją</td></tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">typescript · packages/server/src/routes/tools.ts</span>
+        <button class="copy-btn" onclick="copyBlock(this)">copy</button>
+      </div>
+      <pre><span class="kw">import</span> { Router } <span class="kw">from</span> <span class="st">'express'</span>;
+<span class="kw">import</span> { db } <span class="kw">from</span> <span class="st">'../db/client.js'</span>;
+<span class="kw">import</span> { z } <span class="kw">from</span> <span class="st">'zod'</span>;
+<span class="kw">import</span> { requireRole } <span class="kw">from</span> <span class="st">'../middleware/auth.js'</span>;
+
+<span class="kw">const</span> router: Router = <span class="fn">Router</span>({ mergeParams: <span class="kw">true</span> });
+
+<span class="kw">const</span> toolCreateSchema = z.object({
+  name: z.string().min(<span class="nm">1</span>).max(<span class="nm">100</span>).regex(<span class="op">/^[a-zA-Z0-9_-]+$/</span>, <span class="st">'Alphanumeric + _ -'</span>),
+  description: z.string().max(<span class="nm">500</span>).optional(),
+  type: z.enum([<span class="st">'builtin'</span>, <span class="st">'http'</span>, <span class="st">'bash'</span>, <span class="st">'mcp'</span>]).default(<span class="st">'builtin'</span>),
+  config: z.record(z.any()).optional().default({}),
+});
+<span class="kw">const</span> assignSchema = z.object({
+  agent_id: z.string().uuid(),
+  can_execute: z.boolean().default(<span class="kw">true</span>),
+  config: z.record(z.any()).optional().default({}),
+});
+
+<span class="kw">async function</span> <span class="fn">getToolOrFail</span>(toolId: string, companyId: string) {
+  <span class="kw">const</span> res = <span class="kw">await</span> db.query(<span class="st">'SELECT * FROM tools WHERE id = $1 AND company_id = $2'</span>, [toolId, companyId]);
+  <span class="kw">return</span> res.rows[<span class="nm">0</span>] ?? <span class="kw">null</span>;
+}
+
+<span class="cm">// GET / — lista z metrykami</span>
+router.get(<span class="st">'/'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>, <span class="st">'member'</span>, <span class="st">'viewer'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> companyId = req.params.companyId ?? (req.query.company_id <span class="kw">as</span> string);
+    <span class="kw">if</span> (!companyId) <span class="kw">return</span> res.status(<span class="nm">400</span>).json({ error: <span class="st">'Missing company_id'</span> });
+    <span class="kw">const</span> result = <span class="kw">await</span> db.query(<span class="st">`
+      SELECT t.*,
+        COUNT(DISTINCT at.agent_id)::int AS agent_count,
+        COUNT(DISTINCT tc.id)::int AS total_calls,
+        MAX(tc.created_at) AS last_called_at,
+        AVG(CASE WHEN tc.status = 'success' THEN 1.0 ELSE 0.0 END) AS success_rate
+      FROM tools t
+      LEFT JOIN agent_tools at ON at.tool_id = t.id
+      LEFT JOIN tool_calls tc ON tc.tool_id = t.id
+      WHERE t.company_id = $1
+      GROUP BY t.id ORDER BY t.type, t.created_at ASC`</span>, [companyId]);
+    res.json(result.rows);
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="cm">// POST / — utwórz</span>
+router.post(<span class="st">'/'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> parsed = toolCreateSchema.safeParse(req.body);
+    <span class="kw">if</span> (!parsed.success) <span class="kw">return</span> res.status(<span class="nm">400</span>).json({ error: parsed.error.flatten() });
+    <span class="kw">const</span> { name, description, type, config } = parsed.data;
+    <span class="kw">const</span> result = <span class="kw">await</span> db.query(
+      <span class="st">`INSERT INTO tools (company_id, name, description, type, config)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`</span>,
+      [req.params.companyId, name, description, type, JSON.stringify(config)]);
+    res.status(<span class="nm">201</span>).json(result.rows[<span class="nm">0</span>]);
+  } <span class="kw">catch</span> (err: any) {
+    <span class="kw">if</span> (err.code === <span class="st">'23505'</span>) <span class="kw">return</span> res.status(<span class="nm">409</span>).json({ error: <span class="st">`Tool "${req.body.name}" already exists.`</span> });
+    next(err);
+  }
+});
+
+<span class="cm">// GET /:id — szczegóły + agenci + ostatnie wywołania</span>
+router.get(<span class="st">'/:id'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>, <span class="st">'member'</span>, <span class="st">'viewer'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> tool = <span class="kw">await</span> <span class="fn">getToolOrFail</span>(req.params.id, req.params.companyId);
+    <span class="kw">if</span> (!tool) <span class="kw">return</span> res.status(<span class="nm">404</span>).json({ error: <span class="st">'Tool not found'</span> });
+    <span class="kw">const</span> [agentsRes, callsRes] = <span class="kw">await</span> Promise.all([
+      db.query(<span class="st">`SELECT a.id, a.name, a.role, a.status, at.can_execute
+                FROM agents a JOIN agent_tools at ON at.agent_id = a.id WHERE at.tool_id = $1`</span>, [req.params.id]),
+      db.query(<span class="st">`SELECT tc.id, a.name AS agent_name, tc.status, tc.duration_ms, tc.created_at
+                FROM tool_calls tc LEFT JOIN agents a ON a.id = tc.agent_id
+                WHERE tc.tool_id = $1 ORDER BY tc.created_at DESC LIMIT 5`</span>, [req.params.id]),
+    ]);
+    res.json({ ...tool, assigned_agents: agentsRes.rows, recent_calls: callsRes.rows });
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="cm">// PATCH /:id</span>
+router.patch(<span class="st">'/:id'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> tool = <span class="kw">await</span> <span class="fn">getToolOrFail</span>(req.params.id, req.params.companyId);
+    <span class="kw">if</span> (!tool) <span class="kw">return</span> res.status(<span class="nm">404</span>).json({ error: <span class="st">'Tool not found'</span> });
+    <span class="kw">const</span> allowed = [<span class="st">'description'</span>, <span class="st">'type'</span>, <span class="st">'config'</span>];
+    <span class="kw">const</span> updates: string[] = []; <span class="kw">const</span> values: any[] = []; <span class="kw">let</span> idx = <span class="nm">1</span>;
+    <span class="kw">for</span> (<span class="kw">const</span> [k, v] <span class="kw">of</span> Object.entries(req.body)) {
+      <span class="kw">if</span> (allowed.includes(k) && v !== undefined) {
+        updates.push(<span class="st">`${k} = $${idx++}`</span>); values.push(k === <span class="st">'config'</span> ? JSON.stringify(v) : v);
+      }
+    }
+    <span class="kw">if</span> (!updates.length) <span class="kw">return</span> res.json(tool);
+    values.push(req.params.id);
+    <span class="kw">const</span> r = <span class="kw">await</span> db.query(<span class="st">`UPDATE tools SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`</span>, values);
+    res.json(r.rows[<span class="nm">0</span>]);
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="cm">// DELETE /:id</span>
+router.delete(<span class="st">'/:id'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> tool = <span class="kw">await</span> <span class="fn">getToolOrFail</span>(req.params.id, req.params.companyId);
+    <span class="kw">if</span> (!tool) <span class="kw">return</span> res.status(<span class="nm">404</span>).json({ error: <span class="st">'Tool not found'</span> });
+    <span class="kw">await</span> db.query(<span class="st">'DELETE FROM tools WHERE id = $1'</span>, [req.params.id]);
+    res.status(<span class="nm">204</span>).end();
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="cm">// POST /:id/assign — przypisz agenta</span>
+router.post(<span class="st">'/:id/assign'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> tool = <span class="kw">await</span> <span class="fn">getToolOrFail</span>(req.params.id, req.params.companyId);
+    <span class="kw">if</span> (!tool) <span class="kw">return</span> res.status(<span class="nm">404</span>).json({ error: <span class="st">'Tool not found'</span> });
+    <span class="kw">const</span> parsed = assignSchema.safeParse(req.body);
+    <span class="kw">if</span> (!parsed.success) <span class="kw">return</span> res.status(<span class="nm">400</span>).json({ error: parsed.error.flatten() });
+    <span class="kw">const</span> { agent_id, can_execute, config } = parsed.data;
+    <span class="kw">const</span> agentCheck = <span class="kw">await</span> db.query(<span class="st">'SELECT id FROM agents WHERE id = $1 AND company_id = $2'</span>, [agent_id, req.params.companyId]);
+    <span class="kw">if</span> (!agentCheck.rows.length) <span class="kw">return</span> res.status(<span class="nm">404</span>).json({ error: <span class="st">'Agent not found in this company'</span> });
+    <span class="kw">const</span> result = <span class="kw">await</span> db.query(
+      <span class="st">`INSERT INTO agent_tools (agent_id, tool_id, can_execute, config) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (agent_id, tool_id) DO UPDATE SET can_execute = EXCLUDED.can_execute, config = EXCLUDED.config
+       RETURNING *`</span>,
+      [agent_id, req.params.id, can_execute, JSON.stringify(config)]);
+    res.json(result.rows[<span class="nm">0</span>]);
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="cm">// DELETE /:id/assign/:agentId — odepnij agenta</span>
+router.delete(<span class="st">'/:id/assign/:agentId'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">await</span> db.query(<span class="st">'DELETE FROM agent_tools WHERE tool_id = $1 AND agent_id = $2'</span>, [req.params.id, req.params.agentId]);
+    res.status(<span class="nm">204</span>).end();
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="cm">// POST /:id/test — test HTTP tool bez agenta</span>
+router.post(<span class="st">'/:id/test'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> tool = <span class="kw">await</span> <span class="fn">getToolOrFail</span>(req.params.id, req.params.companyId);
+    <span class="kw">if</span> (!tool) <span class="kw">return</span> res.status(<span class="nm">404</span>).json({ error: <span class="st">'Tool not found'</span> });
+    <span class="kw">const</span> params = req.body.params ?? {}; <span class="kw">const</span> t0 = Date.now();
+    <span class="kw">try</span> {
+      <span class="kw">let</span> output: any;
+      <span class="kw">if</span> (tool.type === <span class="st">'http'</span>) {
+        <span class="kw">const</span> r = <span class="kw">await</span> <span class="fn">fetch</span>(tool.config.url ?? params.url, {
+          method: params.method ?? tool.config.method ?? <span class="st">'GET'</span>,
+          headers: { <span class="st">'Content-Type'</span>: <span class="st">'application/json'</span>, ...tool.config.headers },
+          body: [<span class="st">'GET'</span>, <span class="st">'HEAD'</span>].includes((params.method ?? <span class="st">'GET'</span>).toUpperCase()) ? undefined : JSON.stringify(params.body ?? {}),
+        });
+        output = { status: r.status, body: (await r.text()).slice(<span class="nm">0</span>, <span class="nm">2000</span>) };
+      } <span class="kw">else</span> output = { note: <span class="st">`${tool.type} tools must be tested via agent heartbeat.`</span> };
+      res.json({ ok: <span class="kw">true</span>, duration_ms: Date.now() - t0, output });
+    } <span class="kw">catch</span> (err: any) { res.json({ ok: <span class="kw">false</span>, duration_ms: Date.now() - t0, error: err.message }); }
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="cm">// GET /:id/calls — historia wywołań</span>
+router.get(<span class="st">'/:id/calls'</span>, <span class="fn">requireRole</span>([<span class="st">'owner'</span>, <span class="st">'admin'</span>, <span class="st">'member'</span>]), <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> tool = <span class="kw">await</span> <span class="fn">getToolOrFail</span>(req.params.id, req.params.companyId);
+    <span class="kw">if</span> (!tool) <span class="kw">return</span> res.status(<span class="nm">404</span>).json({ error: <span class="st">'Tool not found'</span> });
+    <span class="kw">const</span> limit = Math.min(parseInt(req.query.limit <span class="kw">as</span> string ?? <span class="st">'50'</span>, <span class="nm">10</span>), <span class="nm">200</span>);
+    <span class="kw">const</span> offset = parseInt(req.query.offset <span class="kw">as</span> string ?? <span class="st">'0'</span>, <span class="nm">10</span>);
+    <span class="kw">const</span> result = <span class="kw">await</span> db.query(
+      <span class="st">`SELECT tc.*, a.name AS agent_name, t.title AS task_title
+       FROM tool_calls tc LEFT JOIN agents a ON a.id = tc.agent_id LEFT JOIN tasks t ON t.id = tc.task_id
+       WHERE tc.tool_id = $1 ORDER BY tc.created_at DESC LIMIT $2 OFFSET $3`</span>,
+      [req.params.id, limit, offset]);
+    res.json({ calls: result.rows, limit, offset });
+  } <span class="kw">catch</span> (err) { next(err); }
+});
+
+<span class="kw">export default</span> router;</pre>
+    </div>
+  </section>
+
+  <!-- SEED -->
+  <section class="section" id="seed">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <div class="section-title">seed-tools.ts — domyślne tools dla nowej firmy</div>
+    </div>
+
+    <div class="file-target">
+      <span>📄</span>
+      <span>packages/server/src/scripts/</span>
+      <span class="arrow">→</span>
+      <span>seed-tools.ts</span>
+      <span style="color:var(--muted)">(nowy plik)</span>
+    </div>
+
+    <p>Uruchom raz po stworzeniu firmy. Wstawia 8 domyślnych tools przez <code>ON CONFLICT DO NOTHING</code> (idempotentny).</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">bash · użycie</span>
+      </div>
+      <pre><span class="cm"># seed dla konkretnej firmy</span>
+pnpm --filter @biuro/server tsx src/scripts/seed-tools.ts &lt;company_id&gt;
+
+<span class="cm"># lub z psql — sprawdź UUID firmy</span>
+psql $DATABASE_URL -c "SELECT id, name FROM companies;"</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">typescript · packages/server/src/scripts/seed-tools.ts</span>
+        <button class="copy-btn" onclick="copyBlock(this)">copy</button>
+      </div>
+      <pre><span class="kw">import</span> { db } <span class="kw">from</span> <span class="st">'../db/client.js'</span>;
+<span class="kw">import</span> { logger } <span class="kw">from</span> <span class="st">'../utils/logger.js'</span>;
+
+<span class="kw">const</span> DEFAULT_TOOLS = [
+  { name: <span class="st">'web_search'</span>, description: <span class="st">'Search the web. Set BRAVE_API_KEY in tool config.'</span>, type: <span class="st">'builtin'</span>, config: {} },
+  { name: <span class="st">'send_email'</span>, description: <span class="st">'Send email via SendGrid. Set api_key + from in config.'</span>, type: <span class="st">'builtin'</span>, config: {} },
+  { name: <span class="st">'create_document'</span>, description: <span class="st">'Create a text document in the knowledge base.'</span>, type: <span class="st">'builtin'</span>, config: {} },
+  { name: <span class="st">'read_knowledge'</span>, description: <span class="st">'Search company knowledge base.'</span>, type: <span class="st">'builtin'</span>, config: {} },
+  { name: <span class="st">'wait'</span>, description: <span class="st">'Pause until next heartbeat cycle.'</span>, type: <span class="st">'builtin'</span>, config: {} },
+  { name: <span class="st">'webhook_notify'</span>, description: <span class="st">'Send notification to webhook (Slack, Teams…)'</span>, type: <span class="st">'http'</span>,
+    config: { url: <span class="st">'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'</span>, method: <span class="st">'POST'</span>,
+              headers: { <span class="st">'Content-Type'</span>: <span class="st">'application/json'</span> } } },
+  { name: <span class="st">'internal_api'</span>, description: <span class="st">'Call your internal REST API.'</span>, type: <span class="st">'http'</span>,
+    config: { url: <span class="st">'https://api.yourcompany.com/v1'</span>, method: <span class="st">'GET'</span>,
+              headers: { Authorization: <span class="st">'Bearer YOUR_TOKEN'</span> } } },
+  { name: <span class="st">'shell_utils'</span>, description: <span class="st">'Whitelisted shell commands: date, echo, ls, curl.'</span>, type: <span class="st">'bash'</span>,
+    config: { allowed_commands: [<span class="st">'date'</span>, <span class="st">'echo'</span>, <span class="st">'ls'</span>, <span class="st">'curl'</span>, <span class="st">'cat'</span>, <span class="st">'wc'</span>], timeout_ms: <span class="nm">5000</span> } },
+] <span class="kw">as const</span>;
+
+<span class="kw">export async function</span> <span class="fn">seedDefaultTools</span>(companyId: string): <span class="kw">Promise</span>&lt;<span class="kw">void</span>&gt; {
+  logger.info({ companyId }, <span class="st">'Seeding default tools'</span>);
+  <span class="kw">let</span> created = <span class="nm">0</span>;
+  <span class="kw">for</span> (<span class="kw">const</span> tool <span class="kw">of</span> DEFAULT_TOOLS) {
+    <span class="kw">try</span> {
+      <span class="kw">await</span> db.query(
+        <span class="st">`INSERT INTO tools (company_id, name, description, type, config)
+         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (company_id, name) DO NOTHING`</span>,
+        [companyId, tool.name, tool.description, tool.type, JSON.stringify(tool.config)]);
+      created++;
+    } <span class="kw">catch</span> (err: any) { logger.warn({ tool: tool.name, err: err.message }, <span class="st">'Skip'</span>); }
+  }
+  logger.info({ companyId, created }, <span class="st">'Seed complete'</span>);
+}
+
+<span class="kw">const</span> companyId = process.argv[<span class="nm">2</span>];
+<span class="kw">if</span> (companyId) {
+  <span class="fn">seedDefaultTools</span>(companyId)
+    .then(() => { console.log(<span class="st">`✓ Seeded ${DEFAULT_TOOLS.length} tools`</span>); process.exit(<span class="nm">0</span>); })
+    .catch((e) => { console.error(e); process.exit(<span class="nm">1</span>); });
+}</pre>
+    </div>
+
+    <div class="alert alert-info">
+      <div class="alert-icon">💡</div>
+      <div class="alert-body">
+        <strong>Opcjonalnie: auto-seed przy tworzeniu firmy</strong>
+        W <code>routes/companies.ts</code> po <code>INSERT INTO companies … RETURNING *</code> dodaj wywołanie <code>await seedDefaultTools(result.rows[0].id)</code>. Każda nowa firma dostanie tools automatycznie.
+      </div>
+    </div>
+  </section>
+
+  <!-- FRONTEND -->
+  <section class="section" id="frontend">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <div class="section-title">ToolsPage.tsx — master-detail UI z modałami</div>
+    </div>
+
+    <div class="file-target">
+      <span>📄</span>
+      <span>packages/dashboard/src/pages/</span>
+      <span class="arrow">→</span>
+      <span>ToolsPage.tsx</span>
+      <span style="color:var(--muted)">(zastąp cały plik)</span>
+    </div>
+
+    <p>Nowy layout: lista tools po lewej (288px) + panel szczegółów po prawej. Trzy modały: <strong>Create Tool</strong> (z szybkim wyborem nazwy dla builtinów), <strong>Assign Agent</strong> (dropdown agentów nienależących jeszcze do toola), <strong>Test Tool</strong> (JSON params → wynik z czasem wykonania).</p>
+
+    <table>
+      <thead><tr><th>Feature</th><th>Jak działa</th></tr></thead>
+      <tbody>
+        <tr><td>Lista tools</td><td>Kliknięcie → fetchDetail(id) + fetchAgents() w tle, otwiera panel szczegółów</td></tr>
+        <tr><td>Create Tool</td><td>Walidacja JSON config po stronie frontu przed wysłaniem, autouzupełnienie nazwy dla builtinów</td></tr>
+        <tr><td>Assign Agent</td><td>Dropdown filtruje agentów już przypisanych, upsert ON CONFLICT w backend</td></tr>
+        <tr><td>Unassign</td><td>X przy każdym agencie → DELETE /assign/:agentId → refresh panelu</td></tr>
+        <tr><td>Test Tool</td><td>POST /:id/test z params JSON, wyświetla status + duration_ms + output/error</td></tr>
+        <tr><td>Delete Tool</td><td>confirm() dialog → DELETE → czyszczenie selected state</td></tr>
+        <tr><td>Metryki</td><td>agent_count, total_calls, success_rate%, last_called_at z GET /</td></tr>
+      </tbody>
+    </table>
+
+    <div class="alert alert-info">
+      <div class="alert-icon">📎</div>
+      <div class="alert-body">
+        Pełny kod ToolsPage (~350 linii) jest zbyt długi na ten brief, ale był wygenerowany w poprzedniej sesji jako <code>ToolsPage_v2.tsx</code>. Skopiuj go bezpośrednio do <code>packages/dashboard/src/pages/ToolsPage.tsx</code>.
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- CHECKLIST -->
+  <section class="section" id="checklist">
+    <div class="section-header">
+      <div class="section-num">✓</div>
+      <div class="section-title">Checklist wdrożenia — kolejność ma znaczenie</div>
+    </div>
+
+    <ul class="steps">
+      <li>
+        <strong>Zastąp packages/server/src/tools/executor.ts</strong>
+        Skopiuj kod z sekcji 1. Sprawdź że importy się kompilują: <code>pnpm --filter @biuro/server tsc --noEmit</code>
+      </li>
+      <li>
+        <strong>Zastąp packages/server/src/orchestrator/context.ts</strong>
+        Sekcja 2. To jest zmiana krytyczna — bez niej agenci nie używają tools nawet jeśli są w bazie.
+      </li>
+      <li>
+        <strong>Zastąp packages/server/src/routes/tools.ts</strong>
+        Sekcja 3. Sprawdź czy router jest zamontowany w <code>routes/index.ts</code> pod <code>/companies/:companyId/tools</code>.
+      </li>
+      <li>
+        <strong>Utwórz packages/server/src/scripts/seed-tools.ts</strong>
+        Sekcja 4. Uruchom: <code>pnpm --filter @biuro/server tsx src/scripts/seed-tools.ts &lt;COMPANY_UUID&gt;</code>
+      </li>
+      <li>
+        <strong>Zastąp packages/dashboard/src/pages/ToolsPage.tsx</strong>
+        Plik ToolsPage_v2.tsx z poprzedniej sesji. Sprawdź import w <code>App.tsx</code> — powinien być bez zmian.
+      </li>
+      <li>
+        <strong>Restart serwera i sprawdź UI</strong>
+        <code>pnpm dev</code> → otwórz Tools → powinny być widoczne seeded tools → kliknij jeden → Assign agent → zrestartuj heartbeat → sprawdź log.
+      </li>
+      <li>
+        <strong>Weryfikacja w logach</strong>
+        Przy następnym heartbeacie agenta szukaj w logach: <code>"AVAILABLE TOOLS (N total)"</code> w context buildu i <code>"Executing tool"</code> przy wywołaniu.
+      </li>
+    </ul>
+  </section>
+
+  <!-- TEST -->
+  <section class="section" id="test">
+    <div class="section-header">
+      <div class="section-num">?</div>
+      <div class="section-title">Weryfikacja — jak sprawdzić że działa</div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span class="code-lang">bash · smoke test</span></div>
+      <pre><span class="cm"># 1. Sprawdź że tools są w bazie</span>
+psql $DATABASE_URL -c "SELECT name, type FROM tools WHERE company_id = '&lt;UUID&gt;';"
+
+<span class="cm"># 2. Sprawdź przypisanie agenta</span>
+psql $DATABASE_URL -c "SELECT a.name, t.name AS tool FROM agent_tools at
+  JOIN agents a ON a.id = at.agent_id JOIN tools t ON t.id = at.tool_id;"
+
+<span class="cm"># 3. Sprawdź że context buduje AVAILABLE TOOLS</span>
+<span class="cm"># (dodaj tymczasowy console.log w context.ts przed return)</span>
+console.log('[TOOLS]', additional_context?.slice(0, 200));
+
+<span class="cm"># 4. Po heartbeacie sprawdź tool_calls</span>
+psql $DATABASE_URL -c "SELECT tool_id, status, duration_ms FROM tool_calls ORDER BY created_at DESC LIMIT 5;"
+
+<span class="cm"># 5. Test HTTP tool przez API</span>
+curl -X POST http://localhost:3100/api/companies/&lt;UUID&gt;/tools/&lt;TOOL_UUID&gt;/test \
+  -H "Content-Type: application/json" \
+  -d '{"params": {"body": {"text": "Hello from Biuro"}}}'</pre>
+    </div>
+
+    <div class="alert alert-success">
+      <div class="alert-icon">✅</div>
+      <div class="alert-body">
+        <strong>Sukces wygląda tak:</strong>
+        Zakładka Tools pokazuje listę narzędzi. Kliknięcie toola pokazuje panel z agentami i historią. Agenci w logach heartbeatu mają sekcję <code>AVAILABLE TOOLS</code>. W tabeli <code>tool_calls</code> pojawiają się rekordy po heartbeacie.
+      </div>
+    </div>
+
+    <div class="alert alert-warn">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-body">
+        <strong>Jeśli agenci nadal nie używają tools:</strong>
+        Sprawdź czy <code>additional_context</code> jest przekazywane do system prompt w <code>claude.ts</code>. W oryginalnym ClaudeRuntime pole <code>additional_context</code> może nie być użyte w budowie <code>systemPrompt</code> — dodaj je tam jeśli brakuje: <code>${context.additional_context ?? ''}</code>
+      </div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<script>
+  // Copy buttons
+  function copyBlock(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  // Active sidebar link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('.sidebar a[href^="#"]');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.sidebar a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

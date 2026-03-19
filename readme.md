@@ -468,7 +468,8 @@ OPENAI_API_KEY=sk-...
 PORT=3100                          # API server port
 HEARTBEAT_INTERVAL_MS=30000        # How often agents check for work (30s)
 LOG_LEVEL=info                     # debug | info | warn | error
-AUTH_ENABLED=false                 # Enable authentication (set true for production)
+AUTH_ENABLED=true                  # Keep enabled outside throwaway local dev
+LLM_PRICING_OVERRIDES=             # Optional JSON map of per-model token pricing
 WORKSPACE_ROOT=/tmp/biuro-workspace  # Root dir for file tools
 ```
 
@@ -481,7 +482,8 @@ OPENAI_API_KEY=
 PORT=3100
 HEARTBEAT_INTERVAL_MS=30000
 LOG_LEVEL=info
-AUTH_ENABLED=false
+AUTH_ENABLED=true
+LLM_PRICING_OVERRIDES=
 WORKSPACE_ROOT=/tmp/biuro-workspace
 ```
 
@@ -689,7 +691,9 @@ curl -H "Authorization: Bearer <token>" /api/companies
 curl -H "Authorization: Bearer biuro_<key>" /api/companies
 ```
 
-When `AUTH_ENABLED=false` (default): No auth required.
+When `AUTH_ENABLED=false`: No auth required.
+
+This should be treated as local-development-only. With auth disabled, the API and dashboard trust every request.
 
 ### Endpoints
 
@@ -1028,6 +1032,12 @@ Reports include:
 # Run all tests
 pnpm --filter @biuro/server test
 
+# Run CLI smoke tests
+pnpm --filter @biuro/cli test
+
+# Run dashboard tests (includes API-backed auth/dashboard flow)
+pnpm --filter @biuro/dashboard test
+
 # Watch mode
 pnpm --filter @biuro/server test:watch
 ```
@@ -1038,6 +1048,11 @@ Tests cover:
 - Budget enforcement
 - Delegation depth detection
 - Safety system triggers
+- Route-level API behavior (`companies`, `agents`, `tasks`, `tools`, `templates`, `integrations`)
+- WebSocket auth and scheduler integration flows
+- Runtime parsing for Claude, OpenAI, and Gemini
+- CLI smoke flows (`login -> status` auth persistence, `deploy` template import)
+- Lightweight API + dashboard E2E flow (UI login, session persistence, company hydration, protected dashboard bootstrap)
 
 ---
 

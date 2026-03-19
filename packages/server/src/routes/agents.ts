@@ -3,6 +3,8 @@ import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireRole } from '../middleware/auth.js';
 import { defaultModelsByRuntime } from '../runtime/defaultModels.js';
+import { extractCompanyRuntimeSettings } from '../runtime/preferences.js';
+import { runtimeRegistry } from '../runtime/registry.js';
 import { enqueueCompanyWakeup } from '../orchestrator/schedulerQueue.js';
 
 const router: Router = Router();
@@ -61,6 +63,29 @@ const replayDiffQuerySchema = z.object({
     return undefined;
   }, z.array(z.enum(['heartbeat', 'audit', 'message', 'session'])).optional()),
   limit: z.coerce.number().int().min(1).max(300).default(120),
+});
+
+const replayForkSchema = z.object({
+  replay_event_id: z.string().min(1),
+  task_id: z.string().min(1).optional(),
+  types: z.array(z.enum(['heartbeat', 'audit', 'message', 'session'])).optional(),
+  prompt_override: z.string().trim().max(4000).optional(),
+  fork_title: z.string().trim().min(1).max(160).optional(),
+});
+
+const failureExplanationRequestSchema = z.object({
+  task_id: z.string().min(1).optional(),
+  event_id: z.string().min(1).optional(),
+  types: z.array(z.enum(['heartbeat', 'audit', 'message', 'session'])).optional(),
+});
+
+const failureExplanationSchema = z.object({
+  headline: z.string().min(3).max(160),
+  summary: z.string().min(1).max(1200),
+  likely_cause: z.string().min(1).max(600),
+  evidence: z.array(z.string().min(1).max(240)).min(1).max(5),
+  recommended_actions: z.array(z.string().min(1).max(240)).min(1).max(5),
+  severity: z.enum(['high', 'medium', 'low']),
 });
 
 function formatReplaySummary(value: unknown, fallback: string) {
@@ -154,6 +179,332 @@ type ReplayDiffPayload = {
   };
 };
 
+type ReplayForkResponse = {
+  ok: true;
+  task_id: string;
+  task_title: string;
+  source_task_id: string;
+  source_event_id: string;
+  restored_message_count: number;
+  seeded_session: boolean;
+  prompt_override_applied: boolean;
+};
+
+type FailureExplanationPlanner = {
+  mode: 'llm' | 'rules';
+  runtime?: string;
+  model?: string;
+  fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_output' | null;
+};
+
+type FailureExplanationResponse = {
+  target_event: {
+    id: string;
+    action: string;
+    timestamp: string;
+    task_id: string | null;
+    task_title: string | null;
+    summary: string;
+  };
+  explanation: z.infer<typeof failureExplanationSchema>;
+  planner: FailureExplanationPlanner;
+};
+
+function extractJsonObject(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]+?)```/i);
+  const candidate = fencedMatch?.[1]?.trim() || trimmed;
+  const firstBrace = candidate.indexOf('{');
+  const lastBrace = candidate.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return null;
+  }
+
+  return candidate.slice(firstBrace, lastBrace + 1);
+}
+
+function getFailureSignal(details?: Record<string, unknown>) {
+  if (!details) {
+    return null;
+  }
+
+  const directKeys = ['error', 'reason', 'message', 'last_error'] as const;
+  for (const key of directKeys) {
+    const value = details[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  const output = details.output;
+  if (output && typeof output === 'object') {
+    const outputError = (output as Record<string, unknown>).error;
+    if (typeof outputError === 'string' && outputError.trim().length > 0) {
+      return outputError.trim();
+    }
+  }
+
+  const routing = details.llm_routing;
+  if (routing && typeof routing === 'object' && Array.isArray((routing as { attempts?: unknown[] }).attempts)) {
+    const attempts = ((routing as { attempts?: unknown[] }).attempts ?? []).filter(
+      (attempt): attempt is { runtime?: unknown; model?: unknown; status?: unknown; reason?: unknown } =>
+        Boolean(attempt) && typeof attempt === 'object'
+    );
+    const failedAttempts = attempts.filter((attempt) => attempt.status === 'failed');
+    if (failedAttempts.length > 0 && failedAttempts.length === attempts.length) {
+      return failedAttempts
+        .map((attempt) => {
+          const runtime = typeof attempt.runtime === 'string' ? attempt.runtime : 'runtime';
+          const model = typeof attempt.model === 'string' ? attempt.model : 'model';
+          const reason = typeof attempt.reason === 'string' ? attempt.reason : 'failed';
+          return `${runtime}/${model}: ${reason}`;
+        })
+        .join(' | ');
+    }
+  }
+
+  return null;
+}
+
+function isFailureReplayEvent(item: ReplayEvent) {
+  const action = item.action.toLowerCase();
+  const summary = item.summary.toLowerCase();
+  const status = typeof item.status === 'string' ? item.status.toLowerCase() : '';
+
+  if (status === 'error' || status === 'blocked' || status === 'budget_exceeded') {
+    return true;
+  }
+
+  if (/(error|failed|failure|timeout|blocked|budget_exceeded)/.test(action)) {
+    return true;
+  }
+
+  if (/(error|failed|failure|timeout|exception)/.test(summary)) {
+    return true;
+  }
+
+  return Boolean(getFailureSignal(item.details));
+}
+
+function classifyFailureSeverity(item: ReplayEvent): 'high' | 'medium' | 'low' {
+  const action = item.action.toLowerCase();
+  const status = typeof item.status === 'string' ? item.status.toLowerCase() : '';
+  if (status === 'error' || /(error|failed|timeout|exception)/.test(action)) {
+    return 'high';
+  }
+  if (status === 'blocked' || status === 'budget_exceeded' || /(blocked|budget_exceeded)/.test(action)) {
+    return 'medium';
+  }
+  return 'low';
+}
+
+function buildFailureEvidence(items: ReplayEvent[], targetIndex: number) {
+  const target = items[targetIndex];
+  const evidence = [
+    `Event: ${target.action} at ${new Date(target.timestamp).toLocaleString()}.`,
+    target.task_title ? `Task: ${target.task_title}.` : null,
+    `Summary: ${target.summary}`,
+    getFailureSignal(target.details) ? `Signal: ${getFailureSignal(target.details)}` : null,
+  ].filter((value): value is string => Boolean(value));
+
+  const previousItems = items.slice(Math.max(0, targetIndex - 2), targetIndex);
+  previousItems.forEach((item) => {
+    evidence.push(`Before failure: ${item.action} - ${item.summary}`);
+  });
+
+  const routing = target.details?.llm_routing;
+  if (routing && typeof routing === 'object' && Array.isArray((routing as { attempts?: unknown[] }).attempts)) {
+    const attempts = ((routing as { attempts?: unknown[] }).attempts ?? []).filter(
+      (attempt): attempt is { runtime?: unknown; model?: unknown; status?: unknown; reason?: unknown } =>
+        Boolean(attempt) && typeof attempt === 'object'
+    );
+    if (attempts.length > 0) {
+      evidence.push(
+        `LLM attempts: ${attempts
+          .map((attempt) => {
+            const runtime = typeof attempt.runtime === 'string' ? attempt.runtime : 'runtime';
+            const model = typeof attempt.model === 'string' ? attempt.model : 'model';
+            const status = typeof attempt.status === 'string' ? attempt.status : 'unknown';
+            const reason = typeof attempt.reason === 'string' ? ` (${attempt.reason})` : '';
+            return `${runtime}/${model}=${status}${reason}`;
+          })
+          .join(', ')}`
+      );
+    }
+  }
+
+  return evidence.slice(0, 5);
+}
+
+function buildFailureRecommendations(item: ReplayEvent) {
+  const action = item.action.toLowerCase();
+  const signal = getFailureSignal(item.details)?.toLowerCase() ?? '';
+
+  if (action.includes('budget_exceeded')) {
+    return [
+      'Increase the budget or move this agent to a cheaper runtime before retrying.',
+      'Replay from the last stable event after adjusting the budget guardrail.',
+      'Trim the task scope so the next heartbeat can complete within budget.',
+    ];
+  }
+
+  if (action.includes('blocked')) {
+    return [
+      'Review pending approvals or governance constraints tied to this task.',
+      'Unblock the agent with a supervisor message or policy change before rerunning.',
+      'Check whether the task is waiting on a missing dependency or assignment.',
+    ];
+  }
+
+  if (signal.includes('timeout') || action.includes('timeout')) {
+    return [
+      'Retry with a fallback runtime or a smaller prompt to reduce timeout risk.',
+      'Inspect provider health and API latency around the failure window.',
+      'Replay from the last stable event after tightening the task scope.',
+    ];
+  }
+
+  if (signal.includes('tool') || signal.includes('http') || signal.includes('web_search')) {
+    return [
+      'Inspect the failing tool input and the upstream dependency it called.',
+      'Re-run the task with a narrower tool request or a mocked dependency if possible.',
+      'Use replay to confirm whether the failure was deterministic or transient.',
+    ];
+  }
+
+  return [
+    'Inspect the replay window around this event to confirm the first visible fault.',
+    'Replay from the last stable point with a narrower prompt or clearer supervisor guidance.',
+    'Check runtime, tool, and external dependency health before rerunning.',
+  ];
+}
+
+function buildHeuristicFailureExplanation(items: ReplayEvent[], targetIndex: number): FailureExplanationResponse {
+  const target = items[targetIndex];
+  const signal = getFailureSignal(target.details);
+  const severity = classifyFailureSeverity(target);
+
+  return {
+    target_event: {
+      id: target.id,
+      action: target.action,
+      timestamp: target.timestamp,
+      task_id: target.task_id ?? null,
+      task_title: target.task_title ?? null,
+      summary: target.summary,
+    },
+    explanation: {
+      headline: target.task_title
+        ? `Failure in ${target.task_title}`
+        : `Failure around ${target.action}`,
+      summary: signal
+        ? `The run broke on ${target.action} because the system surfaced this error: ${signal}.`
+        : `The run broke on ${target.action}, and the replay window shows the failure started at this event.`,
+      likely_cause: signal ?? 'The replay indicates the agent hit an execution error without a cleaner structured reason.',
+      evidence: buildFailureEvidence(items, targetIndex),
+      recommended_actions: buildFailureRecommendations(target),
+      severity,
+    },
+    planner: {
+      mode: 'rules',
+      fallback_reason: 'llm_failed',
+    },
+  };
+}
+
+async function generateFailureExplanation(
+  company: { name: string; mission: string | null; config?: unknown },
+  payload: ReplayPayload,
+  targetIndex: number
+): Promise<FailureExplanationResponse> {
+  const runtimeSettings = extractCompanyRuntimeSettings(company.config);
+  const target = payload.items[targetIndex];
+  const windowItems = payload.items.slice(Math.max(0, targetIndex - 4), Math.min(payload.items.length, targetIndex + 3));
+
+  try {
+    const runtime = runtimeRegistry.getRuntime(runtimeSettings.primaryRuntime, {
+      fallbackOrder: runtimeSettings.fallbackOrder,
+    });
+    const response = await runtime.execute({
+      company_name: company.name,
+      company_mission: company.mission ?? 'No mission provided.',
+      agent_name: payload.agent.name,
+      agent_role: payload.agent.role,
+      current_task: {
+        title: target.task_title ?? 'Explain an agent failure',
+        description: 'Diagnose the failure, explain it plainly, and recommend the next actions.',
+      },
+      goal_hierarchy: [],
+      additional_context: [
+        'Return ONLY a valid JSON object in the `thought` field with this exact shape:',
+        '{"headline":"string","summary":"string","likely_cause":"string","evidence":["string"],"recommended_actions":["string"],"severity":"high|medium|low"}',
+        'Rules:',
+        '- explain the failure in plain language for an operator',
+        '- likely_cause should name the most probable root cause, not just repeat the symptom',
+        '- evidence should quote concrete replay facts, timings, provider attempts, or tool failures',
+        '- recommended_actions should be practical and ordered from fastest to most useful',
+        '- do not invent hidden system state; rely only on the replay window below',
+        '',
+        'Replay window:',
+        ...windowItems.map((item) => {
+          const signal = getFailureSignal(item.details);
+          return `- ${item.timestamp} | ${item.action} | task=${item.task_title ?? 'n/a'} | summary=${item.summary}${signal ? ` | signal=${signal}` : ''}`;
+        }),
+      ].join('\n'),
+      history: [
+        {
+          role: 'user',
+          content: `Explain why this run failed. Focus event: ${target.id} (${target.action}) on ${target.task_title ?? 'unknown task'}.`,
+        },
+      ],
+    });
+
+    const rawJson = extractJsonObject(response.thought);
+    if (!rawJson) {
+      throw new Error('Missing JSON object in runtime response');
+    }
+
+    const parsed = failureExplanationSchema.safeParse(JSON.parse(rawJson));
+    if (!parsed.success) {
+      throw new Error(parsed.error.message);
+    }
+
+    return {
+      target_event: {
+        id: target.id,
+        action: target.action,
+        timestamp: target.timestamp,
+        task_id: target.task_id ?? null,
+        task_title: target.task_title ?? null,
+        summary: target.summary,
+      },
+      explanation: parsed.data,
+      planner: {
+        mode: 'llm',
+        runtime: response.routing?.selected_runtime,
+        model: response.routing?.selected_model,
+        fallback_reason: null,
+      },
+    };
+  } catch (error) {
+    const fallback = buildHeuristicFailureExplanation(payload.items, targetIndex);
+    return {
+      ...fallback,
+      planner: {
+        mode: 'rules',
+        fallback_reason:
+          error instanceof Error && /json/i.test(error.message)
+            ? 'invalid_llm_output'
+            : 'llm_failed',
+      },
+    };
+  }
+}
+
 function escapeHtml(value: unknown) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -169,6 +520,29 @@ function slugifyFilename(value: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48) || 'agent';
+}
+
+function findReplaySessionSnapshot(items: ReplayEvent[], anchorIndex: number, taskId: string) {
+  for (let index = anchorIndex; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.type !== 'session' || item.task_id !== taskId) {
+      continue;
+    }
+
+    if (item.details && typeof item.details === 'object') {
+      return item.details;
+    }
+  }
+
+  return null;
+}
+
+function buildForkTaskTitle(sourceTitle: string, requestedTitle?: string) {
+  if (requestedTitle && requestedTitle.trim().length > 0) {
+    return requestedTitle.trim();
+  }
+
+  return `${sourceTitle} (Fork)`;
 }
 
 function toNumericValue(value: string | number | null | undefined) {
@@ -803,6 +1177,270 @@ router.get('/:id/replay/diff', requireRole(['owner', 'admin', 'member', 'viewer'
     };
 
     res.json(response);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/failure-explanation', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
+  try {
+    if (!req.params.id || req.params.id === 'undefined') return res.status(400).json({ error: 'Invalid ID' });
+    const agentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const parsed = failureExplanationRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+    const replayPayload = await buildReplayPayload(agentId, {
+      from: undefined,
+      to: undefined,
+      task_id: parsed.data.task_id,
+      types: parsed.data.types,
+      limit: 120,
+    });
+
+    if (!replayPayload) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const targetIndex = parsed.data.event_id
+      ? replayPayload.items.findIndex((item) => item.id === parsed.data.event_id)
+      : [...replayPayload.items]
+          .map((item, index) => ({ item, index }))
+          .reverse()
+          .find(({ item }) => isFailureReplayEvent(item))?.index ?? -1;
+
+    if (targetIndex === -1) {
+      return res.status(404).json({ error: 'No failure event found in the current replay scope' });
+    }
+
+    const companyRes = await db.query(
+      `SELECT id, name, mission, config
+       FROM companies
+       WHERE id = $1`,
+      [replayPayload.agent.company_id]
+    );
+
+    const explanation = companyRes.rows.length
+      ? await generateFailureExplanation(
+          companyRes.rows[0] as { name: string; mission: string | null; config?: unknown },
+          replayPayload,
+          targetIndex
+        )
+      : buildHeuristicFailureExplanation(replayPayload.items, targetIndex);
+
+    await db.query(
+      `INSERT INTO audit_log (company_id, agent_id, action, entity_type, details)
+       VALUES ($1, $2, 'agent.failure_explained', 'agent_failure_explanation', $3)`,
+      [
+        replayPayload.agent.company_id,
+        agentId,
+        JSON.stringify({
+          task_id: parsed.data.task_id ?? null,
+          event_id: explanation.target_event.id,
+          planner: explanation.planner,
+          severity: explanation.explanation.severity,
+          headline: explanation.explanation.headline,
+        }),
+      ]
+    );
+
+    res.json(explanation);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/replay/fork', requireRole(['owner', 'admin', 'member']), async (req, res, next) => {
+  try {
+    if (!req.params.id || req.params.id === 'undefined') return res.status(400).json({ error: 'Invalid ID' });
+    const agentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const parsed = replayForkSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+    const replayPayload = await buildReplayPayload(agentId, {
+      from: undefined,
+      to: undefined,
+      task_id: parsed.data.task_id,
+      types: undefined,
+      limit: 300,
+    });
+
+    if (!replayPayload) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const anchorIndex = replayPayload.items.findIndex((item) => item.id === parsed.data.replay_event_id);
+    if (anchorIndex === -1) {
+      return res.status(404).json({ error: 'Replay event not found in the current session scope' });
+    }
+
+    const anchorEvent = replayPayload.items[anchorIndex];
+    if (!anchorEvent.task_id) {
+      return res.status(400).json({ error: 'This replay event is not tied to a task, so it cannot be forked.' });
+    }
+
+    const sourceTaskResult = await db.query(
+      `SELECT id, company_id, goal_id, parent_id, title, description, priority
+       FROM tasks
+       WHERE id = $1`,
+      [anchorEvent.task_id]
+    );
+    if (sourceTaskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Source task not found' });
+    }
+
+    const sourceTask = sourceTaskResult.rows[0] as {
+      id: string;
+      company_id: string;
+      goal_id?: string | null;
+      parent_id?: string | null;
+      title: string;
+      description?: string | null;
+      priority?: number | null;
+    };
+
+    const sourceMessagesResult = await db.query(
+      `SELECT company_id, from_agent, to_agent, content, type, metadata
+       FROM messages
+       WHERE task_id = $1
+         AND created_at <= $2
+       ORDER BY created_at ASC`,
+      [sourceTask.id, anchorEvent.timestamp]
+    );
+
+    const promptOverride = parsed.data.prompt_override?.trim() || null;
+    const taskTitle = buildForkTaskTitle(sourceTask.title, parsed.data.fork_title);
+    const taskDescription = [
+      sourceTask.description?.trim() || '',
+      `Forked from ${sourceTask.title} at ${new Date(anchorEvent.timestamp).toLocaleString()} via ${anchorEvent.action}.`,
+      promptOverride ? 'Includes a supervisor prompt override for the rerun branch.' : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const forkTaskResult = await db.query(
+      `INSERT INTO tasks (company_id, goal_id, parent_id, title, description, assigned_to, priority, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'assigned')
+       RETURNING *`,
+      [
+        sourceTask.company_id,
+        sourceTask.goal_id ?? null,
+        sourceTask.id,
+        taskTitle,
+        taskDescription,
+        agentId,
+        sourceTask.priority ?? 0,
+      ]
+    );
+    const forkTask = forkTaskResult.rows[0] as { id: string; title: string; company_id: string };
+
+    for (const row of sourceMessagesResult.rows as Array<{
+      company_id: string;
+      from_agent?: string | null;
+      to_agent?: string | null;
+      content: string;
+      type?: string | null;
+      metadata?: Record<string, unknown> | null;
+    }>) {
+      await db.query(
+        `INSERT INTO messages (company_id, task_id, from_agent, to_agent, content, type, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          row.company_id,
+          forkTask.id,
+          row.from_agent ?? null,
+          row.to_agent ?? null,
+          row.content,
+          row.type ?? 'message',
+          JSON.stringify(row.metadata ?? {}),
+        ]
+      );
+    }
+
+    if (promptOverride) {
+      await db.query(
+        `INSERT INTO messages (company_id, task_id, from_agent, to_agent, content, type, metadata)
+         VALUES ($1, $2, NULL, $3, $4, 'message', $5)`,
+        [
+          sourceTask.company_id,
+          forkTask.id,
+          agentId,
+          promptOverride,
+          JSON.stringify({
+            fork_prompt_override: true,
+            source_event_id: anchorEvent.id,
+            source_task_id: sourceTask.id,
+          }),
+        ]
+      );
+    }
+
+    const sessionSnapshot = findReplaySessionSnapshot(replayPayload.items, anchorIndex, sourceTask.id);
+    const forkSessionState = {
+      ...(sessionSnapshot ?? {}),
+      forked_from: {
+        event_id: anchorEvent.id,
+        action: anchorEvent.action,
+        timestamp: anchorEvent.timestamp,
+        task_id: sourceTask.id,
+      },
+      ...(promptOverride ? { prompt_override: promptOverride } : {}),
+    };
+
+    await db.query(
+      `INSERT INTO agent_sessions (agent_id, task_id, state)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (agent_id, task_id) DO UPDATE
+       SET state = EXCLUDED.state, updated_at = now()`,
+      [agentId, forkTask.id, JSON.stringify(forkSessionState)]
+    );
+
+    await db.query(
+      "INSERT INTO audit_log (company_id, action, entity_type, entity_id, details) VALUES ($1, 'task.created', 'task', $2, $3)",
+      [
+        sourceTask.company_id,
+        forkTask.id,
+        JSON.stringify({
+          source: 'replay_fork',
+          source_task_id: sourceTask.id,
+          source_event_id: anchorEvent.id,
+        }),
+      ]
+    );
+    await db.query(
+      "INSERT INTO audit_log (company_id, agent_id, action, entity_type, entity_id, details) VALUES ($1, $2, 'replay.forked', 'task', $3, $4)",
+      [
+        sourceTask.company_id,
+        agentId,
+        forkTask.id,
+        JSON.stringify({
+          source_task_id: sourceTask.id,
+          source_event_id: anchorEvent.id,
+          restored_message_count: sourceMessagesResult.rows.length,
+          seeded_session: sessionSnapshot !== null,
+          prompt_override_applied: Boolean(promptOverride),
+        }),
+      ]
+    );
+
+    await enqueueCompanyWakeup(sourceTask.company_id, 'replay_fork_created', {
+      taskId: forkTask.id,
+      agentId,
+    });
+
+    const response: ReplayForkResponse = {
+      ok: true,
+      task_id: forkTask.id,
+      task_title: forkTask.title,
+      source_task_id: sourceTask.id,
+      source_event_id: anchorEvent.id,
+      restored_message_count: sourceMessagesResult.rows.length,
+      seeded_session: sessionSnapshot !== null,
+      prompt_override_applied: Boolean(promptOverride),
+    };
+
+    res.status(201).json(response);
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { Bot, Activity, Wrench, Shield, PauseCircle, PlayCircle } from 'lucide-react';
 import { getAuthToken, getSelectedCompanyId } from '../lib/session';
@@ -71,6 +71,42 @@ type ReplayDiffResponse = {
   };
 };
 
+type ReplayForkResponse = {
+  ok: true;
+  task_id: string;
+  task_title: string;
+  source_task_id: string;
+  source_event_id: string;
+  restored_message_count: number;
+  seeded_session: boolean;
+  prompt_override_applied: boolean;
+};
+
+type FailureExplanationResponse = {
+  target_event: {
+    id: string;
+    action: string;
+    timestamp: string;
+    task_id: string | null;
+    task_title: string | null;
+    summary: string;
+  };
+  explanation: {
+    headline: string;
+    summary: string;
+    likely_cause: string;
+    evidence: string[];
+    recommended_actions: string[];
+    severity: 'high' | 'medium' | 'low';
+  };
+  planner: {
+    mode: 'llm' | 'rules';
+    runtime?: string;
+    model?: string;
+    fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_output' | null;
+  };
+};
+
 const playbackSpeeds = [1, 2, 4];
 const replayEventTypes: ReplayEvent['type'][] = ['heartbeat', 'audit', 'message', 'session'];
 
@@ -120,8 +156,40 @@ function getFallbackCount(routing: ReplayRoutingDetails | null) {
   return routing.attempts.filter((attempt) => attempt.status === 'fallback').length;
 }
 
+function parseReplayTypes(value: string | null): ReplayEvent['type'][] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry): entry is ReplayEvent['type'] => replayEventTypes.includes(entry as ReplayEvent['type']));
+}
+
+function isReplayFailureEvent(event: ReplayEvent | null) {
+  if (!event) {
+    return false;
+  }
+
+  const action = event.action.toLowerCase();
+  const status = typeof event.status === 'string' ? event.status.toLowerCase() : '';
+  const summary = event.summary.toLowerCase();
+  const error = typeof event.details?.error === 'string' ? event.details.error.toLowerCase() : '';
+
+  return (
+    status === 'error' ||
+    status === 'blocked' ||
+    status === 'budget_exceeded' ||
+    /(error|failed|timeout|blocked|budget_exceeded)/.test(action) ||
+    /(error|failed|timeout|exception)/.test(summary) ||
+    Boolean(error)
+  );
+}
+
 export default function AgentDetailPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { request, lastTrace } = useApi();
   const [agent, setAgent] = useState<any>(null);
   const [budget, setBudget] = useState<any>(null);
@@ -130,10 +198,20 @@ export default function AgentDetailPage() {
   const [currentReplayIndex, setCurrentReplayIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [selectedTaskId, setSelectedTaskId] = useState('all');
-  const [selectedTypes, setSelectedTypes] = useState<ReplayEvent['type'][]>([]);
+  const replayTaskParam = searchParams.get('task_id')?.trim() || 'all';
+  const replayEventParam = searchParams.get('event_id')?.trim() || null;
+  const replayTypesParam = searchParams.get('types');
+  const [selectedTaskId, setSelectedTaskId] = useState(replayTaskParam);
+  const [selectedTypes, setSelectedTypes] = useState<ReplayEvent['type'][]>(() => parseReplayTypes(replayTypesParam));
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [forkPrompt, setForkPrompt] = useState('');
+  const [isForking, setIsForking] = useState(false);
+  const [forkStatus, setForkStatus] = useState<string | null>(null);
+  const [forkResult, setForkResult] = useState<ReplayForkResponse | null>(null);
+  const [isExplainingFailure, setIsExplainingFailure] = useState(false);
+  const [failureExplanation, setFailureExplanation] = useState<FailureExplanationResponse | null>(null);
+  const [failureExplanationStatus, setFailureExplanationStatus] = useState<string | null>(null);
   const [compareLeftTaskId, setCompareLeftTaskId] = useState('');
   const [compareRightTaskId, setCompareRightTaskId] = useState('');
   const [replayDiff, setReplayDiff] = useState<ReplayDiffResponse | null>(null);
@@ -183,12 +261,17 @@ export default function AgentDetailPage() {
   }, [id, request]);
 
   useEffect(() => {
-    setSelectedTaskId('all');
-    setSelectedTypes([]);
+    setSelectedTaskId(replayTaskParam);
+    setSelectedTypes(parseReplayTypes(replayTypesParam));
+    setForkPrompt('');
+    setForkStatus(null);
+    setForkResult(null);
+    setFailureExplanation(null);
+    setFailureExplanationStatus(null);
     setCompareLeftTaskId('');
     setCompareRightTaskId('');
     setReplayDiff(null);
-  }, [id]);
+  }, [id, replayTaskParam, replayTypesParam]);
 
   useEffect(() => {
     const fetchReplay = async () => {
@@ -256,6 +339,21 @@ export default function AgentDetailPage() {
     return () => window.clearTimeout(timeout);
   }, [currentReplayIndex, isPlaying, playbackSpeed, replayEvents]);
 
+  useEffect(() => {
+    if (replayEvents.length === 0) {
+      return;
+    }
+
+    if (!replayEventParam) {
+      setCurrentReplayIndex(0);
+      return;
+    }
+
+    const focusedIndex = replayEvents.findIndex((event) => event.id === replayEventParam);
+    setCurrentReplayIndex(focusedIndex >= 0 ? focusedIndex : 0);
+    setIsPlaying(false);
+  }, [replayEventParam, replayEvents]);
+
   if (!agent) return <div className="p-8">Loading...</div>;
 
   const hasReplay = replayEvents.length > 0;
@@ -297,6 +395,59 @@ export default function AgentDetailPage() {
       setExportStatus(err instanceof Error ? err.message : 'Replay report export failed.');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleForkReplay = async () => {
+    if (!currentReplayEvent?.id || !currentReplayEvent.task_id) {
+      return;
+    }
+
+    setIsForking(true);
+    setForkStatus(null);
+    setForkResult(null);
+
+    try {
+      const result = (await request(`/agents/${id}/replay/fork`, {
+        method: 'POST',
+        body: JSON.stringify({
+          replay_event_id: currentReplayEvent.id,
+          task_id: selectedTaskId !== 'all' ? selectedTaskId : undefined,
+          types: selectedTypes.length > 0 ? selectedTypes : undefined,
+          prompt_override: forkPrompt.trim() || undefined,
+        }),
+      })) as ReplayForkResponse;
+
+      setForkResult(result);
+      setForkStatus(`Fork created as ${result.task_title}.`);
+    } catch (err) {
+      setForkStatus(err instanceof Error ? err.message : 'Replay fork failed.');
+    } finally {
+      setIsForking(false);
+    }
+  };
+
+  const handleExplainFailure = async () => {
+    setIsExplainingFailure(true);
+    setFailureExplanationStatus(null);
+    setFailureExplanation(null);
+
+    try {
+      const result = (await request(`/agents/${id}/failure-explanation`, {
+        method: 'POST',
+        body: JSON.stringify({
+          task_id: selectedTaskId !== 'all' ? selectedTaskId : undefined,
+          event_id: isReplayFailureEvent(currentReplayEvent) ? currentReplayEvent?.id : undefined,
+          types: selectedTypes.length > 0 ? selectedTypes : undefined,
+        }),
+      })) as FailureExplanationResponse;
+
+      setFailureExplanation(result);
+      setFailureExplanationStatus('Failure explanation ready.');
+    } catch (err) {
+      setFailureExplanationStatus(err instanceof Error ? err.message : 'Failure explanation failed.');
+    } finally {
+      setIsExplainingFailure(false);
     }
   };
 
@@ -548,6 +699,11 @@ export default function AgentDetailPage() {
                       </span>
                       <span>{currentReplayEvent?.task_title || 'Cross-agent activity'}</span>
                     </div>
+                    {replayEventParam && currentReplayEvent?.id === replayEventParam ? (
+                      <div className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+                        Source fork event
+                      </div>
+                    ) : null}
                     <input
                       aria-label="Replay scrubber"
                       className="w-full accent-primary"
@@ -620,6 +776,142 @@ export default function AgentDetailPage() {
                       </div>
                     </div>
                   ) : null}
+
+                  <div className="rounded-xl border bg-card p-4 space-y-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Time-travel fork</p>
+                        <p className="text-sm text-muted-foreground">
+                          Clone the task from this replay frame, restore visible history, and optionally steer the rerun with a new supervisor prompt.
+                        </p>
+                      </div>
+                      {forkResult ? (
+                        <Link
+                          to={`/tasks/${forkResult.task_id}`}
+                          className="inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm hover:bg-accent transition-colors"
+                        >
+                          Open forked task
+                        </Link>
+                      ) : null}
+                    </div>
+
+                    {currentReplayEvent?.task_id ? (
+                      <>
+                        <textarea
+                          aria-label="Fork prompt override"
+                          value={forkPrompt}
+                          onChange={(event) => setForkPrompt(event.target.value)}
+                          placeholder="Optional: add a new steering prompt for this rerun branch."
+                          className="min-h-[88px] w-full rounded-lg border bg-card px-3 py-2 text-sm"
+                        />
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <p className="text-xs text-muted-foreground">
+                            Fork point: {currentReplayEvent.task_title || 'Current task'} via {currentReplayEvent.action}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleForkReplay}
+                            className="inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isForking}
+                          >
+                            {isForking ? 'Forking...' : 'Fork from this point'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        This frame is not scoped to a task, so there is nothing stable to fork from here yet.
+                      </p>
+                    )}
+
+                    {forkStatus ? (
+                      <p className="text-sm text-muted-foreground">{forkStatus}</p>
+                    ) : null}
+                    {forkResult ? (
+                      <p className="text-xs text-muted-foreground">
+                        Restored {forkResult.restored_message_count} message{forkResult.restored_message_count === 1 ? '' : 's'}
+                        {forkResult.seeded_session ? ' and seeded a session snapshot.' : ' and started with a synthetic fork checkpoint.'}
+                        {forkResult.prompt_override_applied ? ' Prompt override included.' : ''}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border bg-card p-4 space-y-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Failure explanation</p>
+                        <p className="text-sm text-muted-foreground">
+                          Ask the system to diagnose the latest failure in scope and translate it into a plain-language explanation with next steps.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleExplainFailure}
+                        className="inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isExplainingFailure || !hasReplay}
+                      >
+                        {isExplainingFailure
+                          ? 'Explaining...'
+                          : isReplayFailureEvent(currentReplayEvent)
+                            ? 'Explain failure'
+                            : 'Explain latest failure'}
+                      </button>
+                    </div>
+
+                    {failureExplanationStatus ? (
+                      <p className="text-sm text-muted-foreground">{failureExplanationStatus}</p>
+                    ) : null}
+
+                    {failureExplanation ? (
+                      <div className="rounded-xl border bg-muted/20 p-4 space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            failureExplanation.explanation.severity === 'high'
+                              ? 'bg-rose-100 text-rose-700'
+                              : failureExplanation.explanation.severity === 'medium'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {failureExplanation.explanation.severity} severity
+                          </span>
+                          <span className="rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
+                            {failureExplanation.planner.mode === 'llm'
+                              ? `Planned by ${failureExplanation.planner.runtime || 'LLM'}`
+                              : 'Fallback diagnosis'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <p className="text-lg font-semibold">{failureExplanation.explanation.headline}</p>
+                          <p className="mt-2 text-sm text-muted-foreground">{failureExplanation.explanation.summary}</p>
+                        </div>
+
+                        <div className="rounded-lg border bg-card px-4 py-3">
+                          <span className="block text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Likely cause</span>
+                          <span className="text-sm text-foreground">{failureExplanation.explanation.likely_cause}</span>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Evidence</p>
+                            {failureExplanation.explanation.evidence.map((entry) => (
+                              <p key={entry} className="text-sm text-muted-foreground">{entry}</p>
+                            ))}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Recommended actions</p>
+                            {failureExplanation.explanation.recommended_actions.map((entry) => (
+                              <p key={entry} className="text-sm text-muted-foreground">{entry}</p>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="text-xs text-muted-foreground">
+                          Focus event: {failureExplanation.target_event.action} on {failureExplanation.target_event.task_title || 'unknown task'} at {formatReplayTimestamp(failureExplanation.target_event.timestamp)}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="space-y-4">

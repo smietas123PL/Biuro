@@ -16,3 +16,22 @@ export type CompanyRuntimeSettingsUpdate = {
   primary_runtime: RuntimeName;
   fallback_order: RuntimeName[];
 };
+
+export type CompanyDigestSettingsResponse = {
+  company_id: string;
+  company_name: string;
+  enabled: boolean;
+  hour_utc: number;
+  minute_utc: number;
+  system_defaults: {
+    enabled: boolean;
+    hour_utc: number;
+    minute_utc: number;
+  };
+};
+
+export type CompanyDigestSettingsUpdate = {
+  enabled: boolean;
+  hour_utc: number;
+  minute_utc: number;
+};

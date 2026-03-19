@@ -52,6 +52,7 @@ const envSchema = z.object({
         .map((item) => item.trim())
         .filter(Boolean)
     ),
+  LLM_PRICING_OVERRIDES: z.string().optional(),
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().default(20),
   WS_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),
@@ -64,6 +65,13 @@ const envSchema = z.object({
   OTEL_TRACE_HISTORY_LIMIT: z.coerce.number().int().min(10).max(1000).default(200),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   WORKER_METRICS_PORT: z.coerce.number().int().min(0).max(65535).default(9464),
+  DAILY_DIGEST_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  DAILY_DIGEST_HOUR_UTC: z.coerce.number().int().min(0).max(23).default(18),
+  DAILY_DIGEST_MINUTE_UTC: z.coerce.number().int().min(0).max(59).default(0),
+  DAILY_DIGEST_SWEEP_INTERVAL_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(60_000),
   AUTH_ENABLED: z
     .enum(['true', 'false'])
     .default('true')

@@ -2,6 +2,7 @@ import { db } from '../db/client.js';
 import { env } from '../env.js';
 import { logger } from '../utils/logger.js';
 import { processAgentHeartbeat, type HeartbeatOutcome } from './heartbeat.js';
+import { dispatchDueDailyDigests } from '../services/dailyDigest.js';
 import {
   acknowledgeSchedulerWakeup,
   closeSchedulerQueue,
@@ -14,6 +15,7 @@ import {
 let interval: NodeJS.Timeout | null = null;
 let queueLoopPromise: Promise<void> | null = null;
 let schedulerRunning = false;
+let lastDailyDigestSweepAt = 0;
 const inFlightHeartbeats = new Set<Promise<HeartbeatOutcome>>();
 const inFlightHeartbeatWaiters = new Set<() => void>();
 
@@ -73,6 +75,15 @@ async function waitForCapacity() {
   });
 }
 
+async function runScheduledMaintenance(nowMs: number = Date.now()) {
+  if (nowMs - lastDailyDigestSweepAt < env.DAILY_DIGEST_SWEEP_INTERVAL_MS) {
+    return;
+  }
+
+  lastDailyDigestSweepAt = nowMs;
+  await dispatchDueDailyDigests(new Date(nowMs));
+}
+
 async function dispatchQueuedCompany(companyId: string) {
   const remainingCapacity = Math.max(env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size, 0);
   if (remainingCapacity === 0) {
@@ -126,6 +137,7 @@ async function runQueueDrivenScheduler() {
 
   while (schedulerRunning) {
     try {
+      await runScheduledMaintenance();
       await waitForCapacity();
       if (!schedulerRunning) {
         break;
@@ -161,6 +173,7 @@ async function runQueueDrivenScheduler() {
 export function startOrchestrator() {
   if (schedulerRunning) return;
   schedulerRunning = true;
+  lastDailyDigestSweepAt = 0;
 
   logger.info(
     { intervalMs: env.HEARTBEAT_INTERVAL_MS, maxConcurrentHeartbeats: env.MAX_CONCURRENT_HEARTBEATS },
@@ -176,6 +189,7 @@ export function startOrchestrator() {
 
   interval = setInterval(async () => {
     try {
+      await runScheduledMaintenance();
       const remainingCapacity = Math.max(env.MAX_CONCURRENT_HEARTBEATS - inFlightHeartbeats.size, 0);
       if (remainingCapacity === 0) {
         logger.debug({ activeHeartbeats: inFlightHeartbeats.size }, 'Skipping scheduler tick because capacity is full');

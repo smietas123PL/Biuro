@@ -22,6 +22,24 @@ const overviewResponse = {
     events_url: 'https://biuro.test/api/integrations/slack/events',
     slash_command_url: 'https://biuro.test/api/integrations/slack/command',
     interactions_url: 'https://biuro.test/api/integrations/slack/interactions',
+    approval_actions: {
+      ready: true,
+      status: 'Ready for one-click approvals',
+      requirements: [
+        {
+          label: 'Interactivity endpoint exposed at https://biuro.test/api/integrations/slack/interactions',
+          met: true,
+        },
+        {
+          label: 'SLACK_SIGNING_SECRET configured on the server',
+          met: true,
+        },
+        {
+          label: 'Outgoing Slack webhook saved for this company',
+          met: true,
+        },
+      ],
+    },
     slash_command_name: '/biuro',
     example_payload: {
       command: '/biuro',
@@ -149,6 +167,8 @@ describe('IntegrationsPage', () => {
     expect(screen.getByText('https://biuro.test')).toBeTruthy();
     expect(screen.getAllByText('https://hooks.slack.test/services/original')).toHaveLength(2);
     expect(screen.getByText('https://biuro.test/api/integrations/slack/interactions')).toBeTruthy();
-    expect(screen.getByText('Slack interactivity enabled')).toBeTruthy();
+    expect(screen.getAllByText('Ready for one-click approvals').length).toBeGreaterThan(0);
+    expect(screen.getByText('Slack One-Click Approvals')).toBeTruthy();
+    expect(screen.getByText('Outgoing Slack webhook saved for this company')).toBeTruthy();
   });
 });

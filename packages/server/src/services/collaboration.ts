@@ -15,6 +15,7 @@ type CollaborationTaskRow = {
   depth: number;
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
 };
 
 type CollaborationMessageRow = {
@@ -80,6 +81,14 @@ export type CollaborationSnapshot = {
     title: string;
     description: string | null;
     status: string;
+    fork_origin: {
+      source_agent_id: string | null;
+      source_task_id: string;
+      source_event_id: string | null;
+      source_action: string | null;
+      source_timestamp: string | null;
+      prompt_override: boolean;
+    } | null;
   };
   tasks: Array<{
     id: string;
@@ -95,6 +104,7 @@ export type CollaborationSnapshot = {
     depth: number;
     created_at: string;
     updated_at: string;
+    completed_at: string | null;
   }>;
   participants: Array<{
     agent_id: string;
@@ -247,6 +257,7 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
          t.priority,
          t.created_at,
          t.updated_at,
+         t.completed_at,
          0 AS depth
        FROM tasks t
        WHERE t.id = $1
@@ -261,6 +272,7 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
          child.priority,
          child.created_at,
          child.updated_at,
+         child.completed_at,
          tree.depth + 1 AS depth
        FROM tasks child
        JOIN task_tree tree ON child.parent_id = tree.id
@@ -285,7 +297,7 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
   const rootTask = tasks[0];
   const taskIds = tasks.map((entry) => entry.id);
 
-  const [messagesRes, heartbeatsRes] = await Promise.all([
+  const [messagesRes, heartbeatsRes, forkAuditRes, forkSessionRes] = await Promise.all([
     db.query(
       `SELECT
          m.id,
@@ -330,7 +342,48 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
        ORDER BY h.created_at ASC`,
       [taskIds]
     ),
+    db.query(
+      `SELECT agent_id, details
+       FROM audit_log
+       WHERE entity_type = 'task'
+         AND entity_id = $1
+         AND action = 'replay.forked'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [currentTask.id]
+    ),
+    db.query(
+      `SELECT state
+       FROM agent_sessions
+       WHERE task_id = $1
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [currentTask.id]
+    ),
   ]);
+
+  const forkAuditDetails =
+    (forkAuditRes.rows[0]?.details as Record<string, unknown> | undefined) ?? null;
+  const forkAuditAgentId =
+    typeof forkAuditRes.rows[0]?.agent_id === 'string' ? (forkAuditRes.rows[0].agent_id as string) : null;
+  const forkSessionState =
+    (forkSessionRes.rows[0]?.state as Record<string, unknown> | undefined) ?? null;
+  const forkedFrom =
+    forkSessionState?.forked_from && typeof forkSessionState.forked_from === 'object'
+      ? (forkSessionState.forked_from as Record<string, unknown>)
+      : null;
+  const forkOrigin =
+    forkAuditDetails?.source_task_id && typeof forkAuditDetails.source_task_id === 'string'
+      ? {
+          source_agent_id: forkAuditAgentId,
+          source_task_id: forkAuditDetails.source_task_id,
+          source_event_id:
+            typeof forkAuditDetails.source_event_id === 'string' ? forkAuditDetails.source_event_id : null,
+          source_action: typeof forkedFrom?.action === 'string' ? forkedFrom.action : null,
+          source_timestamp: typeof forkedFrom?.timestamp === 'string' ? forkedFrom.timestamp : null,
+          prompt_override: Boolean(forkSessionState?.prompt_override),
+        }
+      : null;
 
   const timeline: CollaborationTimelineItem[] = [];
   const participantMap = new Map<
@@ -476,6 +529,7 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
       title: currentTask.title,
       description: currentTask.description,
       status: currentTask.status,
+      fork_origin: forkOrigin,
     },
     tasks: tasks.map((task) => ({
       id: task.id,
@@ -491,6 +545,7 @@ export async function getTaskCollaborationSnapshot(taskId: string): Promise<Coll
       depth: task.depth,
       created_at: task.created_at,
       updated_at: task.updated_at,
+      completed_at: task.completed_at,
     })),
     participants: Array.from(participantMap.values()).sort((left, right) => {
       if (right.contribution_count !== left.contribution_count) {

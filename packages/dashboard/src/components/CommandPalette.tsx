@@ -70,6 +70,51 @@ type ApprovalItem = {
   status: string;
 };
 
+type NLCommandPlanAction =
+  | {
+      id: string;
+      type: 'navigate';
+      label: string;
+      description: string;
+      path: string;
+      requires_confirmation: boolean;
+    }
+  | {
+      id: string;
+      type: 'api_request';
+      label: string;
+      description: string;
+      endpoint: string;
+      method: 'GET' | 'POST' | 'PATCH';
+      body?: Record<string, unknown>;
+      requires_confirmation: boolean;
+      success_message: string;
+    };
+
+type NLCommandPlan = {
+  source: 'rules' | 'llm';
+  original_input: string;
+  summary: string;
+  reasoning: string;
+  warnings: string[];
+  can_execute: boolean;
+  actions: NLCommandPlanAction[];
+  planner: {
+    mode: 'llm' | 'rules';
+    runtime?: string;
+    model?: string;
+    attempts?: Array<{
+      runtime: string;
+      model: string;
+      status: 'success' | 'fallback' | 'failed';
+      reason?: string;
+    }>;
+    fallback_reason?: 'llm_unavailable' | 'llm_failed' | 'invalid_llm_plan' | null;
+  };
+};
+
+type PlanExecutionState = 'pending' | 'running' | 'completed' | 'failed';
+
 function canManageCompany(role?: CompanyRole | null) {
   return role === 'owner' || role === 'admin';
 }
@@ -206,6 +251,70 @@ function getAccentStyles(accent: ActionPaletteItem['accent']) {
   };
 }
 
+function getExecutionBadgeClass(status?: PlanExecutionState) {
+  if (status === 'completed') {
+    return 'bg-emerald-100 text-emerald-700';
+  }
+
+  if (status === 'running') {
+    return 'bg-sky-100 text-sky-700';
+  }
+
+  if (status === 'failed') {
+    return 'bg-red-100 text-red-700';
+  }
+
+  return 'bg-muted text-muted-foreground';
+}
+
+function getExecutionLabel(status?: PlanExecutionState) {
+  if (status === 'completed') {
+    return 'Done';
+  }
+
+  if (status === 'running') {
+    return 'Running';
+  }
+
+  if (status === 'failed') {
+    return 'Failed';
+  }
+
+  return 'Pending';
+}
+
+function getPlannerRuntimeLabel(runtime?: string) {
+  if (runtime === 'claude') {
+    return 'Claude';
+  }
+
+  if (runtime === 'openai') {
+    return 'OpenAI';
+  }
+
+  if (runtime === 'gemini') {
+    return 'Gemini';
+  }
+
+  return runtime ?? 'Rules';
+}
+
+function getPlannerBadge(plan: NLCommandPlan) {
+  if (plan.planner.mode === 'llm' && plan.planner.runtime) {
+    return `Planned by ${getPlannerRuntimeLabel(plan.planner.runtime)}`;
+  }
+
+  if (plan.planner.fallback_reason === 'invalid_llm_plan') {
+    return 'Fallback to Rules';
+  }
+
+  if (plan.planner.fallback_reason === 'llm_failed') {
+    return 'Rules after LLM error';
+  }
+
+  return 'Planned by Rules';
+}
+
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const { request } = useApi();
@@ -220,6 +329,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
+  const [nlLoading, setNlLoading] = useState(false);
+  const [nlPlan, setNlPlan] = useState<NLCommandPlan | null>(null);
+  const [nlExecutionLoading, setNlExecutionLoading] = useState(false);
+  const [nlExecutionError, setNlExecutionError] = useState<string | null>(null);
+  const [nlExecutionState, setNlExecutionState] = useState<Record<string, PlanExecutionState>>({});
 
   useEffect(() => {
     if (!open) {
@@ -227,6 +341,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       setActiveIndex(0);
       setPendingAction(null);
       setActionMessage(null);
+      setNlPlan(null);
+      setNlExecutionLoading(false);
+      setNlExecutionError(null);
+      setNlExecutionState({});
       return;
     }
 
@@ -333,8 +451,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     return null;
   }
 
+  const resetPlanState = () => {
+    setNlPlan(null);
+    setNlExecutionLoading(false);
+    setNlExecutionError(null);
+    setNlExecutionState({});
+  };
+
   const handleSelect = (item: PaletteItem) => {
     if (item.kind === 'action') {
+      resetPlanState();
       setPendingAction(item);
       setActionMessage(null);
       return;
@@ -364,7 +490,101 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     }
   };
 
+  const handleInterpretCommand = async () => {
+    if (!selectedCompanyId || !query.trim()) {
+      return;
+    }
+
+    setPendingAction(null);
+    setActionMessage(null);
+    setNlExecutionError(null);
+    setNlExecutionState({});
+    setNlLoading(true);
+    try {
+      const plan = (await request('/nl-command', {
+        method: 'POST',
+        body: JSON.stringify({ input: query.trim() }),
+      })) as NLCommandPlan;
+      setNlPlan(plan);
+    } finally {
+      setNlLoading(false);
+    }
+  };
+
+  const handleExecutePlan = async () => {
+    if (!nlPlan || nlExecutionLoading || !nlPlan.can_execute) {
+      return;
+    }
+
+    setActionMessage(null);
+    setNlExecutionError(null);
+    setNlExecutionLoading(true);
+    const initialState = Object.fromEntries(
+      nlPlan.actions.map((action) => [action.id, 'pending' as PlanExecutionState])
+    );
+    setNlExecutionState(initialState);
+
+    try {
+      let finalPath: string | null = null;
+      let lastMessage = 'Plan completed.';
+
+      for (const action of nlPlan.actions) {
+        setNlExecutionState((current) => ({
+          ...current,
+          [action.id]: 'running',
+        }));
+
+        try {
+          if (action.type === 'api_request') {
+            await request(action.endpoint, {
+              method: action.method,
+              body: action.body ? JSON.stringify(action.body) : undefined,
+            });
+            lastMessage = action.success_message;
+          } else {
+            finalPath = action.path;
+            lastMessage = `Opened ${action.label.replace(/^Open\s+/i, '')}.`;
+          }
+
+          setNlExecutionState((current) => ({
+            ...current,
+            [action.id]: 'completed',
+          }));
+        } catch (error) {
+          setNlExecutionState((current) => ({
+            ...current,
+            [action.id]: 'failed',
+          }));
+          throw error;
+        }
+      }
+
+      setActionMessage(lastMessage);
+      setRefreshIndex((current) => current + 1);
+
+      if (finalPath) {
+        navigate(finalPath);
+        onClose();
+        return;
+      }
+
+      resetPlanState();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Plan execution failed.';
+      setNlExecutionError(message);
+    } finally {
+      setNlExecutionLoading(false);
+    }
+  };
+
   const pendingActionStyles = pendingAction ? getAccentStyles(pendingAction.accent) : null;
+  const planButtonDisabled = !selectedCompanyId || !query.trim() || nlLoading;
+  const executePlanLabel =
+    nlPlan?.actions.length === 1 && nlPlan.actions[0]?.type === 'navigate'
+      ? 'Open page'
+      : nlExecutionLoading
+        ? 'Executing...'
+        : 'Execute plan';
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 px-4 py-12 backdrop-blur-sm" onClick={onClose}>
@@ -380,15 +600,25 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               name="commandPaletteQuery"
               autoFocus
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                if (nlPlan || nlExecutionError) {
+                  resetPlanState();
+                }
+              }}
               onKeyDown={(event) => {
-                if (!pendingAction && event.key === 'ArrowDown') {
+                if (!pendingAction && !nlPlan && event.key === 'ArrowDown') {
                   event.preventDefault();
                   setActiveIndex((current) => Math.min(current + 1, Math.max(filteredItems.length - 1, 0)));
                 }
-                if (!pendingAction && event.key === 'ArrowUp') {
+                if (!pendingAction && !nlPlan && event.key === 'ArrowUp') {
                   event.preventDefault();
                   setActiveIndex((current) => Math.max(current - 1, 0));
+                }
+                if (!pendingAction && !nlPlan && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  event.preventDefault();
+                  void handleInterpretCommand();
+                  return;
                 }
                 if (event.key === 'Enter') {
                   event.preventDefault();
@@ -396,7 +626,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                     void handleConfirmAction();
                     return;
                   }
-                  if (filteredItems[activeIndex]) {
+                  if (filteredItems[activeIndex] && !nlPlan) {
                     handleSelect(filteredItems[activeIndex]);
                   }
                 }
@@ -406,12 +636,24 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                     setPendingAction(null);
                     return;
                   }
+                  if (nlPlan) {
+                    resetPlanState();
+                    return;
+                  }
                   onClose();
                 }
               }}
-              placeholder={selectedCompany ? `Search ${selectedCompany.name}...` : 'Search pages and records...'}
+              placeholder={selectedCompany ? `Search ${selectedCompany.name} or type a command...` : 'Search pages and records...'}
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
+            <button
+              type="button"
+              onClick={() => void handleInterpretCommand()}
+              disabled={planButtonDisabled}
+              className="rounded-md border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {nlLoading ? 'Planning...' : 'Plan'}
+            </button>
             <div className="rounded-md border px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
               Esc
             </div>
@@ -420,9 +662,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <span>{selectedCompany ? `Scope: ${selectedCompany.name}` : 'Scope: app-wide pages'}</span>
             <span>{loading ? 'Refreshing index...' : `${filteredItems.length} results`}</span>
           </div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            Press <span className="font-medium text-foreground">Ctrl+Enter</span> to translate a natural-language command into an execution plan.
+          </div>
+          {!selectedCompany && (
+            <div className="mt-3 rounded-2xl border border-dashed px-4 py-3 text-xs text-muted-foreground">
+              Select a company to use natural language planning and execution.
+            </div>
+          )}
           {!companyCanManage && selectedCompany && (
             <div className="mt-3 rounded-2xl border border-dashed px-4 py-3 text-xs text-muted-foreground">
-              Quick actions and governance entries are hidden for your role in {selectedCompany.name}.
+              Quick actions and governance entries are hidden for your role in {selectedCompany.name}, but you can still plan safe member actions.
             </div>
           )}
           {actionMessage && (
@@ -470,6 +720,87 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                 </button>
               </div>
             </div>
+          ) : nlPlan ? (
+            <div className="rounded-3xl border border-sky-200 bg-sky-50/70 p-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">
+                  Natural Language Plan
+                </span>
+                <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-muted-foreground">
+                  Source: {nlPlan.source}
+                </span>
+                <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-muted-foreground">
+                  {getPlannerBadge(nlPlan)}
+                </span>
+                {nlPlan.planner.attempts && nlPlan.planner.attempts.length > 1 && (
+                  <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-muted-foreground">
+                    Attempts: {nlPlan.planner.attempts.length}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <div className="text-xl font-semibold text-foreground">{nlPlan.summary}</div>
+                <div className="mt-2 text-sm text-muted-foreground">{nlPlan.reasoning}</div>
+              </div>
+
+              {nlPlan.actions.length > 0 && (
+                <div className="mt-5 space-y-3">
+                  {nlPlan.actions.map((action, index) => (
+                    <div key={action.id} className="rounded-2xl border bg-white/80 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-muted px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                              Step {index + 1}
+                            </span>
+                            <span className="font-medium text-foreground">{action.label}</span>
+                            <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${getExecutionBadgeClass(nlExecutionState[action.id])}`}>
+                              {getExecutionLabel(nlExecutionState[action.id])}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-sm text-muted-foreground">{action.description}</div>
+                        </div>
+                        <span className="rounded-full bg-background px-3 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                          {action.type === 'navigate' ? 'Navigate' : action.method}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {nlPlan.warnings.length > 0 && (
+                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {nlPlan.warnings.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  ))}
+                </div>
+              )}
+
+              {nlExecutionError && (
+                <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {nlExecutionError}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  onClick={resetPlanState}
+                  disabled={nlExecutionLoading}
+                  className="rounded-md border bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => void handleExecutePlan()}
+                  disabled={!nlPlan.can_execute || nlExecutionLoading}
+                  className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white transition-colors hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {executePlanLabel}
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="space-y-2">
               {filteredItems.map((item, index) => (
@@ -496,7 +827,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
               {filteredItems.length === 0 && (
                 <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                  No matches for this query.
+                  No matches for this query. Try the natural language planner above.
                 </div>
               )}
             </div>

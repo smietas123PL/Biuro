@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomiczne Biuro — Ideas³</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --ink: #1a1916;
+  --paper: #f5f2eb;
+  --paper2: #ede9e0;
+  --rule: rgba(26,25,22,0.1);
+  --rule2: rgba(26,25,22,0.2);
+  --accent: #c84b2f;
+  --accent2: #2d6a4f;
+  --accent3: #1d3557;
+  --gold: #b5873a;
+  --mono: 'JetBrains Mono', monospace;
+  --serif: 'Playfair Display', Georgia, serif;
+  --sans: 'Instrument Sans', system-ui, sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* ── Grain texture overlay ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  opacity: .35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+}
+
+/* ── Header ── */
+header {
+  border-bottom: 2px solid var(--ink);
+  padding: 48px 64px 40px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 24px;
+}
+
+.header-left .kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.header-left h1 {
+  font-family: var(--serif);
+  font-size: clamp(38px, 5vw, 64px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -.02em;
+}
+
+.header-left h1 em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.header-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(26,25,22,.45);
+  text-align: right;
+  line-height: 1.9;
+}
+
+/* ── Layout ── */
+.page {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: calc(100vh - 140px);
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  border-right: 1px solid var(--rule2);
+  padding: 40px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-inner { padding: 0 28px; }
+
+.sidebar-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(26,25,22,.35);
+  margin: 28px 0 10px;
+}
+
+.sidebar-label:first-child { margin-top: 0; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  text-decoration: none;
+  color: rgba(26,25,22,.5);
+  font-size: 13px;
+  font-family: var(--sans);
+  border-left: 2px solid transparent;
+  margin-left: -14px;
+  padding-left: 12px;
+  transition: all .15s;
+}
+
+.nav-item:hover { color: var(--ink); }
+.nav-item.active { color: var(--ink); border-left-color: var(--accent); font-weight: 500; }
+
+.nav-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(26,25,22,.3);
+  min-width: 18px;
+}
+
+/* ── Main content ── */
+.main { padding: 56px 72px 100px; }
+
+/* ── Section divider ── */
+.section-group {
+  margin-bottom: 80px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 40px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rule2);
+}
+
+.group-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.tag-wow    { background: rgba(200,75,47,.1); color: var(--accent); border: 1px solid rgba(200,75,47,.25); }
+.tag-value  { background: rgba(45,106,79,.1); color: var(--accent2); border: 1px solid rgba(45,106,79,.25); }
+.tag-ux     { background: rgba(29,53,87,.1); color: var(--accent3); border: 1px solid rgba(29,53,87,.25); }
+
+.group-title {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-style: italic;
+  color: rgba(26,25,22,.45);
+}
+
+/* ── Idea card ── */
+.idea {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 0 32px;
+  margin-bottom: 52px;
+  padding-bottom: 52px;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+
+.idea:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.idea-num {
+  font-family: var(--serif);
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--rule2);
+  letter-spacing: -.04em;
+  padding-top: 4px;
+  user-select: none;
+  position: relative;
+}
+
+.idea-num::after {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: var(--accent);
+  margin-top: 8px;
+}
+
+.idea.green .idea-num::after { background: var(--accent2); }
+.idea.blue  .idea-num::after { background: var(--accent3); }
+
+.idea-body {}
+
+.idea-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.idea-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -.01em;
+}
+
+.idea-badges {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.badge-wow   { background: rgba(200,75,47,.1); color: var(--accent); }
+.badge-value { background: rgba(45,106,79,.1); color: var(--accent2); }
+.badge-quick { background: rgba(181,135,58,.1); color: var(--gold); }
+.badge-ws    { background: rgba(29,53,87,.1); color: var(--accent3); }
+
+.idea-desc {
+  color: rgba(26,25,22,.75);
+  font-size: 14.5px;
+  line-height: 1.75;
+  margin-bottom: 18px;
+}
+
+.idea-anchor {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 14px;
+  background: var(--paper2);
+  border: 1px solid var(--rule2);
+  border-left: 3px solid var(--accent);
+  border-radius: 2px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.idea.green .idea-anchor { border-left-color: var(--accent2); }
+.idea.blue  .idea-anchor { border-left-color: var(--accent3); }
+
+.anchor-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: rgba(26,25,22,.4);
+  padding-top: 2px;
+}
+
+.anchor-value {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+code {
+  background: rgba(26,25,22,.07);
+  border: 1px solid var(--rule2);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.idea.green code { color: var(--accent2); }
+.idea.blue  code { color: var(--accent3); }
+
+.idea-meta {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(26,25,22,.45);
+}
+
+.chip-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-low  { background: #4ade80; }
+.dot-med  { background: #fbbf24; }
+.dot-high { background: #f87171; }
+
+/* ── Pull quote ── */
+.pullquote {
+  margin: 0 0 20px;
+  padding: 0 0 0 24px;
+  border-left: 2px solid var(--rule2);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 16px;
+  color: rgba(26,25,22,.55);
+  line-height: 1.6;
+}
+
+/* ── Footer ── */
+footer {
+  border-top: 2px solid var(--ink);
+  padding: 32px 64px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: rgba(26,25,22,.35);
+  text-transform: uppercase;
+}
+
+/* ── Animations ── */
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.idea { animation: fadeSlide .5s ease both; }
+.idea:nth-child(1) { animation-delay: .05s; }
+.idea:nth-child(2) { animation-delay: .10s; }
+.idea:nth-child(3) { animation-delay: .15s; }
+.idea:nth-child(4) { animation-delay: .20s; }
+.idea:nth-child(5) { animation-delay: .25s; }
+
+@media (max-width: 900px) {
+  header { padding: 32px 28px 28px; grid-template-columns: 1fr; }
+  .header-meta { text-align: left; }
+  .page { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .main { padding: 32px 28px 60px; }
+  .idea { grid-template-columns: 40px 1fr; gap: 0 20px; }
+  .idea-num { font-size: 40px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="kicker">Autonomiczne Biuro · Ideas³ · 2025</div>
+    <h1>10 rzeczy warte<br><em>wdrożenia</em></h1>
+  </div>
+  <div class="header-meta">
+    WOW + wartość dodana<br>
+    zakorzenione w istniejącym kodzie<br>
+    bez przepisywania od zera
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- Sidebar nav -->
+  <nav class="sidebar">
+    <div class="sidebar-inner">
+      <div class="sidebar-label">Live &amp; Finanse</div>
+      <a class="nav-item active" href="#i1"><span class="nav-num">01</span>Cost Ticker</a>
+      <a class="nav-item" href="#i4"><span class="nav-num">04</span>Budget Gauge</a>
+      <a class="nav-item" href="#i9"><span class="nav-num">09</span>Daily Digest</a>
+
+      <div class="sidebar-label">Agenci &amp; Decyzje</div>
+      <a class="nav-item" href="#i2"><span class="nav-num">02</span>Slack Approval</a>
+      <a class="nav-item" href="#i3"><span class="nav-num">03</span>Thought Stream</a>
+      <a class="nav-item" href="#i10"><span class="nav-num">10</span>Failure Explain</a>
+
+      <div class="sidebar-label">Wizualizacja</div>
+      <a class="nav-item" href="#i5"><span class="nav-num">05</span>Task Timeline</a>
+      <a class="nav-item" href="#i6"><span class="nav-num">06</span>OrgChart Live</a>
+
+      <div class="sidebar-label">AI &amp; Pamięć</div>
+      <a class="nav-item" href="#i7"><span class="nav-num">07</span>Smart Templates</a>
+      <a class="nav-item" href="#i8"><span class="nav-num">08</span>Memory Insights</a>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- GROUP 1 -->
+    <div class="section-group">
+      <div class="group-header">
+        <span class="group-tag tag-wow">Live &amp; Finanse</span>
+        <span class="group-title">widoczność w czasie rzeczywistym</span>
+      </div>
+
+      <!-- 01 -->
+      <div class="idea" id="i1">
+        <div class="idea-num">01</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Live Cost Ticker</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-quick">2 dni</span>
+              <span class="badge badge-ws">WebSocket</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            Rosnący licznik dziennego kosztu na dashboardzie — jak taksometr. Aktualizuje się co heartbeat bez odświeżania strony, widoczny przez cały czas w górnym pasku jako <strong>$0.0342 dziś</strong>. Użytkownik natychmiast czuje finansowy ciężar każdej operacji agentów.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>applyAgentBudgetSpend()</code> liczy koszt do 4 miejsc po przecinku przy każdym heartbeacie. <code>WSHub.broadcast()</code> emituje <code>agent.working</code> ze wszystkimi danymi.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Komponent <code>CostTicker</code> subskrybujący WS eventy i sumujący <code>cost_usd</code> po stronie frontu. Opcjonalnie — progu alertu konfigurowanego w Settings.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Nakład: 2 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: wysoki</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04 -->
+      <div class="idea" id="i4">
+        <div class="idea-num">04</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Budget Gauge z alertem przed przekroczeniem</div>
+            <div class="idea-badges">
+              <span class="badge badge-value">Wartość</span>
+              <span class="badge badge-quick">2 dni</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            Procentowy pasek postępu na karcie każdego agenta: żółty od 80%, czerwony od 95%. WebSocket broadcast gdy agent przekroczy próg — toast w UI i opcjonalnie wiadomość na Slack. Zapobiega niespodziankom na koniec miesiąca zamiast tylko je rejestrować.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>isAgentBudgetExceeded()</code> sprawdza status budżetu. Tabela <code>budgets</code> ma <code>spent_usd</code> i <code>limit_usd</code> per agent per miesiąc. <code>NotificationService.alertSlack()</code> gotowy.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Progowe eventy (80%, 95%) w heartbeacie + <code>BudgetBar</code> komponent + endpoint <code>GET /agents/:id/budget</code> zwracający procent wykorzystania.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Nakład: 2 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: krytyczny dla klientów płacących</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 09 -->
+      <div class="idea" id="i9">
+        <div class="idea-num">09</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Daily Digest — agenci raportują sami</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-value">Wartość</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            O 18:00 cron agreguje dzień i wysyła na Slack: ile tasków ukończono, ile zablokowanych, dzienny koszt vs budżet, top 3 błędy. Stakeholder nie musi logować się do dashboardu żeby wiedzieć czy system pracuje. Agenci <em>raportują do szefa</em> sami z siebie.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>audit_log</code> z kosztami, <code>tasks</code> ze statusami, <code>heartbeats</code> z błędami, <code>NotificationService.alertSlack()</code>, scheduler w <code>orchestrator/scheduler.ts</code>.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Funkcja <code>generateDailyDigest(companyId)</code> + trigger o stałej godzinie w schedulerze + opcja konfiguracji godziny i kanału w Settings firmy.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Nakład: 3 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: wysoki dla nietech zarządzających</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2 -->
+    <div class="section-group">
+      <div class="group-header">
+        <span class="group-tag tag-wow">Agenci &amp; Decyzje</span>
+        <span class="group-title">human-in-the-loop bez bólu</span>
+      </div>
+
+      <!-- 02 -->
+      <div class="idea green" id="i2">
+        <div class="idea-num">02</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Approval one-click przez Slack</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-value">Wartość</span>
+            </div>
+          </div>
+          <blockquote class="pullquote">
+            Agent pisze do ciebie na Slacku i czeka na odpowiedź. Ty klikasz Approve. Task odblokowany.
+          </blockquote>
+          <p class="idea-desc">
+            Gdy agent wywołuje <code>request_approval</code>, wiadomość na Slack dostaje przyciski Block Kit: <strong>Approve</strong> / <strong>Reject</strong>. Kliknięcie → Slack webhook → <code>POST /api/approvals/:id/resolve</code>. Zero nawigowania po dashboardzie, zero czasu blokady spowodowanego nieobecnością managera przy komputerze.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>createApprovalRequest()</code> wysyła wiadomość na Slack przez <code>alertSlack()</code>. Endpoint <code>POST /approvals/:id</code> obsługuje resolve. <code>SLACK_SIGNING_SECRET</code> jest w env schema.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Zamiana plaintext na Slack Block Kit z <code>actions</code>. Endpoint odbierający <code>payload</code> z interactivity Slacka, weryfikujący podpis HMAC i wywołujący <code>resolveApproval()</code>.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Nakład: 4 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: drastycznie skraca czas blokad</span>
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Ryzyko: średnie (HMAC verify)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 -->
+      <div class="idea green" id="i3">
+        <div class="idea-num">03</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Agent "myśli głośno" — live thought stream</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-quick">1 dzień</span>
+              <span class="badge badge-ws">WebSocket</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            Dedykowany panel "Co agent myśli teraz?" — live aktualizowany przez WebSocket, pokazujący ostatnią myśl aktywnego agenta jako floating card pod jego statusem. Agenci przestają być czarnymi skrzynkami i stają się współpracownikami których możesz obserwować przy pracy.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>ClaudeRuntime</code> parsuje <code>&lt;thought&gt;...&lt;/thought&gt;</code> z każdej odpowiedzi LLM. Myśl jest zapisywana do <code>messages</code> jako <code>status_update</code>. <code>WSHub</code> może broadcastować dowolny event.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Broadcast <code>agent.thought</code> w heartbeacie po sparsowaniu thought. Komponent <code>ThoughtBubble</code> w dashboardzie subskrybujący ten event i wyświetlający ostatnią myśl per agent z timestamp.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Nakład: 1 dzień</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: wysoki na postrzeganie produktu</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 10 -->
+      <div class="idea green" id="i10">
+        <div class="idea-num">10</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Failure Explanation — system diagnozuje sam siebie</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-value">Wartość</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            Przycisk "Wyjaśnij" na karcie zablokowanego taska → POST do Claude z historią wiadomości i logami heartbeatu → plain-language diagnoza: <em>"Agent próbował wywołać web_search, ale narzędzie nie jest przypisane. Rozwiązanie: wejdź w Tools i przypisz web_search do agenta X."</em> System sam naprowadza użytkownika na rozwiązanie.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>heartbeats</code> ma <code>status: 'error'</code> z <code>details</code> JSONB. <code>messages</code> zawiera pełną historię rozmów agenta. <code>tool_calls</code> loguje każde wywołanie i błąd. <code>ClaudeRuntime</code> gotowy do użycia.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Endpoint <code>POST /tasks/:id/explain</code> zbierający logi z ostatnich N heartbeatów + messages i wysyłający do Claude z prośbą o diagnozę. Przycisk "Wyjaśnij" w <code>TaskDetailPage</code>.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Nakład: 3 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: kluczowy dla nietech użytkowników</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3 -->
+    <div class="section-group">
+      <div class="group-header">
+        <span class="group-tag tag-ux">Wizualizacja</span>
+        <span class="group-title">interfejs który rozumiesz jednym spojrzeniem</span>
+      </div>
+
+      <!-- 05 -->
+      <div class="idea blue" id="i5">
+        <div class="idea-num">05</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Task Timeline — oś czasu zamiast listy</div>
+            <div class="idea-badges">
+              <span class="badge badge-value">Wartość</span>
+              <span class="badge badge-quick">3 dni</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            <code>TaskDetailPage</code> renderuje wiadomości jako prostą listę. Tabela <code>messages</code> ma <code>type</code> (message, delegation, tool_call, tool_result, approval_request). Pionowa oś czasu z ikonami per typ, grupowaniem po heartbeacie i expand/collapse dla par tool_call → tool_result. Czas diagnozy problemu skraca się z godzin do sekund.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value">Tabela <code>messages</code> z polami <code>type</code>, <code>created_at</code>, <code>metadata</code> (zawiera wyniki tool calls). <code>tool_calls</code> z <code>input</code>, <code>output</code>, <code>duration_ms</code>, <code>status</code>.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Komponent <code>TaskTimeline</code> grupujący messages po heartbeat window (30s), ikony per <code>type</code>, collapsible sekcje dla sekwencji tool_call/tool_result, diff view dla delegacji.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Nakład: 3 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: wysoki dla debugowania</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 06 -->
+      <div class="idea blue" id="i6">
+        <div class="idea-num">06</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">OrgChart z live pulsowaniem agentów</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-value">Wartość</span>
+              <span class="badge badge-ws">WebSocket</span>
+            </div>
+          </div>
+          <blockquote class="pullquote">
+            Org chart który oddycha. Kliknij węzeł — otwiera się sidepanel z aktualnym taskiem. Bez nawigacji na inną stronę.
+          </blockquote>
+          <p class="idea-desc">
+            Węzły aktywnych agentów pulsują animowanym ringiem (CSS <code>@keyframes</code>). Kolor koduje status: zielony idle, niebieski working, czerwony paused/error. Kliknięcie → sidepanel z aktualnym taskiem, last heartbeat, koszt miesięczny vs budżet, przyciski Pause/Resume bez przechodzenia na inną stronę.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>OrgChartPage.tsx</code> istnieje. WS broadcastuje <code>agent.working</code> z <code>agentId</code>. Pole <code>agents.reports_to</code> buduje hierarchię. <code>agents.status</code> ma 4 stany.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Subskrypcja WS eventów w OrgChart → aktualizacja koloru i animacji węzła. Sidepanel komponent z fetch szczegółów agenta on-click. <code>d3-hierarchy</code> lub własny SVG layout.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Nakład: 4–5 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: najlepsza pierwsza wrażenie</span>
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Ryzyko: średnie (layout)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 4 -->
+    <div class="section-group" style="margin-bottom: 0;">
+      <div class="group-header">
+        <span class="group-tag" style="background:rgba(181,135,58,.1);color:var(--gold);border:1px solid rgba(181,135,58,.25);">AI &amp; Pamięć</span>
+        <span class="group-title">inteligencja która rośnie z czasem</span>
+      </div>
+
+      <!-- 07 -->
+      <div class="idea" id="i7">
+        <div class="idea-num">07</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Smart Templates z AI pre-fill</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-value">Wartość</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            Pole "Opisz zadanie po ludzku" → POST do Claude z prośbą o wypełnienie pól template → user widzi prefill z możliwością edycji przed zapisem. Wpisujesz <em>"sprawdź czy konkurencja obniżyła ceny"</em> i dostajesz gotowy, dobrze opisany task z sugerowanym agentem i priorytetem. Nietech użytkownicy tworzą quality tasks bez znajomości konwencji systemu.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>TemplatesPage</code> i tabela <code>templates</code> z polami <code>name</code>, <code>description</code>, <code>default_priority</code>, <code>default_role</code>. <code>ClaudeRuntime</code> gotowy do wywołania. Lista agentów i ich ról dostępna przez API.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Endpoint <code>POST /templates/ai-suggest</code> + prompt dla Claude zwracający JSON z polami template. Modal z polem free-text i podglądem AI-generated draft przed zapisem.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Nakład: 3 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: onboarding nietech users</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 08 -->
+      <div class="idea" id="i8">
+        <div class="idea-num">08</div>
+        <div class="idea-body">
+          <div class="idea-header">
+            <div class="idea-title">Memory Insights — czego nauczyły się agenty</div>
+            <div class="idea-badges">
+              <span class="badge badge-wow">WOW</span>
+              <span class="badge badge-value">Wartość</span>
+            </div>
+          </div>
+          <p class="idea-desc">
+            Strona "Pamięć" pokazuje N ostatnich wspomnień agenta, pogrupowanych semantycznie (klastry embeddinggów). Użytkownik może ręcznie usunąć złe wspomnienie zanim zaszkodzi kolejnym tassom. Widoczność że agenci <em>uczą się</em> jest jednym z najmocniejszych argumentów sprzedażowych platformy.
+          </p>
+          <div class="idea-anchor">
+            <span class="anchor-label">Już istnieje</span>
+            <span class="anchor-value"><code>storeMemory()</code> i <code>findRelatedMemories()</code> działają. Tabela <code>agent_memory</code> rośnie z każdym taskiem. Embeddingi pgvector umożliwiają grouping po odległości kosinusowej. Retrieval metrics w osobnej tabeli.</span>
+            <span class="anchor-label">Brakuje</span>
+            <span class="anchor-value">Endpoint <code>GET /agents/:id/memory</code> + <code>DELETE /agents/:id/memory/:memId</code>. Strona lub panel w AgentDetail z listą wspomnień, tagami podobieństwa i przyciskiem usunięcia.</span>
+          </div>
+          <div class="idea-meta">
+            <span class="meta-chip"><span class="chip-dot dot-med"></span>Nakład: 3 dni</span>
+            <span class="meta-chip"><span class="chip-dot dot-high"></span>Impact: unikalny argument sprzedażowy</span>
+            <span class="meta-chip"><span class="chip-dot dot-low"></span>Ryzyko: niskie</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer>
+  <span>Autonomiczne Biuro · Ideas³ · 2025</span>
+  <span>10 funkcji · wszystkie zakorzenione w istniejącym kodzie</span>
+</footer>
+
+<script>
+// Active nav on scroll
+const items = document.querySelectorAll('.idea[id]');
+const links = document.querySelectorAll('.nav-item');
+
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-15% 0px -75% 0px' });
+
+items.forEach(el => io.observe(el));
+</script>
+</body>
+</html>

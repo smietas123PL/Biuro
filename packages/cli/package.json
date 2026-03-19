@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "pnpm run build && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "axios": "^1.7.2",

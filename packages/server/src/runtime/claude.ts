@@ -9,6 +9,7 @@ import {
 } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 import { defaultModelsByRuntime } from './defaultModels.js';
+import { estimateUsageCostUsd } from './pricing.js';
 
 const ACTION_TOOLS: Anthropic.Tool[] = [
   {
@@ -204,15 +205,26 @@ export class ClaudeRuntime implements IAgentRuntime {
 
     try {
       if (!env.ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY === 'your_key_here' || env.ANTHROPIC_API_KEY === '') {
+        const mockModel = context.agent_model || defaultModelsByRuntime.claude;
         return {
           thought: 'Mock thought for testing',
           actions: [{ type: 'complete_task', result: 'Mock generated mission statement' }],
-          usage: { input_tokens: 10, output_tokens: 10, cost_usd: 0.0002 },
+          usage: {
+            input_tokens: 10,
+            output_tokens: 10,
+            cost_usd: estimateUsageCostUsd({
+              runtime: 'claude',
+              model: mockModel,
+              inputTokens: 10,
+              outputTokens: 10,
+            }),
+          },
         };
       }
 
+      const model = context.agent_model || defaultModelsByRuntime.claude;
       const response = await this.client.messages.create({
-        model: context.agent_model || defaultModelsByRuntime.claude,
+        model,
         max_tokens: 4096,
         system: systemPrompt,
         messages,
@@ -236,7 +248,12 @@ export class ClaudeRuntime implements IAgentRuntime {
         usage: {
           input_tokens: response.usage.input_tokens,
           output_tokens: response.usage.output_tokens,
-          cost_usd: response.usage.input_tokens * 0.000003 + response.usage.output_tokens * 0.000015,
+          cost_usd: estimateUsageCostUsd({
+            runtime: 'claude',
+            model,
+            inputTokens: response.usage.input_tokens,
+            outputTokens: response.usage.output_tokens,
+          }),
         },
       };
     } catch (err) {

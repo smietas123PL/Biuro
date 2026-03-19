@@ -11,6 +11,7 @@ const anthropicConstructorMock = vi.hoisted(() =>
 
 const envMock = vi.hoisted(() => ({
   ANTHROPIC_API_KEY: 'test-key',
+  LLM_PRICING_OVERRIDES: undefined as string | undefined,
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -62,6 +63,7 @@ describe('ClaudeRuntime', () => {
     anthropicConstructorMock.mockClear();
     loggerMock.error.mockReset();
     envMock.ANTHROPIC_API_KEY = 'test-key';
+    envMock.LLM_PRICING_OVERRIDES = undefined;
   });
 
   it('maps Anthropic tool_use blocks into agent actions', async () => {
@@ -128,6 +130,33 @@ describe('ClaudeRuntime', () => {
       input_tokens: 100,
       output_tokens: 25,
       cost_usd: 0.000675,
+    });
+  });
+
+  it('uses model-specific pricing overrides when configured', async () => {
+    envMock.LLM_PRICING_OVERRIDES = JSON.stringify({
+      'claude-sonnet-4-20250514': {
+        input_per_million_usd: 4,
+        output_per_million_usd: 20,
+      },
+    });
+    messagesCreateMock.mockResolvedValue({
+      content: [
+        { type: 'text', text: 'I should wait for teammate input.' },
+      ],
+      usage: {
+        input_tokens: 100,
+        output_tokens: 25,
+      },
+    });
+
+    const runtime = new ClaudeRuntime();
+    const response = await runtime.execute(createContext());
+
+    expect(response.usage).toEqual({
+      input_tokens: 100,
+      output_tokens: 25,
+      cost_usd: 0.0009,
     });
   });
 

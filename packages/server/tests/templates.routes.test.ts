@@ -6,6 +6,8 @@ const dbMock = vi.hoisted(() => ({
   query: vi.fn(),
   transaction: vi.fn(),
 }));
+const runtimeExecuteMock = vi.hoisted(() => vi.fn());
+const getRuntimeMock = vi.hoisted(() => vi.fn(() => ({ execute: runtimeExecuteMock })));
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -13,6 +15,12 @@ vi.mock('../src/db/client.js', () => ({
 
 vi.mock('../src/middleware/auth.js', () => ({
   requireRole: () => (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+}));
+
+vi.mock('../src/runtime/registry.js', () => ({
+  runtimeRegistry: {
+    getRuntime: getRuntimeMock,
+  },
 }));
 
 import templatesRouter from '../src/routes/templates.js';
@@ -24,6 +32,8 @@ describe('template routes', () => {
   beforeEach(async () => {
     dbMock.query.mockReset();
     dbMock.transaction.mockReset();
+    runtimeExecuteMock.mockReset();
+    getRuntimeMock.mockClear();
 
     const app = express();
     app.use(express.json());
@@ -152,6 +162,115 @@ describe('template routes', () => {
         agentsImported: 1,
         budgetsImported: 1,
       },
+    });
+  });
+
+  it('generates an AI template suggestion and writes an audit entry', async () => {
+    runtimeExecuteMock.mockResolvedValue({
+      thought: JSON.stringify({
+        title: 'Review competitor pricing changes',
+        description: 'Inspect recent competitor pricing updates and summarize any meaningful shifts for the team.',
+        priority: 72,
+        default_role: 'researcher',
+        suggested_agent_id: '11111111-1111-4111-8111-111111111111',
+        suggested_agent_name: 'Mina',
+        confidence: 'high',
+        warnings: [],
+      }),
+      actions: [
+        {
+          type: 'continue',
+          thought: 'done',
+        },
+      ],
+      routing: {
+        selected_runtime: 'claude',
+        selected_model: 'claude-sonnet',
+        attempts: [
+          {
+            runtime: 'claude',
+            model: 'claude-sonnet',
+            status: 'success',
+          },
+        ],
+      },
+    });
+
+    dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
+      if (text.includes('FROM companies')) {
+        expect(params).toEqual(['company-1']);
+        return {
+          rows: [
+            {
+              id: 'company-1',
+              name: 'QA Test Corp',
+              mission: 'Ship reliable software',
+              config: { llm_primary_runtime: 'claude', llm_fallback_order: ['openai', 'gemini'] },
+            },
+          ],
+        };
+      }
+
+      if (text.includes('FROM agents')) {
+        expect(params).toEqual(['company-1']);
+        return {
+          rows: [
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              name: 'Mina',
+              role: 'researcher',
+              title: 'Research Analyst',
+              status: 'idle',
+            },
+          ],
+        };
+      }
+
+      if (text.includes(`'template.ai_suggested'`)) {
+        expect(params?.[0]).toBe('company-1');
+        const details = JSON.parse(String(params?.[1]));
+        expect(details.prompt).toContain('konkurencja');
+        expect(details.planner).toMatchObject({
+          mode: 'llm',
+          runtime: 'claude',
+          model: 'claude-sonnet',
+        });
+        expect(details.suggestion).toMatchObject({
+          title: 'Review competitor pricing changes',
+          suggested_agent_name: 'Mina',
+        });
+        return { rows: [], rowCount: 1 };
+      }
+
+      throw new Error(`Unexpected query: ${text}`);
+    });
+
+    const response = await fetch(`${baseUrl}/ai-suggest`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-company-id': 'company-1',
+      },
+      body: JSON.stringify({
+        prompt: 'sprawdz czy konkurencja obniżyła ceny i przygotuj krótkie podsumowanie',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      suggestion: {
+        title: 'Review competitor pricing changes',
+        suggested_agent_name: 'Mina',
+        priority: 72,
+      },
+      planner: {
+        mode: 'llm',
+        runtime: 'claude',
+      },
+    });
+
+    expect(getRuntimeMock).toHaveBeenCalledWith('claude', {
+      fallbackOrder: ['openai', 'gemini', 'claude'],
     });
   });
 });

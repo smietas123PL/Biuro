@@ -7,8 +7,7 @@ const dbState = vi.hoisted(() => ({
   },
 }));
 
-const alertSlackMock = vi.hoisted(() => vi.fn());
-const alertDiscordMock = vi.hoisted(() => vi.fn());
+const deliverOutgoingWebhooksMock = vi.hoisted(() => vi.fn());
 const loggerWarnMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
@@ -17,11 +16,8 @@ vi.mock('../src/db/client.js', () => ({
   },
 }));
 
-vi.mock('../src/services/notifications.js', () => ({
-  NotificationService: {
-    alertSlack: alertSlackMock,
-    alertDiscord: alertDiscordMock,
-  },
+vi.mock('../src/services/outgoingWebhooks.js', () => ({
+  deliverOutgoingWebhooks: deliverOutgoingWebhooksMock,
 }));
 
 vi.mock('../src/utils/logger.js', () => ({
@@ -38,8 +34,7 @@ describe('safety pg-mem flows', () => {
   beforeEach(async () => {
     testDb = await createPgMemDb();
     dbState.impl = testDb;
-    alertSlackMock.mockReset();
-    alertDiscordMock.mockReset();
+    deliverOutgoingWebhooksMock.mockReset();
     loggerWarnMock.mockReset();
   });
 
@@ -103,6 +98,36 @@ describe('safety pg-mem flows', () => {
     });
   });
 
+  it('blocks agents that already hit the hard heartbeat safety cap', async () => {
+    const companyId = '00000000-0000-0000-0000-000000000021';
+    const taskId = '00000000-0000-0000-0000-000000000211';
+    const agentId = '00000000-0000-0000-0000-000000000212';
+
+    await testDb.query(`INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`, [companyId]);
+    await testDb.query(
+      `INSERT INTO tasks (id, company_id, title, status)
+       VALUES ($1, $2, 'Investigate churn', 'backlog')`,
+      [taskId, companyId]
+    );
+
+    for (let index = 0; index < 60; index += 1) {
+      await testDb.query(
+        `INSERT INTO heartbeats (id, agent_id, task_id, status, details)
+         VALUES ($1, $2, $3, 'idle', '{}')`,
+        [
+          `10000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`,
+          agentId,
+          taskId,
+        ]
+      );
+    }
+
+    await expect(checkSafety(agentId, taskId)).resolves.toEqual({
+      ok: false,
+      reason: 'Heartbeat rate limit exceeded',
+    });
+  });
+
   it('blocks agents with too many recent heartbeat errors', async () => {
     const companyId = '00000000-0000-0000-0000-000000000003';
     const taskId = '00000000-0000-0000-0000-000000000301';
@@ -147,6 +172,7 @@ describe('safety pg-mem flows', () => {
           rows: [
             {
               agent_name: 'Ada',
+              company_id: 'company-1',
               company_name: 'QA Test Corp',
               slack_webhook_url: 'https://hooks.slack.test/services/abc',
               discord_webhook_url: 'https://discord.test/api/webhooks/xyz',
@@ -156,28 +182,35 @@ describe('safety pg-mem flows', () => {
         };
       }
 
+      if (text.includes("INSERT INTO audit_log") && text.includes("'agent.auto_paused'")) {
+        return { rows: [], rowCount: 1 };
+      }
+
       throw new Error(`Unexpected query in autoPauseAgent test: ${text}`);
     });
 
-    alertSlackMock.mockResolvedValue({ ok: true });
-    alertDiscordMock.mockResolvedValue({ ok: true });
+    deliverOutgoingWebhooksMock.mockResolvedValue([
+      { target: 'slack', status: 'success', error: null },
+      { target: 'discord', status: 'success', error: null },
+    ]);
     dbState.impl = {
       query: queryMock,
     };
 
     await autoPauseAgent(agentId, 'Message flood detected');
-    expect(queryMock).toHaveBeenCalledTimes(2);
+    expect(queryMock).toHaveBeenCalledTimes(3);
     expect(loggerWarnMock).toHaveBeenCalledWith(
       { agentId, reason: 'Message flood detected' },
       'Auto-pausing agent due to safety violation'
     );
-    expect(alertSlackMock).toHaveBeenCalledWith(
-      'https://hooks.slack.test/services/abc',
-      expect.stringContaining('Message flood detected')
-    );
-    expect(alertDiscordMock).toHaveBeenCalledWith(
-      'https://discord.test/api/webhooks/xyz',
-      expect.stringContaining('Message flood detected')
+    expect(deliverOutgoingWebhooksMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: 'company-1',
+        agentId,
+        event: 'agent.auto_paused',
+        slackWebhookUrl: 'https://hooks.slack.test/services/abc',
+        discordWebhookUrl: 'https://discord.test/api/webhooks/xyz',
+      })
     );
   });
 });

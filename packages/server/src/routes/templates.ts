@@ -1,10 +1,14 @@
 import { Router } from 'express';
+import { z } from 'zod';
+import type { TemplateAISuggestResponse, TemplateAISuggestion } from '@biuro/shared';
 import { CompanyTemplateSchema, TemplateService, buildTemplatePreviewAuditDetails } from '../services/template.js';
 import { requireRole } from '../middleware/auth.js';
 import { getTemplatePresetById, listTemplatePresets } from '../services/templatePresets.js';
 import { getMarketplaceTemplateById, listMarketplaceTemplates } from '../services/templateMarketplace.js';
 import { db } from '../db/client.js';
 import type { AuthRequest } from '../utils/context.js';
+import { extractCompanyRuntimeSettings } from '../runtime/preferences.js';
+import { runtimeRegistry } from '../runtime/registry.js';
 
 const router: Router = Router();
 
@@ -12,8 +16,272 @@ function getPresetIdParam(value: string | string[] | undefined) {
   return typeof value === 'string' ? value : undefined;
 }
 
+const aiSuggestSchema = z.object({
+  prompt: z.string().min(8).max(2_000),
+});
+
+const aiSuggestionSchema = z.object({
+  title: z.string().min(3).max(140),
+  description: z.string().min(1).max(3_000),
+  priority: z.number().int().min(0).max(100),
+  default_role: z.string().min(1).max(120).nullable().default(null),
+  suggested_agent_id: z.string().uuid().nullable().default(null),
+  suggested_agent_name: z.string().min(1).max(120).nullable().default(null),
+  confidence: z.enum(['high', 'medium', 'low']).default('medium'),
+  warnings: z.array(z.string().min(1).max(240)).max(5).default([]),
+});
+
+type TemplateSuggestAgent = {
+  id: string;
+  name: string;
+  role: string;
+  title: string | null;
+  status: string;
+};
+
+function normalizeSuggestText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s/-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildHeuristicTitle(prompt: string) {
+  const cleaned = prompt.trim().replace(/\s+/g, ' ');
+  if (!cleaned) {
+    return 'Follow up on request';
+  }
+
+  const words = cleaned.split(' ').slice(0, 8);
+  const sentence = words.join(' ');
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+}
+
+function scoreAgent(prompt: string, agent: TemplateSuggestAgent) {
+  const query = normalizeSuggestText(prompt);
+  const candidate = normalizeSuggestText(`${agent.name} ${agent.role} ${agent.title ?? ''}`);
+  if (!query || !candidate) {
+    return 0;
+  }
+
+  let score = 0;
+  for (const token of query.split(' ')) {
+    if (token.length < 3) {
+      continue;
+    }
+    if (candidate.includes(token)) {
+      score += token.length;
+    }
+  }
+
+  return score;
+}
+
+function inferPriority(prompt: string) {
+  const normalized = normalizeSuggestText(prompt);
+  if (/(urgent|asap|critical|natychmiast|pilne|krytyczne)/.test(normalized)) {
+    return 90;
+  }
+  if (/(today|dzis|this week|w tym tygodniu|launch|incident|pricing|konkurenc)/.test(normalized)) {
+    return 70;
+  }
+  return 50;
+}
+
+function buildHeuristicSuggestion(prompt: string, agents: TemplateSuggestAgent[]): TemplateAISuggestion {
+  const matchedAgent = agents
+    .map((agent) => ({ agent, score: scoreAgent(prompt, agent) }))
+    .sort((left, right) => right.score - left.score)[0];
+  const selectedAgent = matchedAgent && matchedAgent.score > 0 ? matchedAgent.agent : null;
+
+  return {
+    title: buildHeuristicTitle(prompt),
+    description: prompt.trim(),
+    priority: inferPriority(prompt),
+    default_role: selectedAgent?.role ?? null,
+    suggested_agent_id: selectedAgent?.id ?? null,
+    suggested_agent_name: selectedAgent?.name ?? null,
+    confidence: selectedAgent ? 'medium' : 'low',
+    warnings: ['AI suggestion used a deterministic fallback draft.'],
+  };
+}
+
+function extractJsonObject(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]+?)```/i);
+  const candidate = fencedMatch?.[1]?.trim() || trimmed;
+  const firstBrace = candidate.indexOf('{');
+  const lastBrace = candidate.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return null;
+  }
+
+  return candidate.slice(firstBrace, lastBrace + 1);
+}
+
+async function generateAISuggestion(
+  company: { name: string; mission: string | null; config?: unknown },
+  agents: TemplateSuggestAgent[],
+  prompt: string
+): Promise<TemplateAISuggestResponse> {
+  const runtimeSettings = extractCompanyRuntimeSettings(company.config);
+
+  try {
+    const runtime = runtimeRegistry.getRuntime(runtimeSettings.primaryRuntime, {
+      fallbackOrder: runtimeSettings.fallbackOrder,
+    });
+    const response = await runtime.execute({
+      company_name: company.name,
+      company_mission: company.mission ?? 'No mission provided.',
+      agent_name: 'Template Strategist',
+      agent_role: 'AI template pre-fill assistant',
+      current_task: {
+        title: 'Draft a task template from a natural-language request',
+        description: 'Return one compact JSON object describing the best draft task for the request.',
+      },
+      goal_hierarchy: [],
+      additional_context: [
+        'Available agents:',
+        ...agents.map((agent) => `- ${agent.id} | ${agent.name} | role=${agent.role} | title=${agent.title ?? 'n/a'} | status=${agent.status}`),
+        '',
+        'Return ONLY a valid JSON object in the `thought` field with this exact shape:',
+        '{"title":"string","description":"string","priority":0,"default_role":"string|null","suggested_agent_id":"uuid|null","suggested_agent_name":"string|null","confidence":"high|medium|low","warnings":["string"]}',
+        'Rules:',
+        '- title must be concise and action-oriented',
+        '- description should be 2-4 sentences and expand the request into a clear task',
+        '- priority must be an integer from 0 to 100',
+        '- default_role should reflect the best owning role when possible',
+        '- suggested_agent_id/name should be null if no clear assignee exists',
+        '- warnings should call out ambiguity or missing context',
+      ].join('\n'),
+      history: [
+        {
+          role: 'user',
+          content: `Draft a task suggestion for this request:\n${prompt.trim()}`,
+        },
+      ],
+    });
+
+    const rawJson = extractJsonObject(response.thought);
+    if (!rawJson) {
+      throw new Error('Missing JSON object in runtime response');
+    }
+
+    const parsed = aiSuggestionSchema.safeParse(JSON.parse(rawJson));
+    if (!parsed.success) {
+      throw new Error(parsed.error.message);
+    }
+
+    const validAgentIds = new Set(agents.map((agent) => agent.id));
+    const normalizedSuggestion: TemplateAISuggestion = {
+      title: parsed.data.title,
+      description: parsed.data.description,
+      priority: parsed.data.priority,
+      default_role: parsed.data.default_role,
+      suggested_agent_id:
+        parsed.data.suggested_agent_id && validAgentIds.has(parsed.data.suggested_agent_id)
+          ? parsed.data.suggested_agent_id
+          : null,
+      suggested_agent_name:
+        parsed.data.suggested_agent_id && validAgentIds.has(parsed.data.suggested_agent_id)
+          ? parsed.data.suggested_agent_name
+          : null,
+      confidence: parsed.data.confidence,
+      warnings: parsed.data.warnings,
+    };
+
+    return {
+      suggestion: normalizedSuggestion,
+      planner: {
+        mode: 'llm',
+        runtime: response.routing?.selected_runtime,
+        model: response.routing?.selected_model,
+        fallback_reason: null,
+      },
+    };
+  } catch (error) {
+    return {
+      suggestion: buildHeuristicSuggestion(prompt, agents),
+      planner: {
+        mode: 'rules',
+        fallback_reason:
+          error instanceof Error && /json|runtime response/i.test(error.message)
+            ? 'invalid_llm_output'
+            : 'llm_failed',
+      },
+    };
+  }
+}
+
 router.get('/presets', requireRole(['owner', 'admin', 'member', 'viewer']), (_req, res) => {
   res.json(listTemplatePresets());
+});
+
+router.post('/ai-suggest', requireRole(['owner', 'admin', 'member', 'viewer']), async (req: AuthRequest, res) => {
+  const companyId = req.header('x-company-id');
+  if (!companyId) {
+    return res.status(400).json({ error: 'Missing company ID' });
+  }
+
+  const parsed = aiSuggestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  try {
+    const [companyRes, agentsRes] = await Promise.all([
+      db.query(
+        `SELECT id, name, mission, config
+         FROM companies
+         WHERE id = $1`,
+        [companyId]
+      ),
+      db.query(
+        `SELECT id, name, role, title, status
+         FROM agents
+         WHERE company_id = $1
+           AND status != 'terminated'
+         ORDER BY created_at ASC`,
+        [companyId]
+      ),
+    ]);
+
+    if (companyRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const result = await generateAISuggestion(
+      companyRes.rows[0] as { name: string; mission: string | null; config?: unknown },
+      agentsRes.rows as TemplateSuggestAgent[],
+      parsed.data.prompt
+    );
+
+    await db.query(
+      `INSERT INTO audit_log (company_id, action, entity_type, details)
+       VALUES ($1, 'template.ai_suggested', 'template_ai_suggestion', $2)`,
+      [
+        companyId,
+        JSON.stringify({
+          prompt: parsed.data.prompt,
+          requested_by_user_id: req.user?.id ?? null,
+          requested_by_role: req.user?.role ?? null,
+          planner: result.planner,
+          suggestion: result.suggestion,
+        }),
+      ]
+    );
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'AI template suggestion failed' });
+  }
 });
 
 router.get('/marketplace', requireRole(['owner', 'admin', 'member', 'viewer']), async (_req, res) => {

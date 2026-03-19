@@ -11,6 +11,14 @@ type IntegrationsOverview = {
     events_url: string;
     slash_command_url: string;
     interactions_url: string;
+    approval_actions: {
+      ready: boolean;
+      status: string;
+      requirements: Array<{
+        label: string;
+        met: boolean;
+      }>;
+    };
     slash_command_name: string;
     example_payload: {
       command: string;
@@ -326,7 +334,7 @@ export default function IntegrationsPage() {
                 value={overview.slack.signing_secret_configured ? 'Configured' : 'Missing'}
               />
               <StatusRow label="Slash command" value={overview.slack.slash_command_name} />
-              <StatusRow label="Approval actions" value="Slack interactivity enabled" />
+              <StatusRow label="Approval actions" value={overview.slack.approval_actions.status} />
             </IntegrationCard>
 
             <IntegrationCard
@@ -354,14 +362,21 @@ export default function IntegrationsPage() {
                 { label: 'Interactions URL', value: overview.slack.interactions_url },
               ]}
             />
+            <ChecklistPanel
+              title="Slack One-Click Approvals"
+              description="Minimum setup for Block Kit approve/reject actions from Slack."
+              ready={overview.slack.approval_actions.ready}
+              status={overview.slack.approval_actions.status}
+              items={overview.slack.approval_actions.requirements}
+            />
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-2">
             <SetupPanel
               title="Discord Endpoint"
               description="Configure your Discord webhook sender against this endpoint."
               lines={[{ label: 'Webhook URL', value: overview.discord.webhook_url }]}
             />
-          </section>
-
-          <section className="grid gap-4 xl:grid-cols-2">
             <CodePanel
               title="Slack Example Payload"
               description="The company id is injected from your current company context."
@@ -535,6 +550,60 @@ function CodePanel({
       <pre className="mt-4 overflow-x-auto rounded-2xl border bg-slate-950 px-4 py-3 text-sm text-slate-100">
         <code>{code}</code>
       </pre>
+    </section>
+  );
+}
+
+function ChecklistPanel({
+  title,
+  description,
+  ready,
+  status,
+  items,
+}: {
+  title: string;
+  description: string;
+  ready: boolean;
+  status: string;
+  items: Array<{ label: string; met: boolean }>;
+}) {
+  return (
+    <section className="rounded-2xl border bg-card p-6 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+        </div>
+        <span
+          className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+            ready ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+          }`}
+        >
+          {ready ? 'Ready' : 'Setup needed'}
+        </span>
+      </div>
+
+      <div className="mt-4 rounded-xl border bg-muted/20 px-4 py-3 text-sm font-medium text-foreground">
+        {status}
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-start justify-between gap-3 rounded-xl border bg-muted/10 px-4 py-3 text-sm"
+          >
+            <span className="text-foreground">{item.label}</span>
+            <span
+              className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
+                item.met ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+              }`}
+            >
+              {item.met ? 'Met' : 'Missing'}
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

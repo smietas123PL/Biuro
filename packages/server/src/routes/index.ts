@@ -13,6 +13,7 @@ import templates from './templates.js';
 import integrations from './integrations.js';
 import knowledge from './knowledge.js';
 import observability from './observability.js';
+import nlCommand from './nlCommand.js';
 import { requireRole } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -64,6 +65,7 @@ router.use('/templates', templates);
 router.use('/integrations', integrations);
 router.use('/knowledge', requireRole(['owner', 'admin', 'member']), knowledge);
 router.use('/observability', observability);
+router.use('/nl-command', nlCommand);
 
 // Health check
 router.get('/health', (_req, res) => {

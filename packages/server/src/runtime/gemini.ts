@@ -3,14 +3,12 @@ import { env } from '../env.js';
 import { AgentContext, AgentResponse, IAgentRuntime } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 import { defaultModelsByRuntime } from './defaultModels.js';
+import { estimateUsageCostUsd } from './pricing.js';
 import {
   buildStructuredRuntimeSystemPrompt,
   parseStructuredAgentResponse,
   structuredAgentResponseGeminiSchema,
 } from './structuredResponse.js';
-
-const COST_PER_MTK_INPUT = 0.10;
-const COST_PER_MTK_OUTPUT = 0.40;
 
 export class GeminiRuntime implements IAgentRuntime {
   private genAI: GoogleGenerativeAI;
@@ -24,8 +22,9 @@ export class GeminiRuntime implements IAgentRuntime {
 
   async execute(context: AgentContext): Promise<AgentResponse> {
     const systemPrompt = buildStructuredRuntimeSystemPrompt(context);
+    const modelName = context.agent_model || defaultModelsByRuntime.gemini;
     const model = this.genAI.getGenerativeModel({
-      model: context.agent_model || defaultModelsByRuntime.gemini,
+      model: modelName,
       systemInstruction: systemPrompt,
       generationConfig: {
         responseMimeType: 'application/json',
@@ -54,7 +53,12 @@ export class GeminiRuntime implements IAgentRuntime {
 
       const inputTokens = response.usageMetadata?.promptTokenCount || 0;
       const outputTokens = response.usageMetadata?.candidatesTokenCount || 0;
-      const costUsd = (inputTokens / 1_000_000) * COST_PER_MTK_INPUT + (outputTokens / 1_000_000) * COST_PER_MTK_OUTPUT;
+      const costUsd = estimateUsageCostUsd({
+        runtime: 'gemini',
+        model: modelName,
+        inputTokens,
+        outputTokens,
+      });
       const { thought, actions } = parseStructuredAgentResponse(text, 'Gemini');
 
       return {

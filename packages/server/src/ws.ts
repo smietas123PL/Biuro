@@ -3,13 +3,16 @@ import { Server } from 'http';
 import { db } from './db/client.js';
 import { env } from './env.js';
 import { logger } from './utils/logger.js';
+import { setWsSnapshot, wsBroadcastEventsTotal, wsConnectionAttemptsTotal } from './observability/metrics.js';
 
 export class WSHub {
   private wss: WebSocketServer;
   private clients: Map<string, Set<WebSocket>> = new Map(); // companyId -> Set of WS
+  private connectionAttempts: Map<string, number[]> = new Map();
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server, path: '/ws' });
+    this.updateSnapshot();
 
     this.wss.on('connection', (ws: WebSocket, req: any) => {
       void this.handleConnection(ws, req);
@@ -18,17 +21,27 @@ export class WSHub {
 
   private async handleConnection(ws: WebSocket, req: any) {
     try {
+      const clientIp = this.getClientIp(req);
+      if (!this.allowConnection(clientIp)) {
+        wsConnectionAttemptsTotal.inc({ outcome: 'rate_limited' });
+        logger.warn({ clientIp }, 'WS connection rate limit exceeded');
+        this.closeClient(ws, 4429, 'Too many websocket connection attempts');
+        return;
+      }
+
       const url = new URL(req.url || '', `http://${req.headers.host}`);
       const companyId = url.searchParams.get('companyId');
       const token = url.searchParams.get('token');
 
       if (!companyId) {
+        wsConnectionAttemptsTotal.inc({ outcome: 'missing_company' });
         ws.close(4400, 'Missing companyId');
         return;
       }
 
       if (env.AUTH_ENABLED) {
         if (!token) {
+          wsConnectionAttemptsTotal.inc({ outcome: 'missing_token' });
           ws.close(4401, 'Missing token');
           return;
         }
@@ -41,6 +54,7 @@ export class WSHub {
           [token]
         );
         if (sessionRes.rows.length === 0) {
+          wsConnectionAttemptsTotal.inc({ outcome: 'invalid_session' });
           ws.close(4401, 'Invalid session');
           return;
         }
@@ -54,6 +68,7 @@ export class WSHub {
           [userId, companyId]
         );
         if (roleRes.rows.length === 0) {
+          wsConnectionAttemptsTotal.inc({ outcome: 'forbidden' });
           ws.close(4403, 'Forbidden');
           return;
         }
@@ -67,11 +82,19 @@ export class WSHub {
         this.clients.set(companyId, new Set());
       }
       this.clients.get(companyId)!.add(ws);
+      wsConnectionAttemptsTotal.inc({ outcome: 'accepted' });
+      this.updateSnapshot();
 
       ws.on('close', () => {
-        this.clients.get(companyId)?.delete(ws);
+        const companyClients = this.clients.get(companyId);
+        companyClients?.delete(ws);
+        if (companyClients && companyClients.size === 0) {
+          this.clients.delete(companyId);
+        }
+        this.updateSnapshot();
       });
     } catch (err) {
+      wsConnectionAttemptsTotal.inc({ outcome: 'error' });
       logger.error({ err }, 'Failed to authorize WS connection');
       this.closeClient(ws, 1011, 'Internal server error');
     }
@@ -83,17 +106,66 @@ export class WSHub {
     }
   }
 
+  private getClientIp(req: any) {
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (typeof forwardedFor === 'string') {
+      const firstIp = forwardedFor.split(',')[0]?.trim();
+      if (firstIp) {
+        return firstIp;
+      }
+    }
+
+    if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+      const firstIp = String(forwardedFor[0]).split(',')[0]?.trim();
+      if (firstIp) {
+        return firstIp;
+      }
+    }
+
+    return req.socket?.remoteAddress || 'unknown';
+  }
+
+  private allowConnection(clientIp: string) {
+    const now = Date.now();
+    const windowStart = now - env.WS_RATE_LIMIT_WINDOW_MS;
+    const recentAttempts = (this.connectionAttempts.get(clientIp) ?? []).filter(
+      (timestamp) => timestamp > windowStart
+    );
+
+    if (recentAttempts.length >= env.WS_RATE_LIMIT_MAX) {
+      this.connectionAttempts.set(clientIp, recentAttempts);
+      return false;
+    }
+
+    recentAttempts.push(now);
+    this.connectionAttempts.set(clientIp, recentAttempts);
+    return true;
+  }
+
   broadcast(companyId: string, event: string, data: any) {
     const targets = this.clients.get(companyId);
     if (!targets) return;
 
     const payload = JSON.stringify({ event, data, timestamp: new Date().toISOString() });
+    wsBroadcastEventsTotal.inc({ event });
     
     for (const ws of targets) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(payload);
       }
     }
+  }
+
+  private updateSnapshot() {
+    let connections = 0;
+    for (const companyClients of this.clients.values()) {
+      connections += companyClients.size;
+    }
+
+    setWsSnapshot({
+      connections,
+      rooms: this.clients.size,
+    });
   }
 }
 

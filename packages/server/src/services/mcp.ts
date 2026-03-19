@@ -12,10 +12,11 @@ export class MCPService {
   private static clients: Map<string, Client> = new Map();
 
   static async getClient(name: string, config: MCPServerConfig): Promise<Client> {
-    if (this.clients.has(name)) return this.clients.get(name)!;
+    const cachedClient = this.clients.get(name);
+    if (cachedClient) return cachedClient;
 
     logger.info({ name, command: config.command }, 'Connecting to MCP Server');
-    
+
     const transport = new StdioClientTransport({
       command: config.command,
       args: config.args,
@@ -27,10 +28,16 @@ export class MCPService {
       { capabilities: {} }
     );
 
-    await client.connect(transport);
-    this.clients.set(name, client);
-    
-    return client;
+    try {
+      await client.connect(transport);
+      this.clients.set(name, client);
+      return client;
+    } catch (err) {
+      await transport.close().catch((closeErr: unknown) => {
+        logger.warn({ err: closeErr, name }, 'Failed to close MCP transport after connect error');
+      });
+      throw err;
+    }
   }
 
   static async callTool(serverName: string, config: MCPServerConfig, toolName: string, args: any) {
@@ -50,5 +57,32 @@ export class MCPService {
   static async listTools(serverName: string, config: MCPServerConfig) {
     const client = await this.getClient(serverName, config);
     return await client.listTools();
+  }
+
+  static async closeClient(name: string) {
+    const client = this.clients.get(name);
+    if (!client) {
+      return false;
+    }
+
+    this.clients.delete(name);
+
+    try {
+      await client.close();
+      logger.info({ name }, 'Closed MCP client');
+    } catch (err) {
+      logger.warn({ err, name }, 'Failed to close MCP client cleanly');
+    }
+
+    return true;
+  }
+
+  static async closeAllClients() {
+    const clientNames = [...this.clients.keys()];
+    if (clientNames.length === 0) {
+      return;
+    }
+
+    await Promise.all(clientNames.map((name) => this.closeClient(name)));
   }
 }

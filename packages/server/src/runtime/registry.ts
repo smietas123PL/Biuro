@@ -3,9 +3,11 @@ import { ClaudeRuntime } from './claude.js';
 import { OpenAIRuntime } from './openai.js';
 import { GeminiRuntime } from './gemini.js';
 import { env } from '../env.js';
+import { MultiProviderRuntimeRouter } from './router.js';
+import type { RuntimeName } from './preferences.js';
 
 class RuntimeRegistry {
-  private runtimes: Map<string, IAgentRuntime> = new Map();
+  private runtimes: Map<RuntimeName, IAgentRuntime> = new Map();
 
   constructor() {
     this.runtimes.set('claude', new ClaudeRuntime());
@@ -15,10 +17,14 @@ class RuntimeRegistry {
     }
   }
 
-  getRuntime(name: string): IAgentRuntime {
-    const runtime = this.runtimes.get(name);
-    if (!runtime) throw new Error(`Runtime ${name} not found`);
-    return runtime;
+  getRuntime(name: string, options?: { fallbackOrder?: RuntimeName[] }): IAgentRuntime {
+    if (!this.runtimes.has(name as RuntimeName)) {
+      if (this.runtimes.size === 0) {
+        throw new Error('No runtimes available');
+      }
+    }
+
+    return new MultiProviderRuntimeRouter(name, this.runtimes, options);
   }
 }
 

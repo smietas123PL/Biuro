@@ -21,6 +21,10 @@ export const NotificationService = {
     return this.sendWebhook(url, { text: message });
   },
 
+  async sendSlackMessage(url: string, payload: Record<string, unknown>) {
+    return this.sendWebhook(url, payload);
+  },
+
   async alertDiscord(url: string, message: string) {
     return this.sendWebhook(url, { content: message });
   }

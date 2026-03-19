@@ -3,6 +3,21 @@ import { db } from './db/client.js';
 import { logger } from './utils/logger.js';
 import { getActiveHeartbeatCount, startOrchestrator, stopOrchestrator } from './orchestrator/scheduler.js';
 import { runtimeRegistry } from './runtime/registry.js';
+import { MCPService } from './services/mcp.js';
+import { env } from './env.js';
+import { startMetricsServer } from './observability/metricsServer.js';
+import { initializeTracing, shutdownTracing } from './observability/tracing.js';
+import { closeRealtimeEventBus, initializeRealtimeEventBus } from './realtime/eventBus.js';
+import { closeSchedulerQueue, initializeSchedulerQueue } from './orchestrator/schedulerQueue.js';
+
+initializeTracing({
+  serviceName: `${env.OTEL_SERVICE_NAME}-worker`,
+  enableConsoleExporter: env.OTEL_TRACE_CONSOLE_EXPORTER,
+  historyLimit: env.OTEL_TRACE_HISTORY_LIMIT,
+  otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
+
+const metricsServer = startMetricsServer(env.WORKER_METRICS_PORT, 'biuro-worker');
 
 let shuttingDown = false;
 
@@ -23,6 +38,11 @@ async function shutdown(signal: string, exitCode: number = 0) {
   try {
     await stopOrchestrator();
     logger.info({ activeHeartbeats: getActiveHeartbeatCount() }, 'Heartbeat drain finished');
+    await metricsServer?.close();
+    await closeSchedulerQueue();
+    await closeRealtimeEventBus();
+    await MCPService.closeAllClients();
+    await shutdownTracing();
     await db.close();
     clearTimeout(forceExitTimer);
     logger.info('Worker stopped cleanly');
@@ -41,6 +61,11 @@ async function initWorker() {
     // 1. Check DB
     await db.query('SELECT 1');
     logger.info('Worker connected to Database');
+    await initializeRealtimeEventBus({
+      serviceName: 'worker',
+      subscribe: false,
+    });
+    await initializeSchedulerQueue();
 
     // 2. Runtimes are auto-registered in RuntimeRegistry constructor
     void runtimeRegistry;

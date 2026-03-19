@@ -21,6 +21,7 @@ const overviewResponse = {
     signing_secret_configured: true,
     events_url: 'https://biuro.test/api/integrations/slack/events',
     slash_command_url: 'https://biuro.test/api/integrations/slack/command',
+    interactions_url: 'https://biuro.test/api/integrations/slack/interactions',
     slash_command_name: '/biuro',
     example_payload: {
       command: '/biuro',
@@ -98,6 +99,10 @@ describe('IntegrationsPage', () => {
       );
     });
 
+    await waitFor(() => {
+      expect(screen.getAllByRole('textbox').length).toBe(2);
+    });
+
     const textareas = screen.getAllByRole('textbox');
     fireEvent.change(textareas[0], {
       target: { value: 'https://hooks.slack.test/services/updated' },
@@ -143,5 +148,7 @@ describe('IntegrationsPage', () => {
     expect(screen.getByText('Discord test message sent successfully.')).toBeTruthy();
     expect(screen.getByText('https://biuro.test')).toBeTruthy();
     expect(screen.getAllByText('https://hooks.slack.test/services/original')).toHaveLength(2);
+    expect(screen.getByText('https://biuro.test/api/integrations/slack/interactions')).toBeTruthy();
+    expect(screen.getByText('Slack interactivity enabled')).toBeTruthy();
   });
 });

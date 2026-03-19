@@ -17,7 +17,7 @@ function summarizePreset(template: CompanyTemplate) {
   };
 }
 
-const presets: TemplatePreset[] = [
+export const templatePresetsCatalog: TemplatePreset[] = [
   {
     id: 'solo-founder',
     name: 'Solo Founder Sprint',
@@ -317,7 +317,7 @@ const presets: TemplatePreset[] = [
 ];
 
 export function listTemplatePresets() {
-  return presets.map((preset) => ({
+  return templatePresetsCatalog.map((preset) => ({
     id: preset.id,
     name: preset.name,
     description: preset.description,
@@ -327,5 +327,5 @@ export function listTemplatePresets() {
 }
 
 export function getTemplatePresetById(id: string) {
-  return presets.find((preset) => preset.id === id) ?? null;
+  return templatePresetsCatalog.find((preset) => preset.id === id) ?? null;
 }

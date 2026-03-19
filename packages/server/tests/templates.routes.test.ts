@@ -73,7 +73,7 @@ describe('template routes', () => {
           'Nova',
           'operator',
           null,
-          'claude',
+          'gemini',
           null,
           null,
           '{}',

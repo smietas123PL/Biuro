@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Clock3, ShieldAlert, Users } from 'lucide-react';
-import { useApi, useWebSocket } from '../hooks/useApi';
+import { useApi, useWebSocket, type ApiTraceSnapshot } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
+import { buildGrafanaTraceExploreUrl } from '../lib/grafana';
+import { TraceLinkCallout } from '../components/TraceLinkCallout';
 
 type CompanyStats = {
   agent_count: number;
@@ -28,6 +30,20 @@ type ActivityItem = {
   task_id?: string | null;
   task_title?: string | null;
   summary: string;
+};
+
+type BudgetTotals = {
+  limit_usd: number;
+  spent_usd: number;
+  remaining_usd: number;
+  utilization_pct: number | null;
+};
+
+type BudgetToast = {
+  id: string;
+  tone: 'warning' | 'critical';
+  title: string;
+  body: string;
 };
 
 type RetrievalMetricsSummary = {
@@ -60,6 +76,26 @@ type RetrievalMetricsSummary = {
   }>;
 };
 
+type TraceDetail = {
+  trace_id: string;
+  service: string;
+  summary: {
+    span_count: number;
+    started_at: string;
+    ended_at: string;
+    duration_ms: number;
+  };
+  items: Array<{
+    span_id: string;
+    parent_span_id?: string;
+    name: string;
+    duration_ms: number;
+    status_code: string;
+    start_time: string;
+    attributes: Record<string, unknown>;
+  }>;
+};
+
 const emptyStats: CompanyStats = {
   agent_count: 0,
   active_agents: 0,
@@ -74,38 +110,109 @@ const emptyStats: CompanyStats = {
   daily_cost_usd: 0,
 };
 
+const emptyBudgetTotals: BudgetTotals = {
+  limit_usd: 0,
+  spent_usd: 0,
+  remaining_usd: 0,
+  utilization_pct: null,
+};
+
 export default function DashboardPage() {
-  const { request, loading, error } = useApi();
+  const { request, loading, error, lastTrace } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
   const [stats, setStats] = useState<CompanyStats>(emptyStats);
+  const [budgetTotals, setBudgetTotals] = useState<BudgetTotals>(emptyBudgetTotals);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [retrievalMetrics, setRetrievalMetrics] = useState<RetrievalMetricsSummary | null>(null);
+  const [traceDetail, setTraceDetail] = useState<TraceDetail | null>(null);
+  const [traceError, setTraceError] = useState<string | null>(null);
+  const [costPulse, setCostPulse] = useState<number | null>(null);
+  const [budgetToasts, setBudgetToasts] = useState<BudgetToast[]>([]);
   const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as
-    | { event: string; data?: { agentId?: string; agentName?: string; taskId?: string; taskTitle?: string }; timestamp: string }
+    | {
+        event: string;
+        data?: {
+          agentId?: string;
+          agentName?: string;
+          taskId?: string;
+          taskTitle?: string;
+          delta_cost_usd?: number;
+          daily_cost_usd?: number;
+          threshold_pct?: number;
+          utilization_pct?: number;
+          tone?: 'warning' | 'critical';
+          message?: string;
+        };
+        timestamp: string;
+      }
     | null;
+
+  const refreshBudgetTotals = async () => {
+    if (!selectedCompanyId) {
+      setBudgetTotals(emptyBudgetTotals);
+      return;
+    }
+
+    const summary = (await request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
+      suppressError: true,
+      trackTrace: false,
+    })) as { totals: BudgetTotals };
+    setBudgetTotals(summary.totals);
+  };
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!selectedCompanyId) {
         setStats(emptyStats);
+        setBudgetTotals(emptyBudgetTotals);
         setActivity([]);
         setRetrievalMetrics(null);
         return;
       }
 
       const statsData = (await request(`/companies/${selectedCompanyId}/stats`)) as CompanyStats;
-      const [activityResult, retrievalMetricsResult] = await Promise.allSettled([
+      const [activityResult, retrievalMetricsResult, budgetResult] = await Promise.allSettled([
         request(`/companies/${selectedCompanyId}/activity-feed?limit=12`, undefined, { suppressError: true }) as Promise<ActivityItem[]>,
         request(`/companies/${selectedCompanyId}/retrieval-metrics?days=7`, undefined, { suppressError: true }) as Promise<RetrievalMetricsSummary>,
+        request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, { suppressError: true, trackTrace: false }) as Promise<{ totals: BudgetTotals }>,
       ]);
 
       setStats(statsData);
       setActivity(activityResult.status === 'fulfilled' ? activityResult.value : []);
       setRetrievalMetrics(retrievalMetricsResult.status === 'fulfilled' ? retrievalMetricsResult.value : null);
+      setBudgetTotals(budgetResult.status === 'fulfilled' ? budgetResult.value.totals : emptyBudgetTotals);
     };
 
     void fetchDashboardData();
   }, [request, selectedCompanyId]);
+
+  useEffect(() => {
+    if (!lastTrace?.traceId) {
+      setTraceDetail(null);
+      setTraceError(null);
+      return;
+    }
+
+    const loadTraceDetail = async () => {
+      try {
+        const detail = (await request(`/observability/traces/${lastTrace.traceId}`, undefined, {
+          suppressError: true,
+          trackTrace: false,
+        })) as TraceDetail;
+        setTraceDetail(detail);
+        setTraceError(null);
+      } catch (traceDetailError) {
+        setTraceDetail(null);
+        setTraceError(
+          traceDetailError instanceof Error
+            ? traceDetailError.message
+            : 'Trace detail is unavailable for this session.'
+        );
+      }
+    };
+
+    void loadTraceDetail();
+  }, [lastTrace, request]);
 
   useEffect(() => {
     if (!lastEvent || lastEvent.event !== 'agent.working') {
@@ -126,6 +233,62 @@ export default function DashboardPage() {
 
     setActivity((current) => [realtimeItem, ...current].slice(0, 12));
   }, [lastEvent]);
+
+  useEffect(() => {
+    if (!lastEvent || !selectedCompanyId) {
+      return;
+    }
+
+    if (lastEvent.event === 'cost.updated') {
+      const nextDailyCost =
+        typeof lastEvent.data?.daily_cost_usd === 'number'
+          ? lastEvent.data.daily_cost_usd
+          : stats.daily_cost_usd;
+      const deltaCost =
+        typeof lastEvent.data?.delta_cost_usd === 'number' ? lastEvent.data.delta_cost_usd : null;
+
+      setStats((current) => ({
+        ...current,
+        daily_cost_usd: nextDailyCost,
+      }));
+      setCostPulse(deltaCost);
+      void refreshBudgetTotals();
+
+      if (deltaCost !== null) {
+        const timeout = window.setTimeout(() => {
+          setCostPulse((current) => (current === deltaCost ? null : current));
+        }, 3500);
+        return () => window.clearTimeout(timeout);
+      }
+    }
+
+    if (lastEvent.event === 'budget.threshold') {
+      setBudgetToasts((current) => {
+        const nextToast: BudgetToast = {
+          id: `${lastEvent.timestamp}-${lastEvent.data?.agentId ?? 'agent'}-${lastEvent.data?.threshold_pct ?? 'threshold'}`,
+          tone: lastEvent.data?.tone === 'critical' ? 'critical' : 'warning',
+          title: `Budget ${lastEvent.data?.threshold_pct ?? 80}% alert`,
+          body:
+            lastEvent.data?.message ??
+            `${lastEvent.data?.agentName ?? 'Agent'} reached a budget threshold.`,
+        };
+        return [nextToast, ...current].slice(0, 3);
+      });
+      void refreshBudgetTotals();
+    }
+  }, [lastEvent, selectedCompanyId, stats.daily_cost_usd]);
+
+  useEffect(() => {
+    if (budgetToasts.length === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setBudgetToasts((current) => current.slice(0, -1));
+    }, 5000);
+
+    return () => window.clearTimeout(timeout);
+  }, [budgetToasts]);
 
   if (!selectedCompany) {
     return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to see live metrics.</div>;
@@ -167,6 +330,24 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {budgetToasts.length > 0 && (
+        <div className="fixed right-4 top-4 z-40 space-y-3">
+          {budgetToasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`w-[320px] rounded-2xl border px-4 py-3 shadow-lg ${
+                toast.tone === 'critical'
+                  ? 'border-red-200 bg-red-50 text-red-800'
+                  : 'border-amber-200 bg-amber-50 text-amber-800'
+              }`}
+            >
+              <div className="text-sm font-semibold">{toast.title}</div>
+              <div className="mt-1 text-sm">{toast.body}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Overview</h2>
         <p className="text-sm text-muted-foreground">
@@ -174,7 +355,65 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error ? (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          <TraceLinkCallout
+            trace={lastTrace}
+            title="Debug This Error"
+            body="Open the most recent API trace in Grafana Explore to inspect the failure path."
+            compact
+          />
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Cost Ticker</div>
+              <div className="mt-2 text-4xl font-semibold tracking-tight">${stats.daily_cost_usd.toFixed(4)} today</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                Streaming directly from heartbeat cost events without a manual refresh.
+              </div>
+            </div>
+            <div className={`rounded-full border px-3 py-1 text-xs font-medium ${
+              costPulse && costPulse > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-muted bg-muted/30 text-muted-foreground'
+            }`}>
+              {costPulse && costPulse > 0 ? `+ $${costPulse.toFixed(4)} latest heartbeat` : 'Waiting for next heartbeat'}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Budget Gauge</div>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <div className="text-4xl font-semibold tracking-tight">
+              {budgetTotals.utilization_pct === null ? 'No cap' : `${budgetTotals.utilization_pct.toFixed(0)}%`}
+            </div>
+            <div className="text-right text-sm text-muted-foreground">
+              <div>${budgetTotals.spent_usd.toFixed(2)} spent</div>
+              <div>${budgetTotals.limit_usd.toFixed(2)} allocated</div>
+            </div>
+          </div>
+          <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted/30">
+            <div
+              className={`h-full rounded-full transition-all ${
+                budgetTotals.utilization_pct !== null && budgetTotals.utilization_pct >= 95
+                  ? 'bg-red-500'
+                  : budgetTotals.utilization_pct !== null && budgetTotals.utilization_pct >= 80
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-500'
+              }`}
+              style={{ width: `${budgetTotals.utilization_pct === null ? 0 : Math.max(Math.min(budgetTotals.utilization_pct, 100), 4)}%` }}
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Thresholds: 80% warning, 95% critical</span>
+            <span>${budgetTotals.remaining_usd.toFixed(2)} remaining</span>
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
@@ -218,6 +457,7 @@ export default function DashboardPage() {
               title="Governance"
               body={stats.pending_approvals > 0 ? `${stats.pending_approvals} approval requests need attention.` : 'No approval bottlenecks at the moment.'}
             />
+            <TraceInsight trace={lastTrace} detail={traceDetail} error={traceError} />
           </div>
         </div>
       </div>
@@ -348,6 +588,86 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function TraceInsight({
+  trace,
+  detail,
+  error,
+}: {
+  trace: ApiTraceSnapshot | null;
+  detail: TraceDetail | null;
+  error: string | null;
+}) {
+  if (!trace) {
+    return (
+      <Insight
+        title="Observability"
+        body="Trace drilldown will appear after the next API request completes."
+      />
+    );
+  }
+
+  const traceIdLabel =
+    trace.traceId.length > 16 ? `${trace.traceId.slice(0, 8)}...${trace.traceId.slice(-8)}` : trace.traceId;
+  const topSpans = detail?.items.slice(0, 3) ?? [];
+  const grafanaTraceUrl = buildGrafanaTraceExploreUrl(trace);
+
+  return (
+    <div className="rounded-xl border bg-muted/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium text-foreground">Trace Drilldown</div>
+        <div className="flex items-center gap-2">
+          <div className="rounded-full border bg-background/70 px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+            {trace.method} {trace.status}
+          </div>
+          <a
+            href={grafanaTraceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-sky-700 transition-colors hover:bg-sky-100"
+          >
+            Open in Grafana
+          </a>
+        </div>
+      </div>
+      <div className="mt-2 text-sm text-muted-foreground">
+        Latest trace <span className="font-mono text-foreground">{traceIdLabel}</span> for {trace.path}
+      </div>
+      {detail && (
+        <div className="mt-3 space-y-2">
+          <div className="text-xs text-muted-foreground">
+            {detail.summary.span_count} spans across {Math.round(detail.summary.duration_ms)} ms
+          </div>
+          {topSpans.map((span) => (
+            <div key={span.span_id} className="rounded-lg bg-background/60 px-3 py-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-foreground">{span.name}</span>
+                <span className="text-xs text-muted-foreground">{Math.round(span.duration_ms)} ms</span>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {formatSpanHighlight(span.attributes)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!detail && error && <div className="mt-3 text-xs text-amber-700">{error}</div>}
+    </div>
+  );
+}
+
+function formatSpanHighlight(attributes: Record<string, unknown>) {
+  const interestingEntries = ['http.route', 'task.id', 'tool.name', 'heartbeat.status']
+    .map((key) => [key, attributes[key]] as const)
+    .filter(([, value]) => typeof value === 'string' && value.length > 0)
+    .slice(0, 2);
+
+  if (interestingEntries.length === 0) {
+    return 'Detailed span attributes are available for this trace.';
+  }
+
+  return interestingEntries.map(([key, value]) => `${key}: ${value}`).join(' | ');
 }
 
 function Metric({ label, value, helper }: { label: string; value: number | string; helper: string }) {

@@ -1,4 +1,5 @@
 import express from 'express';
+import { createHmac } from 'crypto';
 import { createServer, type Server } from 'http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +9,7 @@ const dbMock = vi.hoisted(() => ({
 
 const alertSlackMock = vi.hoisted(() => vi.fn());
 const alertDiscordMock = vi.hoisted(() => vi.fn());
+const sendSlackMessageMock = vi.hoisted(() => vi.fn());
 
 const envMock = vi.hoisted(() => ({
   PORT: 3100,
@@ -32,6 +34,7 @@ vi.mock('../src/services/notifications.js', () => ({
   NotificationService: {
     alertSlack: alertSlackMock,
     alertDiscord: alertDiscordMock,
+    sendSlackMessage: sendSlackMessageMock,
   },
 }));
 
@@ -45,9 +48,20 @@ describe('integration routes', () => {
     dbMock.query.mockReset();
     alertSlackMock.mockReset();
     alertDiscordMock.mockReset();
+    sendSlackMessageMock.mockReset();
 
     const app = express();
-    app.use(express.json());
+    const captureRawBody: Parameters<typeof express.json>[0]['verify'] = (req, _res, buffer, encoding) => {
+      if (buffer.length === 0) {
+        return;
+      }
+
+      const bodyEncoding = typeof encoding === 'string' ? (encoding as BufferEncoding) : 'utf8';
+      (req as express.Request & { rawBody?: string }).rawBody = buffer.toString(bodyEncoding);
+    };
+
+    app.use(express.json({ verify: captureRawBody }));
+    app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
     app.use('/api/integrations', integrationsRouter);
 
     server = createServer(app);
@@ -122,6 +136,9 @@ describe('integration routes', () => {
 
     await expect(response.json()).resolves.toMatchObject({
       base_url: 'https://biuro.example.com',
+      slack: {
+        interactions_url: 'https://biuro.example.com/api/integrations/slack/interactions',
+      },
       outgoing: {
         slack_webhook_url: 'https://hooks.slack.test/services/current',
         discord_webhook_url: 'https://discord.test/api/webhooks/current',
@@ -287,5 +304,158 @@ describe('integration routes', () => {
       target_url: 'https://discord.test/api/webhooks/stored',
       error: 'Webhook failed: 500 Internal Server Error',
     });
+  });
+
+  it('stores inbound Discord messages against a task matched by discord_channel metadata', async () => {
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'task-1',
+            company_id: 'company-1',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const response = await fetch(`${baseUrl}/discord/webhook`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-webhook-secret': 'discord-secret',
+      },
+      body: JSON.stringify({
+        id: 'discord-message-1',
+        channel_id: 'discord-channel-42',
+        content: 'Customer asked for a Friday status update.',
+        author: {
+          id: 'user-9',
+          username: 'ops-user',
+          bot: false,
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(dbMock.query).toHaveBeenCalledTimes(2);
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain("metadata->>$1 = $2");
+    expect(dbMock.query.mock.calls[0]?.[1]).toEqual([
+      'discord_channel',
+      'discord-channel-42',
+      'discord_thread',
+    ]);
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('INSERT INTO messages');
+    expect(dbMock.query.mock.calls[1]?.[1]?.[0]).toBe('company-1');
+    expect(dbMock.query.mock.calls[1]?.[1]?.[1]).toBe('task-1');
+    expect(dbMock.query.mock.calls[1]?.[1]?.[2]).toBe('Customer asked for a Friday status update.');
+    expect(JSON.parse(String(dbMock.query.mock.calls[1]?.[1]?.[3]))).toMatchObject({
+      source: 'discord',
+      channel_id: 'discord-channel-42',
+      discord_message_id: 'discord-message-1',
+      discord_author: 'ops-user',
+      discord_author_id: 'user-9',
+    });
+  });
+
+  it('ignores bot-authored Discord webhook messages', async () => {
+    const response = await fetch(`${baseUrl}/discord/webhook`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-webhook-secret': 'discord-secret',
+      },
+      body: JSON.stringify({
+        id: 'discord-message-2',
+        channel_id: 'discord-channel-42',
+        content: 'Automated sync message',
+        author: {
+          id: 'bot-1',
+          username: 'system-bot',
+          bot: true,
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(dbMock.query).not.toHaveBeenCalled();
+  });
+
+  it('resolves approvals from Slack interactive actions and returns a replacement payload', async () => {
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'approval-1',
+            company_id: 'company-1',
+            task_id: 'task-1',
+            reason: 'Budget threshold exceeded',
+            status: 'pending',
+            task_title: 'Prepare launch notes',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'approval-1',
+            company_id: 'company-1',
+            task_id: 'task-1',
+            reason: 'Budget threshold exceeded',
+            status: 'approved',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const payload = JSON.stringify({
+      type: 'block_actions',
+      user: {
+        id: 'U123',
+        username: 'ops-lead',
+      },
+      actions: [
+        {
+          action_id: 'approval.approve',
+          value: JSON.stringify({ approval_id: 'approval-1' }),
+        },
+      ],
+    });
+    const body = new URLSearchParams({ payload }).toString();
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = `v0=${createHmac('sha256', 'slack-secret')
+      .update(`v0:${timestamp}:${body}`)
+      .digest('hex')}`;
+
+    const response = await fetch(`${baseUrl}/slack/interactions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-slack-request-timestamp': timestamp,
+        'x-slack-signature': signature,
+      },
+      body,
+    });
+
+    expect(response.status).toBe(200);
+    const payloadResponse = await response.json();
+    expect(payloadResponse).toMatchObject({
+      replace_original: true,
+      text: 'Approved: Prepare launch notes',
+    });
+    expect(payloadResponse.blocks[0]).toMatchObject({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*Approved* for *Prepare launch notes*',
+      },
+    });
+
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain('FROM approvals a');
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('UPDATE approvals');
+    expect(String(dbMock.query.mock.calls[2]?.[0])).toContain("SET status = CASE WHEN assigned_to IS NULL THEN 'backlog' ELSE 'assigned' END");
+    expect(String(dbMock.query.mock.calls[3]?.[0])).toContain('INSERT INTO messages');
+    expect(String(dbMock.query.mock.calls[4]?.[0])).toContain('approval.resolved');
   });
 });

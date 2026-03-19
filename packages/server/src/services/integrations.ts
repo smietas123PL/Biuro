@@ -1,40 +1,205 @@
 import { db } from '../db/client.js';
 import { logger } from '../utils/logger.js';
-import { createApprovalRequest } from '../governance/approvals.js';
+import { resolveApproval } from '../governance/approvals.js';
+import { enqueueCompanyWakeup } from '../orchestrator/schedulerQueue.js';
+
+async function storeInboundTaskMessage(args: {
+  platform: 'slack' | 'discord';
+  channelId: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const taskRes = await db.query(
+    `SELECT id, company_id
+     FROM tasks
+     WHERE metadata->>$1 = $2
+        OR metadata->>$3 = $2
+     LIMIT 1`,
+    [`${args.platform}_channel`, args.channelId, `${args.platform}_thread`]
+  );
+
+  if (taskRes.rows.length === 0) {
+    return { matched: false as const };
+  }
+
+  const task = taskRes.rows[0];
+  await db.query(
+    `INSERT INTO messages (company_id, task_id, content, type, metadata)
+     VALUES ($1, $2, $3, 'message', $4)`,
+    [
+      task.company_id,
+      task.id,
+      args.content,
+      JSON.stringify({
+        source: args.platform,
+        channel_id: args.channelId,
+        ...(args.metadata ?? {}),
+      }),
+    ]
+  );
+
+  return { matched: true as const, taskId: task.id, companyId: task.company_id };
+}
+
+function buildSlackApprovalResponse(args: {
+  status: 'approved' | 'rejected';
+  title: string;
+  reason: string;
+  notes: string;
+  alreadyResolved?: boolean;
+}) {
+  const statusLabel = args.status === 'approved' ? 'Approved' : 'Rejected';
+  const summary = args.alreadyResolved
+    ? `Approval was already ${statusLabel.toLowerCase()}.`
+    : `${statusLabel} in Slack.`;
+
+  return {
+    replace_original: true,
+    text: `${statusLabel}: ${args.title}`,
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${statusLabel}* for *${args.title}*`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: summary,
+          },
+          {
+            type: 'mrkdwn',
+            text: `Reason: ${args.reason}`,
+          },
+          {
+            type: 'mrkdwn',
+            text: args.notes,
+          },
+        ],
+      },
+    ],
+  };
+}
 
 export const IntegrationService = {
   async handleSlackEvent(event: any) {
     logger.info({ type: event.type }, 'Handling Slack event');
-    
-    // Example: Handling a message in a synced channel
+
     if (event.type === 'message' && !event.bot_id) {
-       // Find the task associated with this channel/thread
-       const taskRes = await db.query(
-         "SELECT id, company_id FROM tasks WHERE metadata->>'slack_channel' = $1 LIMIT 1",
-         [event.channel]
-       );
-       
-       if (taskRes.rows.length > 0) {
-         const task = taskRes.rows[0];
-         await db.query(
-           "INSERT INTO messages (company_id, task_id, content, type) VALUES ($1, $2, $3, 'message')",
-           [task.company_id, task.id, event.text]
-         );
-       }
+      await storeInboundTaskMessage({
+        platform: 'slack',
+        channelId: event.channel,
+        content: event.text,
+        metadata: {
+          slack_user: event.user ?? null,
+          slack_ts: event.ts ?? null,
+        },
+      });
     }
   },
 
+  async handleSlackInteraction(payload: any) {
+    const action = payload?.actions?.[0];
+    if (!action?.action_id || typeof action.value !== 'string') {
+      return {
+        response_action: 'errors',
+        errors: {
+          default: 'Unsupported Slack interaction payload.',
+        },
+      };
+    }
+
+    if (action.action_id !== 'approval.approve' && action.action_id !== 'approval.reject') {
+      return {
+        response_action: 'errors',
+        errors: {
+          default: `Unknown action: ${action.action_id}`,
+        },
+      };
+    }
+
+    let approvalId: string | null = null;
+    try {
+      const parsed = JSON.parse(action.value) as { approval_id?: string };
+      approvalId = parsed.approval_id ?? null;
+    } catch {
+      approvalId = null;
+    }
+
+    if (!approvalId) {
+      return {
+        response_action: 'errors',
+        errors: {
+          default: 'Missing approval id in Slack action payload.',
+        },
+      };
+    }
+
+    const status = action.action_id === 'approval.approve' ? 'approved' : 'rejected';
+    const notes = `Resolved in Slack by ${payload.user?.username ?? payload.user?.name ?? 'unknown-user'}`;
+    const resolution = await resolveApproval(approvalId, status, notes, {
+      source: 'slack',
+      resolvedBy: payload.user?.id ?? null,
+    });
+
+    if (!resolution) {
+      return {
+        response_type: 'ephemeral',
+        text: 'Approval not found.',
+      };
+    }
+
+    return buildSlackApprovalResponse({
+      status,
+      title: resolution.task_title ?? 'Approval request',
+      reason: resolution.reason,
+      notes,
+      alreadyResolved: Boolean((resolution as { already_resolved?: boolean }).already_resolved),
+    });
+  },
+
   async handleDiscordEvent(message: any) {
-    logger.info({ author: message.author.username }, 'Handling Discord message');
-    // Similar logic to Slack...
+    logger.info(
+      {
+        author: message.author?.username ?? 'unknown',
+        channelId: message.channel_id ?? null,
+      },
+      'Handling Discord message'
+    );
+
+    if (!message?.channel_id || !message?.content?.trim()) {
+      return;
+    }
+
+    if (message.author?.bot || message.webhook_id) {
+      return;
+    }
+
+    await storeInboundTaskMessage({
+      platform: 'discord',
+      channelId: message.channel_id,
+      content: message.content,
+      metadata: {
+        discord_message_id: message.id ?? null,
+        discord_author: message.author?.username ?? null,
+        discord_author_id: message.author?.id ?? null,
+      },
+    });
   },
 
   async handleSlashCommand(command: string, params: string, companyId: string) {
     if (command === '/biuro-task') {
       const res = await db.query(
-        "INSERT INTO tasks (company_id, title, description, status) VALUES ($1, $2, $3, 'backlog') RETURNING id",
+        "INSERT INTO tasks (company_id, title, description, status) VALUES ($1, $2, $3, 'backlog') RETURNING id, company_id",
         [companyId, 'New Task from Slack', params]
       );
+      await enqueueCompanyWakeup(companyId, 'slash_command_task_created', {
+        taskId: res.rows[0].id,
+      });
       return `Task created: ${res.rows[0].id}`;
     }
     return `Unknown command: ${command}`;

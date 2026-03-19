@@ -13,6 +13,9 @@
     "start": "pnpm --filter @biuro/server start",
     "worker": "pnpm --filter @biuro/server worker",
     "migrate": "pnpm --filter @biuro/server migrate",
+    "migrate:status": "pnpm --filter @biuro/server migrate:status",
+    "migrate:verify": "pnpm --filter @biuro/server migrate:verify",
+    "migrate:create": "pnpm --filter @biuro/server migrate:create",
     "test:phase3": "pnpm --filter @biuro/server tsx src/verify3.ts"
   }
 }

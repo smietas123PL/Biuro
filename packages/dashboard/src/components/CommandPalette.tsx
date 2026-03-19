@@ -85,6 +85,7 @@ function getStaticItems(role?: CompanyRole | null): NavigationPaletteItem[] {
     { kind: 'navigation', id: 'page-templates', label: 'Templates', description: 'Local preset library and company setup imports', path: '/templates', section: 'Pages', keywords: ['presets', 'marketplace', 'setup'] },
     { kind: 'navigation', id: 'page-integrations', label: 'Integrations', description: 'Slack and Discord setup overview', path: '/integrations', section: 'Pages', keywords: ['slack', 'discord', 'webhooks'] },
     { kind: 'navigation', id: 'page-tools', label: 'Tools', description: 'Registered tools and capabilities', path: '/tools', section: 'Pages', keywords: ['tooling', 'capabilities'] },
+    { kind: 'navigation', id: 'page-observability', label: 'Observability', description: 'Recent traces, span detail, and Grafana handoff', path: '/observability', section: 'Pages', keywords: ['traces', 'otel', 'grafana', 'tempo'] },
   ];
 
   if (canManageCompany(role)) {
@@ -282,7 +283,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             id: `tool-${tool.id}`,
             label: tool.name,
             description: tool.description || `${tool.type} tool`,
-            path: '/tools',
+            path: `/tools?tool=${tool.id}`,
             section: 'Tools' as const,
             keywords: [tool.type],
           })),

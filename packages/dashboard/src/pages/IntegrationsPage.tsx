@@ -10,6 +10,7 @@ type IntegrationsOverview = {
     signing_secret_configured: boolean;
     events_url: string;
     slash_command_url: string;
+    interactions_url: string;
     slash_command_name: string;
     example_payload: {
       command: string;
@@ -325,6 +326,7 @@ export default function IntegrationsPage() {
                 value={overview.slack.signing_secret_configured ? 'Configured' : 'Missing'}
               />
               <StatusRow label="Slash command" value={overview.slack.slash_command_name} />
+              <StatusRow label="Approval actions" value="Slack interactivity enabled" />
             </IntegrationCard>
 
             <IntegrationCard
@@ -349,6 +351,7 @@ export default function IntegrationsPage() {
               lines={[
                 { label: 'Events URL', value: overview.slack.events_url },
                 { label: 'Slash Command URL', value: overview.slack.slash_command_url },
+                { label: 'Interactions URL', value: overview.slack.interactions_url },
               ]}
             />
             <SetupPanel

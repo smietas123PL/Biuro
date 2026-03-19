@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Biuro Dashboards
+    orgId: 1
+    folder: Autonomiczne Biuro
+    type: file
+    disableDeletion: true
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

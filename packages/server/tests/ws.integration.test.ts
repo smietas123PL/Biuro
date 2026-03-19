@@ -8,11 +8,14 @@ const dbMock = vi.hoisted(() => ({
 
 const envMock = vi.hoisted(() => ({
   AUTH_ENABLED: true,
+  WS_RATE_LIMIT_WINDOW_MS: 60_000,
+  WS_RATE_LIMIT_MAX: 30,
 }));
 
 const loggerMock = vi.hoisted(() => ({
   info: vi.fn(),
   error: vi.fn(),
+  warn: vi.fn(),
 }));
 
 vi.mock('../src/db/client.js', () => ({
@@ -103,7 +106,10 @@ describe('websocket authorization', () => {
     dbMock.query.mockReset();
     loggerMock.info.mockReset();
     loggerMock.error.mockReset();
+    loggerMock.warn.mockReset();
     envMock.AUTH_ENABLED = true;
+    envMock.WS_RATE_LIMIT_WINDOW_MS = 60_000;
+    envMock.WS_RATE_LIMIT_MAX = 30;
 
     server = createServer();
     hub = initWSHub(server);
@@ -167,6 +173,27 @@ describe('websocket authorization', () => {
     await new Promise<void>((resolve) => {
       ws.close(1000, 'done');
       ws.once('close', () => resolve());
+    });
+  });
+
+  it('rejects websocket connections when the client exceeds the configured connection rate limit', async () => {
+    envMock.WS_RATE_LIMIT_MAX = 1;
+    envMock.WS_RATE_LIMIT_WINDOW_MS = 60_000;
+    envMock.AUTH_ENABLED = false;
+
+    const firstSocket = await openSocket(buildWsUrl(server, { companyId: 'company-1' }));
+    const secondResult = await waitForClose(buildWsUrl(server, { companyId: 'company-1' }));
+
+    expect(secondResult.code).toBe(4429);
+    expect(secondResult.reason).toBe('Too many websocket connection attempts');
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      { clientIp: '127.0.0.1' },
+      'WS connection rate limit exceeded'
+    );
+
+    await new Promise<void>((resolve) => {
+      firstSocket.close(1000, 'done');
+      firstSocket.once('close', () => resolve());
     });
   });
 });

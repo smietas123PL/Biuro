@@ -48,6 +48,16 @@ export interface AgentResponse {
     output_tokens: number;
     cost_usd: number;
   };
+  routing?: {
+    selected_runtime: string;
+    selected_model: string;
+    attempts: Array<{
+      runtime: string;
+      model: string;
+      status: 'success' | 'fallback' | 'failed';
+      reason?: string;
+    }>;
+  };
 }
 
 export interface AgentContext {

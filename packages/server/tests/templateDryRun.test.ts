@@ -206,6 +206,6 @@ describe('buildTemplateImportDryRun', () => {
       throw new Error('Expected template to parse successfully');
     }
 
-    expect(parsed.data.agents[0]?.runtime).toBe('claude');
+    expect(parsed.data.agents[0]?.runtime).toBe('gemini');
   });
 });

@@ -9,7 +9,7 @@ const initialForm = {
   name: '',
   role: '',
   title: '',
-  runtime: 'claude',
+  runtime: 'gemini',
   system_prompt: '',
   monthly_budget_usd: '10',
   reports_to: '',

@@ -7,11 +7,30 @@ import { db } from './db/client.js';
 import routes from './routes/index.js';
 import { createServer } from 'http';
 import { initWSHub } from './ws.js';
+import { MCPService } from './services/mcp.js';
+import { observabilityMiddleware, metricsHandler } from './observability/http.js';
+import { initializeTracing, shutdownTracing } from './observability/tracing.js';
+import {
+  closeRealtimeEventBus,
+  initializeRealtimeEventBus,
+  subscribeToCompanyEvents,
+} from './realtime/eventBus.js';
+
+initializeTracing({
+  serviceName: `${env.OTEL_SERVICE_NAME}-api`,
+  enableConsoleExporter: env.OTEL_TRACE_CONSOLE_EXPORTER,
+  historyLimit: env.OTEL_TRACE_HISTORY_LIMIT,
+  otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+});
 
 const app = express();
 const server = createServer(app);
 const wsHub = initWSHub(server);
+const unsubscribeRealtimeEvents = subscribeToCompanyEvents('api-ws-hub', async (envelope) => {
+  wsHub.broadcast(envelope.companyId, envelope.event, envelope.data);
+});
 const allowedOrigins = new Set(env.ALLOWED_ORIGINS);
+let shuttingDown = false;
 
 const captureRawBody: Parameters<typeof express.json>[0]['verify'] = (req, _res, buffer, encoding) => {
   if (buffer.length === 0) {
@@ -38,10 +57,12 @@ app.use(cors({
 }));
 app.use(express.json({ verify: captureRawBody }));
 app.use(express.urlencoded({ extended: false, verify: captureRawBody }));
+app.use(observabilityMiddleware);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
 });
+app.get('/metrics', metricsHandler);
 
 // Routes
 app.use('/api', routes);
@@ -52,11 +73,62 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(500).json({ error: 'Internal server error' });
 });
 
+async function stopHttpServer() {
+  if (!server.listening) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function shutdown(signal: string, exitCode: number = 0) {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+  logger.info({ signal }, 'Stopping API server');
+
+  const forceExitTimer = setTimeout(() => {
+    logger.error({ signal }, 'Forcing API server shutdown after timeout');
+    process.exit(exitCode === 0 ? 1 : exitCode);
+  }, 10_000);
+  forceExitTimer.unref();
+
+  try {
+    await stopHttpServer();
+    unsubscribeRealtimeEvents();
+    await closeRealtimeEventBus();
+    await MCPService.closeAllClients();
+    await shutdownTracing();
+    await db.close();
+    clearTimeout(forceExitTimer);
+    logger.info('API server stopped cleanly');
+    process.exit(exitCode);
+  } catch (err) {
+    clearTimeout(forceExitTimer);
+    logger.error({ err, signal }, 'API server shutdown failed');
+    process.exit(1);
+  }
+}
+
 const start = async () => {
   try {
     // Test DB connection
     await db.query('SELECT 1');
     logger.info('Database connected');
+    await initializeRealtimeEventBus({
+      serviceName: 'api',
+      subscribe: true,
+    });
 
     // API Server doesn't run heartbeats anymore (offloaded to worker)
     // const { startOrchestrator } = await import('./orchestrator/scheduler.js');
@@ -72,3 +144,21 @@ const start = async () => {
 };
 
 start();
+
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'API server crashed with uncaught exception');
+  void shutdown('uncaughtException', 1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'API server crashed with unhandled rejection');
+  void shutdown('unhandledRejection', 1);
+});

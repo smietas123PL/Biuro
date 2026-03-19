@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireRole } from '../middleware/auth.js';
+import { resolveApproval } from '../governance/approvals.js';
 
 const router: Router = Router();
 
@@ -32,13 +33,14 @@ router.get('/', requireRole(['owner', 'admin']), async (req, res, next) => {
 // Resolve approval
 router.post('/:id/resolve', requireRole(['owner', 'admin']), async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { status, notes } = req.body;
-    const result = await db.query(
-      "UPDATE approvals SET status = $1, resolution_notes = $2, resolved_at = now() WHERE id = $3 RETURNING *",
-      [status, notes, id]
-    );
-    res.json(result.rows[0]);
+    const result = await resolveApproval(id, status, notes, {
+      source: 'dashboard',
+      resolvedBy: 'dashboard-user',
+    });
+    if (!result) return res.status(404).json({ error: 'Approval not found' });
+    res.json(result);
   } catch (err) { next(err); }
 });
 

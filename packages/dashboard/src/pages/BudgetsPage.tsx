@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, WalletCards } from 'lucide-react';
-import { useApi } from '../hooks/useApi';
+import { useApi, useWebSocket } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
 
 type BudgetAgent = {
@@ -72,10 +72,33 @@ const emptySummary: BudgetSummary = {
   agents: [],
 };
 
+type BudgetToast = {
+  id: string;
+  tone: 'warning' | 'critical';
+  message: string;
+};
+
 export default function BudgetsPage() {
   const { request, loading, error } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
   const [summary, setSummary] = useState<BudgetSummary>(emptySummary);
+  const [liveMessage, setLiveMessage] = useState<string | null>(null);
+  const [budgetToasts, setBudgetToasts] = useState<BudgetToast[]>([]);
+  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as
+    | {
+        event: string;
+        data?: {
+          daily_cost_usd?: number;
+          delta_cost_usd?: number;
+          message?: string;
+          tone?: 'warning' | 'critical';
+          agentName?: string;
+          agent_name?: string;
+          threshold_pct?: number;
+        };
+        timestamp: string;
+      }
+    | null;
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -84,12 +107,76 @@ export default function BudgetsPage() {
         return;
       }
 
-      const data = await request(`/companies/${selectedCompanyId}/budgets-summary`);
+      const data = await request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
+        suppressError: true,
+        trackTrace: false,
+      });
       setSummary(data);
     };
 
     void fetchSummary();
   }, [request, selectedCompanyId]);
+
+  useEffect(() => {
+    if (!lastEvent || !selectedCompanyId) {
+      return;
+    }
+
+    if (lastEvent.event === 'cost.updated') {
+      if (
+        typeof lastEvent.data?.delta_cost_usd === 'number' &&
+        typeof lastEvent.data?.daily_cost_usd === 'number'
+      ) {
+        setLiveMessage(
+          `Live update: +$${lastEvent.data.delta_cost_usd.toFixed(4)} heartbeat, $${lastEvent.data.daily_cost_usd.toFixed(4)} today.`
+        );
+      }
+
+      void request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
+        suppressError: true,
+        trackTrace: false,
+      }).then((data) => setSummary(data as BudgetSummary));
+    }
+
+    if (lastEvent.event === 'budget.threshold') {
+      const tone: BudgetToast['tone'] = lastEvent.data?.tone === 'critical' ? 'critical' : 'warning';
+      setBudgetToasts((current) => [
+        {
+          id: `${lastEvent.timestamp}-${lastEvent.data?.threshold_pct ?? 80}`,
+          tone,
+          message:
+            lastEvent.data?.message ??
+            `${lastEvent.data?.agent_name ?? lastEvent.data?.agentName ?? 'Agent'} crossed a budget threshold.`,
+        },
+        ...current,
+      ].slice(0, 3));
+      void request(`/companies/${selectedCompanyId}/budgets-summary`, undefined, {
+        suppressError: true,
+        trackTrace: false,
+      }).then((data) => setSummary(data as BudgetSummary));
+    }
+  }, [lastEvent, request, selectedCompanyId]);
+
+  useEffect(() => {
+    if (!liveMessage) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setLiveMessage(null), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [liveMessage]);
+
+  useEffect(() => {
+    if (budgetToasts.length === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setBudgetToasts((current) => current.slice(0, -1));
+    }, 5000);
+
+    return () => window.clearTimeout(timeout);
+  }, [budgetToasts]);
 
   if (!selectedCompany) {
     return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to review budgets.</div>;
@@ -99,6 +186,24 @@ export default function BudgetsPage() {
 
   return (
     <div className="space-y-6">
+      {budgetToasts.length > 0 && (
+        <div className="fixed right-4 top-4 z-40 space-y-3">
+          {budgetToasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`w-[320px] rounded-2xl border px-4 py-3 shadow-lg ${
+                toast.tone === 'critical'
+                  ? 'border-red-200 bg-red-50 text-red-800'
+                  : 'border-amber-200 bg-amber-50 text-amber-800'
+              }`}
+            >
+              <div className="text-sm font-semibold">Budget alert</div>
+              <div className="mt-1 text-sm">{toast.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Budgets</h2>
@@ -107,6 +212,49 @@ export default function BudgetsPage() {
         <div className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm text-muted-foreground">
           <WalletCards className="h-4 w-4 text-emerald-600" />
           Available credits: <span className="font-semibold text-foreground">${summary.balance_usd.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Budget Mode</div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            This page auto-refreshes on heartbeat cost events and budget threshold alerts.
+          </div>
+          {liveMessage && (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {liveMessage}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Company Budget Gauge</div>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <div className="text-4xl font-semibold tracking-tight">
+              {summary.totals.utilization_pct === null ? 'No cap' : `${summary.totals.utilization_pct.toFixed(0)}%`}
+            </div>
+            <div className="text-right text-sm text-muted-foreground">
+              <div>${summary.totals.spent_usd.toFixed(2)} spent</div>
+              <div>${summary.totals.limit_usd.toFixed(2)} limit</div>
+            </div>
+          </div>
+          <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted/30">
+            <div
+              className={`h-full rounded-full transition-all ${
+                summary.totals.utilization_pct !== null && summary.totals.utilization_pct >= 95
+                  ? 'bg-red-500'
+                  : summary.totals.utilization_pct !== null && summary.totals.utilization_pct >= 80
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-500'
+              }`}
+              style={{ width: `${summary.totals.utilization_pct === null ? 0 : Math.max(Math.min(summary.totals.utilization_pct, 100), 4)}%` }}
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Warning at 80%, critical at 95%</span>
+            <span>${summary.totals.remaining_usd.toFixed(2)} remaining</span>
+          </div>
         </div>
       </div>
 
@@ -248,13 +396,25 @@ export default function BudgetsPage() {
                     <span className="text-muted-foreground">
                       ${agent.spent_usd.toFixed(2)} spent of ${agent.limit_usd.toFixed(2)}
                     </span>
-                    <span className="font-medium text-foreground">
-                      {agent.utilization_pct === null ? 'No limit' : `${agent.utilization_pct.toFixed(0)}%`}
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-medium uppercase tracking-wide ${
+                      agent.utilization_pct !== null && agent.utilization_pct >= 95
+                        ? 'bg-red-100 text-red-700'
+                        : agent.utilization_pct !== null && agent.utilization_pct >= 80
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {agent.utilization_pct === null ? 'No limit' : `${agent.utilization_pct.toFixed(0)}% used`}
                     </span>
                   </div>
                   <div className="h-3 overflow-hidden rounded-full bg-background">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 transition-all"
+                      className={`h-full rounded-full transition-all ${
+                        agent.utilization_pct !== null && agent.utilization_pct >= 95
+                          ? 'bg-red-500'
+                          : agent.utilization_pct !== null && agent.utilization_pct >= 80
+                            ? 'bg-amber-400'
+                            : 'bg-emerald-500'
+                      }`}
                       style={{ width: `${agent.utilization_pct === null ? 0 : Math.max(Math.min(agent.utilization_pct, 100), 4)}%` }}
                     />
                   </div>

@@ -56,6 +56,29 @@ describe('buildAgentContext integration flows', () => {
         };
       }
 
+      if (text.includes('FROM tools t') && text.includes('JOIN agent_tools at')) {
+        return {
+          rows: [
+            {
+              id: 'tool-1',
+              name: 'web_search',
+              type: 'builtin',
+              description: 'Search public web results for current information.',
+              config: {},
+              agent_tool_config: {},
+            },
+            {
+              id: 'tool-2',
+              name: 'workspace_shell',
+              type: 'bash',
+              description: 'Run a safe shell command from the approved list.',
+              config: { allowed_commands: ['ls', 'cat package.json'] },
+              agent_tool_config: { allowed_commands: ['ls', 'cat package.json'] },
+            },
+          ],
+        };
+      }
+
       if (text.includes('WITH RECURSIVE goal_path')) {
         return {
           rows: [{ title: 'Improve retention' }, { title: 'Investigate churn' }],
@@ -82,6 +105,10 @@ describe('buildAgentContext integration flows', () => {
 
     expect(context.company_name).toBe('QA Test Corp');
     expect(context.goal_hierarchy).toEqual(['Improve retention', 'Investigate churn']);
+    expect(context.additional_context).toContain('AVAILABLE TOOLS:');
+    expect(context.additional_context).toContain('- web_search [builtin]');
+    expect(context.additional_context).toContain('tool_name":"web_search"');
+    expect(context.additional_context).toContain('Allowed commands: ls, cat package.json');
     expect(context.history).toEqual([
       { role: 'user', content: 'Please focus on enterprise users.', metadata: null },
       { role: 'assistant', content: 'I started the analysis.', metadata: { step: 1 } },
@@ -134,6 +161,10 @@ describe('buildAgentContext integration flows', () => {
             },
           ],
         };
+      }
+
+      if (text.includes('FROM tools t') && text.includes('JOIN agent_tools at')) {
+        return { rows: [] };
       }
 
       if (text.includes('FROM messages')) {

@@ -13,6 +13,7 @@ describe('useApi', () => {
       ok: true,
       status: 200,
       json: async () => ({ ok: true }),
+      headers: new Headers({ 'x-trace-id': 'trace-auth-123' }),
     });
 
     vi.stubGlobal('fetch', fetchMock);
@@ -42,6 +43,12 @@ describe('useApi', () => {
     );
     expect(result.current.error).toBeNull();
     expect(result.current.loading).toBe(false);
+    expect(result.current.lastTrace).toMatchObject({
+      traceId: 'trace-auth-123',
+      path: '/integrations/config',
+      method: 'PATCH',
+      status: 200,
+    });
   });
 
   it('clears the local session after a 401 response', async () => {
@@ -49,6 +56,7 @@ describe('useApi', () => {
       ok: false,
       status: 401,
       json: async () => ({ error: 'Unauthorized' }),
+      headers: new Headers({ 'x-trace-id': 'trace-401' }),
     });
 
     vi.stubGlobal('fetch', fetchMock);
@@ -73,5 +81,57 @@ describe('useApi', () => {
     expect(localStorage.getItem(COMPANY_STORAGE_KEY)).toBeNull();
     expect(result.current.error).toBe('Unauthorized');
     expect(result.current.loading).toBe(false);
+    expect(result.current.lastTrace).toMatchObject({
+      traceId: 'trace-401',
+      status: 401,
+    });
+  });
+
+  it('retries safe requests after transient network failures', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, source: 'retry' }),
+        headers: new Headers({ 'x-trace-id': 'trace-retry-2' }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useApi());
+
+    let response: unknown = null;
+    await act(async () => {
+      response = await result.current.request('/companies');
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response).toEqual({ ok: true, source: 'retry' });
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.lastTrace?.traceId).toBe('trace-retry-2');
+  });
+
+  it('can skip trace tracking for internal observability requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+      headers: new Headers({ 'x-trace-id': 'trace-hidden' }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useApi());
+
+    await act(async () => {
+      await result.current.request('/observability/traces/trace-hidden', undefined, {
+        trackTrace: false,
+      });
+    });
+
+    expect(result.current.lastTrace).toBeNull();
   });
 });

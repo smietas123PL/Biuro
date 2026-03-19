@@ -14,10 +14,11 @@ const evaluatePolicyMock = vi.hoisted(() => vi.fn());
 const createApprovalRequestMock = vi.hoisted(() => vi.fn());
 const checkSafetyMock = vi.hoisted(() => vi.fn());
 const autoPauseAgentMock = vi.hoisted(() => vi.fn());
-const broadcastMock = vi.hoisted(() => vi.fn());
-const getWSHubMock = vi.hoisted(() => vi.fn(() => ({ broadcast: broadcastMock })));
+const broadcastCompanyEventMock = vi.hoisted(() => vi.fn());
 const findRelatedMemoriesMock = vi.hoisted(() => vi.fn());
 const storeMemoryMock = vi.hoisted(() => vi.fn());
+const alertSlackMock = vi.hoisted(() => vi.fn());
+const alertDiscordMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -54,13 +55,20 @@ vi.mock('../src/orchestrator/safety.js', () => ({
   autoPauseAgent: autoPauseAgentMock,
 }));
 
-vi.mock('../src/ws.js', () => ({
-  getWSHub: getWSHubMock,
+vi.mock('../src/realtime/eventBus.js', () => ({
+  broadcastCompanyEvent: broadcastCompanyEventMock,
 }));
 
 vi.mock('../src/orchestrator/memory.js', () => ({
   findRelatedMemories: findRelatedMemoriesMock,
   storeMemory: storeMemoryMock,
+}));
+
+vi.mock('../src/services/notifications.js', () => ({
+  NotificationService: {
+    alertSlack: alertSlackMock,
+    alertDiscord: alertDiscordMock,
+  },
 }));
 
 import { applyAgentBudgetSpend, processAgentHeartbeat } from '../src/orchestrator/heartbeat.js';
@@ -78,10 +86,11 @@ describe('heartbeat integration flows', () => {
     createApprovalRequestMock.mockReset();
     checkSafetyMock.mockReset();
     autoPauseAgentMock.mockReset();
-    broadcastMock.mockReset();
-    getWSHubMock.mockClear();
+    broadcastCompanyEventMock.mockReset();
     findRelatedMemoriesMock.mockReset();
     storeMemoryMock.mockReset();
+    alertSlackMock.mockReset();
+    alertDiscordMock.mockReset();
   });
 
   it('keeps budget updates atomic and reports a capped spend path', async () => {
@@ -161,6 +170,10 @@ describe('heartbeat integration flows', () => {
         return { rows: [{ runtime: 'openai', name: 'Ada' }] };
       }
 
+      if (text === 'SELECT config FROM companies WHERE id = $1') {
+        return { rows: [{ config: { llm_primary_runtime: 'gemini', llm_fallback_order: ['gemini', 'claude', 'openai'] } }] };
+      }
+
       if (text === 'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2') {
         return { rows: [] };
       }
@@ -193,10 +206,18 @@ describe('heartbeat integration flows', () => {
 
     expect(auditDetails.budget_capped).toBe(true);
     expect(heartbeatDetails.budget_capped).toBe(true);
-    expect(broadcastMock).toHaveBeenCalledWith('company-1', 'agent.working', expect.objectContaining({
-      agentId: 'agent-1',
-      taskId: 'task-1',
-    }));
+    expect(getRuntimeMock).toHaveBeenCalledWith('gemini', {
+      fallbackOrder: ['gemini', 'claude', 'openai'],
+    });
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      'company-1',
+      'agent.working',
+      expect.objectContaining({
+        agentId: 'agent-1',
+        taskId: 'task-1',
+      }),
+      'worker'
+    );
   });
 
   it('uses a single atomic checkout query when claiming the next task', async () => {
@@ -251,4 +272,122 @@ describe('heartbeat integration flows', () => {
       reason: 'no eligible tasks',
     });
   });
+
+  it('broadcasts live cost updates and sends a one-time budget threshold alert', async () => {
+    evaluatePolicyMock.mockResolvedValue({ allowed: true, requires_approval: false });
+    checkSafetyMock.mockResolvedValue({ ok: true });
+    findRelatedMemoriesMock.mockResolvedValue([]);
+    buildAgentContextMock.mockResolvedValue({
+      company_name: 'QA Test Corp',
+      company_mission: 'Ship reliable software',
+      agent_name: 'Ada',
+      agent_role: 'Researcher',
+      goal_hierarchy: [],
+      current_task: {
+        title: 'Investigate churn',
+        description: 'Look for the churn drivers.',
+      },
+      history: [],
+    });
+    runtimeExecuteMock.mockResolvedValue({
+      thought: 'Done.',
+      actions: [],
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cost_usd: 1.5,
+      },
+    });
+    dbMock.transaction.mockImplementation(async (fn: (client: { query: typeof dbMock.query }) => Promise<unknown>) =>
+      fn({
+        query: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              id: 'task-1',
+              company_id: 'company-1',
+              title: 'Investigate churn',
+              description: 'Look for the churn drivers.',
+            },
+          ],
+        }),
+      } as never)
+    );
+    dbMock.query.mockImplementation(async (text: string) => {
+      if (text.includes("UPDATE agents SET status = 'working'")) {
+        return { rows: [{ id: 'agent-1', company_id: 'company-1' }] };
+      }
+
+      if (text === 'SELECT runtime, name FROM agents WHERE id = $1') {
+        return { rows: [{ runtime: 'openai', name: 'Ada' }] };
+      }
+
+      if (text === 'SELECT config FROM companies WHERE id = $1') {
+        return { rows: [{ config: { llm_primary_runtime: 'gemini', llm_fallback_order: ['gemini', 'claude', 'openai'] } }] };
+      }
+
+      if (text === 'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2') {
+        return { rows: [] };
+      }
+
+      if (text.includes('WITH seeded_budget AS')) {
+        return { rows: [{ spent_usd: 8.2, limit_usd: 10 }] };
+      }
+
+      if (text.includes('CASE') && text.includes('FROM budgets')) {
+        return { rows: [{ spent_usd: 8.2, limit_usd: 10, utilization_pct: 82 }] };
+      }
+
+      if (text.includes("FROM audit_log") && text.includes("details->>'threshold_pct'")) {
+        return { rows: [] };
+      }
+
+      if (text.includes('SELECT COALESCE(SUM(cost_usd), 0)::float AS total')) {
+        return { rows: [{ total: 5.75 }] };
+      }
+
+      if (text === 'SELECT slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1') {
+        return { rows: [{ slack_webhook_url: 'https://hooks.slack.test/services/alerts', discord_webhook_url: null }] };
+      }
+
+      return { rows: [] };
+    });
+    alertSlackMock.mockResolvedValue({ ok: true });
+
+    await processAgentHeartbeat('agent-1');
+
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      'company-1',
+      'budget.updated',
+      expect.objectContaining({
+        agent_id: 'agent-1',
+        utilization_pct: 82,
+      }),
+      'worker'
+    );
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      'company-1',
+      'budget.threshold',
+      expect.objectContaining({
+        agent_id: 'agent-1',
+        threshold_pct: 80,
+        tone: 'warning',
+      }),
+      'worker'
+    );
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      'company-1',
+      'cost.updated',
+      expect.objectContaining({
+        agent_id: 'agent-1',
+        daily_cost_usd: 5.75,
+        delta_cost_usd: 1.5,
+      }),
+      'worker'
+    );
+    expect(alertSlackMock).toHaveBeenCalledWith(
+      'https://hooks.slack.test/services/alerts',
+      expect.stringContaining('Ada reached 82.0% of monthly budget')
+    );
+  });
+
 });

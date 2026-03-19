@@ -1,4 +1,4 @@
-import { afterEach } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -6,4 +6,6 @@ import { cleanup } from '@testing-library/react';
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });

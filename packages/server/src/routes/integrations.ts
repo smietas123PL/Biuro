@@ -153,12 +153,13 @@ router.get('/overview', requireRole(['owner', 'admin']), async (req, res, next) 
         configured: Boolean(env.SLACK_SIGNING_SECRET),
         signing_secret_configured: Boolean(env.SLACK_SIGNING_SECRET),
         events_url: `${baseUrl}/api/integrations/slack/events`,
-        slash_command_url: `${baseUrl}/api/integrations/slack/command`,
-        slash_command_name: '/biuro-task',
-        example_payload: {
-          command: '/biuro-task',
-          text: 'Analyze Q4 revenue patterns',
-          company_id: companyId,
+      slash_command_url: `${baseUrl}/api/integrations/slack/command`,
+      interactions_url: `${baseUrl}/api/integrations/slack/interactions`,
+      slash_command_name: '/biuro-task',
+      example_payload: {
+        command: '/biuro-task',
+        text: 'Analyze Q4 revenue patterns',
+        company_id: companyId,
         },
       },
       discord: {
@@ -318,6 +319,31 @@ router.post('/slack/command', async (req: RawBodyRequest, res) => {
   const { command, text, company_id } = req.body;
   const result = await IntegrationService.handleSlashCommand(command, text, company_id);
   res.send({ text: result });
+});
+
+router.post('/slack/interactions', async (req: RawBodyRequest, res) => {
+  try {
+    if (!verifySlackSignature(req)) {
+      return res.status(401).json({ error: 'Invalid Slack signature' });
+    }
+  } catch (err: any) {
+    return res.status(503).json({ error: err.message });
+  }
+
+  const payloadRaw = typeof req.body?.payload === 'string' ? req.body.payload : null;
+  if (!payloadRaw) {
+    return res.status(400).json({ error: 'Missing Slack interaction payload' });
+  }
+
+  let payload: any;
+  try {
+    payload = JSON.parse(payloadRaw);
+  } catch {
+    return res.status(400).json({ error: 'Invalid Slack interaction payload' });
+  }
+
+  const result = await IntegrationService.handleSlackInteraction(payload);
+  res.json(result);
 });
 
 router.post('/discord/webhook', async (req, res) => {

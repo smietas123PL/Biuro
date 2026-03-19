@@ -1,0 +1,171 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import TemplatesPage from './TemplatesPage';
+
+const requestMock = vi.hoisted(() => vi.fn());
+const useApiMock = vi.hoisted(() => vi.fn());
+const useCompanyMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../hooks/useApi', () => ({
+  useApi: () => useApiMock(),
+}));
+
+vi.mock('../context/CompanyContext', () => ({
+  useCompany: () => useCompanyMock(),
+}));
+
+describe('TemplatesPage', () => {
+  beforeEach(() => {
+    requestMock.mockReset();
+    useApiMock.mockReset();
+    useCompanyMock.mockReset();
+
+    useApiMock.mockReturnValue({
+      request: requestMock,
+      loading: false,
+      error: null,
+    });
+    useCompanyMock.mockReturnValue({
+      selectedCompany: { id: 'company-1', name: 'QA Test Corp' },
+      selectedCompanyId: 'company-1',
+    });
+  });
+
+  it('loads marketplace templates and installs them through the dry-run flow', async () => {
+    requestMock
+      .mockResolvedValueOnce([
+        {
+          id: 'local-1',
+          name: 'Local Starter',
+          description: 'Local preset',
+          recommended_for: 'Internal teams',
+          summary: { goals: 1, agents: 1, tools: 1, policies: 1 },
+        },
+      ])
+      .mockResolvedValueOnce({
+        catalog: {
+          name: 'Biuro Marketplace',
+          source_type: 'remote',
+          source_url: 'https://marketplace.test/templates.json',
+        },
+        templates: [
+          {
+            id: 'market-1',
+            name: 'Support Ops Pack',
+            description: 'External support template',
+            recommended_for: 'Ops teams',
+            vendor: 'Ops Guild',
+            categories: ['support', 'ops'],
+            badge: 'Featured',
+            source_url: 'https://marketplace.test/support-ops-pack',
+            summary: { goals: 3, agents: 2, tools: 2, policies: 1 },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        id: 'market-1',
+        name: 'Support Ops Pack',
+        description: 'External support template',
+        recommended_for: 'Ops teams',
+        vendor: 'Ops Guild',
+        categories: ['support', 'ops'],
+        badge: 'Featured',
+        source_url: 'https://marketplace.test/support-ops-pack',
+        template: {
+          company: { name: 'Support Ops Pack', mission: 'Run support ops.' },
+          goals: [{ title: 'Triage inbox' }],
+          agents: [{ name: 'Riley', role: 'ops_lead' }],
+          tools: [{ name: 'web_search', type: 'builtin' }],
+          policies: [{ name: 'Escalation guardrail', type: 'approval_required' }],
+        },
+      })
+      .mockResolvedValueOnce({
+        preview: {
+          preserve_company_identity: true,
+          company: { resulting_name: 'QA Test Corp', resulting_mission: 'Run support ops.' },
+          current: { goals: 1, agents: 1, tools: 1, policies: 1 },
+          incoming: { goals: 3, agents: 2, tools: 2, policies: 1 },
+          changes: { total_new_records: 5, tools_to_create: 1, tools_to_update: 1, budgets_to_add: 1 },
+          collisions: { agent_names: [], goal_titles: [], policy_names: [], tool_names: [] },
+          record_changes: {
+            goals_to_add: ['Triage inbox'],
+            agents_to_add: ['Riley'],
+            policies_to_add: ['Escalation guardrail'],
+            tools_to_create: ['web_search'],
+            tools_to_update: [],
+            budgets_to_add: [],
+          },
+          projected: {
+            goals: { count: 2, names: ['Triage inbox'] },
+            agents: { count: 2, names: ['Riley'] },
+            tools: { count: 2, names: ['web_search'] },
+            policies: { count: 2, names: ['Escalation guardrail'] },
+            budgets: { count: 1, agent_names: ['Riley'] },
+          },
+          warnings: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        template: { id: 'market-1', name: 'Support Ops Pack', vendor: 'Ops Guild' },
+      })
+      .mockResolvedValueOnce({
+        preview: {
+          preserve_company_identity: true,
+          company: { resulting_name: 'QA Test Corp', resulting_mission: 'Run support ops.' },
+          current: { goals: 1, agents: 1, tools: 1, policies: 1 },
+          incoming: { goals: 3, agents: 2, tools: 2, policies: 1 },
+          changes: { total_new_records: 5, tools_to_create: 1, tools_to_update: 1, budgets_to_add: 1 },
+          collisions: { agent_names: [], goal_titles: [], policy_names: [], tool_names: [] },
+          record_changes: {
+            goals_to_add: ['Triage inbox'],
+            agents_to_add: ['Riley'],
+            policies_to_add: ['Escalation guardrail'],
+            tools_to_create: ['web_search'],
+            tools_to_update: [],
+            budgets_to_add: [],
+          },
+          projected: {
+            goals: { count: 2, names: ['Triage inbox'] },
+            agents: { count: 2, names: ['Riley'] },
+            tools: { count: 2, names: ['web_search'] },
+            policies: { count: 2, names: ['Escalation guardrail'] },
+            budgets: { count: 1, agent_names: ['Riley'] },
+          },
+          warnings: [],
+        },
+      });
+
+    render(<TemplatesPage />);
+
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenNthCalledWith(1, '/templates/presets');
+      expect(requestMock).toHaveBeenNthCalledWith(2, '/templates/marketplace');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Biuro Marketplace')).toBeTruthy();
+    });
+
+    expect(screen.getAllByText('Support Ops Pack').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getByText(/Published by:/)).toBeTruthy();
+      expect(screen.getAllByText(/Ops Guild/).length).toBeGreaterThan(0);
+      expect(screen.getByText('Dry run before install')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('Type IMPORT to confirm'), {
+      target: { value: 'IMPORT' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Install Into QA Test Corp' }));
+
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenNthCalledWith(
+        5,
+        '/templates/import-marketplace/market-1',
+        { method: 'POST' }
+      );
+    });
+
+    expect(screen.getByText('Installed "Support Ops Pack" into QA Test Corp.')).toBeTruthy();
+  });
+});

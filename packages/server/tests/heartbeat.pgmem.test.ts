@@ -177,4 +177,5 @@ describe('heartbeat pg-mem scenarios', () => {
     expect(checkSafetyMock).not.toHaveBeenCalled();
     expect(broadcastMock).not.toHaveBeenCalled();
   });
+
 });

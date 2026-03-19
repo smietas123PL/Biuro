@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { History } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
+import { TraceLinkCallout } from '../components/TraceLinkCallout';
+import type { ApiTraceSnapshot } from '../hooks/useApi';
 
 type AuditLogItem = {
   id: string;
@@ -11,6 +13,17 @@ type AuditLogItem = {
   created_at: string;
 };
 
+type AuditRoutingDetails = {
+  selected_runtime: string;
+  selected_model: string;
+  attempts: Array<{
+    runtime: string;
+    model: string;
+    status: 'success' | 'fallback' | 'failed';
+    reason?: string;
+  }>;
+};
+
 type AuditLogResponse = {
   items: AuditLogItem[];
   has_more: boolean;
@@ -18,6 +31,15 @@ type AuditLogResponse = {
     created_at: string;
     id: string;
   } | null;
+};
+
+type RecentTraceResponse = {
+  items: Array<{
+    trace_id: string;
+    name: string;
+    start_time: string;
+    status_code: string;
+  }>;
 };
 
 type TemplatePreviewDetails = {
@@ -117,10 +139,42 @@ function buildAuditLogQuery(
   return `?${params.toString()}`;
 }
 
+function getAuditRouting(details?: Record<string, unknown> | null): AuditRoutingDetails | null {
+  const routing = details?.llm_routing;
+  if (!routing || typeof routing !== 'object') {
+    return null;
+  }
+
+  const selectedRuntime = (routing as { selected_runtime?: unknown }).selected_runtime;
+  const selectedModel = (routing as { selected_model?: unknown }).selected_model;
+  const attempts = (routing as { attempts?: unknown }).attempts;
+  if (typeof selectedRuntime !== 'string' || typeof selectedModel !== 'string') {
+    return null;
+  }
+
+  return {
+    selected_runtime: selectedRuntime,
+    selected_model: selectedModel,
+    attempts: Array.isArray(attempts)
+      ? attempts.filter((attempt) => attempt && typeof attempt === 'object')
+        .map((attempt) => ({
+          runtime: String((attempt as { runtime?: unknown }).runtime ?? 'unknown'),
+          model: String((attempt as { model?: unknown }).model ?? 'unknown'),
+          status: ((attempt as { status?: unknown }).status as AuditRoutingDetails['attempts'][number]['status']) ?? 'failed',
+          reason: typeof (attempt as { reason?: unknown }).reason === 'string'
+            ? String((attempt as { reason?: unknown }).reason)
+            : undefined,
+        }))
+      : [],
+  };
+}
+
 export default function AuditLogPage() {
   const { request, loading } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
+  const [recentTraces, setRecentTraces] = useState<ApiTraceSnapshot[]>([]);
+  const [recentTraceError, setRecentTraceError] = useState<string | null>(null);
   const [activeFilterId, setActiveFilterId] = useState<AuditFilter['id']>('all');
   const [activeRangeId, setActiveRangeId] = useState<AuditRange['id']>('7d');
   const [nextCursor, setNextCursor] = useState<AuditLogResponse['next_cursor']>(null);
@@ -148,6 +202,39 @@ export default function AuditLogPage() {
   useEffect(() => {
     void loadLogs();
   }, [activeFilterId, activeRangeId, selectedCompanyId]);
+
+  useEffect(() => {
+    const loadRecentTraces = async () => {
+      if (!selectedCompanyId) {
+        setRecentTraces([]);
+        setRecentTraceError(null);
+        return;
+      }
+
+      try {
+        const data = (await request('/observability/traces/recent?limit=6', undefined, {
+          suppressError: true,
+          trackTrace: false,
+        })) as RecentTraceResponse;
+
+        setRecentTraces(
+          (data.items ?? []).map((trace) => ({
+            traceId: trace.trace_id,
+            path: trace.name,
+            method: 'TRACE',
+            status: Number(trace.status_code) || 200,
+            capturedAt: trace.start_time,
+          }))
+        );
+        setRecentTraceError(null);
+      } catch (err) {
+        setRecentTraces([]);
+        setRecentTraceError(err instanceof Error ? err.message : 'Recent traces are unavailable.');
+      }
+    };
+
+    void loadRecentTraces();
+  }, [request, selectedCompanyId]);
 
   if (!selectedCompany) {
     return <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">Choose a company to inspect the audit log.</div>;
@@ -194,38 +281,78 @@ export default function AuditLogPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card">
-        <div className="divide-y">
-          {logs.map((log) => (
-            <AuditLogRow key={log.id} log={log} />
-          ))}
-          {logs.length === 0 && !loading && (
-            <div className="p-12 text-center italic text-muted-foreground">
-              No events logged for this filter and date range yet.
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <div className="divide-y">
+            {logs.map((log) => (
+              <AuditLogRow key={log.id} log={log} />
+            ))}
+            {logs.length === 0 && !loading && (
+              <div className="p-12 text-center italic text-muted-foreground">
+                No events logged for this filter and date range yet.
+              </div>
+            )}
+          </div>
+
+          {hasMore && (
+            <div className="border-t p-4">
+              <button
+                onClick={() => {
+                  setLoadingMore(true);
+                  void loadLogs(nextCursor, true).finally(() => setLoadingMore(false));
+                }}
+                disabled={loadingMore || !nextCursor}
+                className="w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loadingMore ? 'Loading more...' : 'Load more'}
+              </button>
             </div>
           )}
         </div>
 
-        {hasMore && (
-          <div className="border-t p-4">
-            <button
-              onClick={() => {
-                setLoadingMore(true);
-                void loadLogs(nextCursor, true).finally(() => setLoadingMore(false));
-              }}
-              disabled={loadingMore || !nextCursor}
-              className="w-full rounded-md border bg-background px-4 py-3 text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loadingMore ? 'Loading more...' : 'Load more'}
-            </button>
-          </div>
-        )}
+        <aside className="space-y-4">
+          <section className="rounded-2xl border bg-card p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">Recent Traces</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Fresh spans from the in-app observability buffer for quick debugging.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {recentTraces.map((trace) => (
+                <TraceLinkCallout
+                  key={trace.traceId}
+                  trace={trace}
+                  title={trace.path}
+                  body={`Captured ${new Date(trace.capturedAt).toLocaleString()} with status ${trace.status}.`}
+                  compact
+                />
+              ))}
+
+              {recentTraces.length === 0 && !recentTraceError && (
+                <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+                  Recent traces will appear here once the API records fresh spans for your session.
+                </div>
+              )}
+
+              {recentTraceError && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  {recentTraceError}
+                </div>
+              )}
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   );
 }
 
 function AuditLogRow({ log }: { log: AuditLogItem }) {
+  const routing = getAuditRouting(log.details);
   const templatePreview = log.action === 'template.previewed'
     ? (log.details as TemplatePreviewDetails | null)
     : null;
@@ -319,6 +446,28 @@ function AuditLogRow({ log }: { log: AuditLogItem }) {
             <div className="text-sm text-muted-foreground">
               Agent: <span className="text-foreground">{log.agent_id?.split('-')[0] || 'System'}</span>
             </div>
+            {routing ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
+                    Provider {routing.selected_runtime}
+                  </span>
+                  <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+                    Model {routing.selected_model}
+                  </span>
+                  <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+                    Fallbacks {routing.attempts.filter((attempt) => attempt.status === 'fallback').length}
+                  </span>
+                </div>
+
+                <AuditMetricBlock
+                  title="LLM routing"
+                  lines={routing.attempts.map((attempt) => (
+                    `${attempt.runtime} / ${attempt.model} • ${attempt.status}${attempt.reason ? ` • ${attempt.reason}` : ''}`
+                  ))}
+                />
+              </div>
+            ) : null}
             {log.details && (
               <pre className="mt-2 max-h-24 overflow-auto rounded bg-muted p-2 text-xs">
                 {JSON.stringify(log.details, null, 2)}

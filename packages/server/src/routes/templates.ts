@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CompanyTemplateSchema, TemplateService, buildTemplatePreviewAuditDetails } from '../services/template.js';
 import { requireRole } from '../middleware/auth.js';
 import { getTemplatePresetById, listTemplatePresets } from '../services/templatePresets.js';
+import { getMarketplaceTemplateById, listMarketplaceTemplates } from '../services/templateMarketplace.js';
 import { db } from '../db/client.js';
 import type { AuthRequest } from '../utils/context.js';
 
@@ -13,6 +14,114 @@ function getPresetIdParam(value: string | string[] | undefined) {
 
 router.get('/presets', requireRole(['owner', 'admin', 'member', 'viewer']), (_req, res) => {
   res.json(listTemplatePresets());
+});
+
+router.get('/marketplace', requireRole(['owner', 'admin', 'member', 'viewer']), async (_req, res) => {
+  res.json(await listMarketplaceTemplates());
+});
+
+router.get('/marketplace/:id', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res) => {
+  const marketplaceId = getPresetIdParam(req.params.id);
+  if (!marketplaceId) {
+    return res.status(400).json({ error: 'Invalid marketplace template ID' });
+  }
+
+  const entry = await getMarketplaceTemplateById(marketplaceId);
+  if (!entry) {
+    return res.status(404).json({ error: 'Marketplace template not found' });
+  }
+
+  res.json(entry);
+});
+
+router.get('/marketplace/:id/dry-run', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res) => {
+  const companyId = req.header('x-company-id');
+  if (!companyId) {
+    return res.status(400).json({ error: 'Missing company ID' });
+  }
+
+  const marketplaceId = getPresetIdParam(req.params.id);
+  if (!marketplaceId) {
+    return res.status(400).json({ error: 'Invalid marketplace template ID' });
+  }
+
+  const entry = await getMarketplaceTemplateById(marketplaceId);
+  if (!entry) {
+    return res.status(404).json({ error: 'Marketplace template not found' });
+  }
+
+  try {
+    const preview = await TemplateService.previewImport(companyId, entry.template, {
+      preserveCompanyIdentity: true,
+    });
+    res.json({
+      template: {
+        id: entry.id,
+        name: entry.name,
+        vendor: entry.vendor,
+        source_url: entry.source_url,
+      },
+      preview,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Marketplace dry run failed' });
+  }
+});
+
+router.post('/marketplace/:id/save-preview', requireRole(['owner', 'admin', 'member', 'viewer']), async (req: AuthRequest, res) => {
+  const companyId = req.header('x-company-id');
+  if (!companyId) {
+    return res.status(400).json({ error: 'Missing company ID' });
+  }
+
+  const marketplaceId = getPresetIdParam(req.params.id);
+  if (!marketplaceId) {
+    return res.status(400).json({ error: 'Invalid marketplace template ID' });
+  }
+
+  const entry = await getMarketplaceTemplateById(marketplaceId);
+  if (!entry) {
+    return res.status(404).json({ error: 'Marketplace template not found' });
+  }
+
+  try {
+    const preview = await TemplateService.previewImport(companyId, entry.template, {
+      preserveCompanyIdentity: true,
+    });
+    const details = buildTemplatePreviewAuditDetails({
+      presetId: entry.id,
+      presetName: entry.name,
+      preview,
+      userId: req.user?.id,
+      role: req.user?.role,
+    });
+
+    await db.query(
+      `INSERT INTO audit_log (company_id, action, entity_type, details)
+       VALUES ($1, 'template.previewed', 'template_marketplace', $2)`,
+      [
+        companyId,
+        JSON.stringify({
+          ...details,
+          source: 'marketplace',
+          vendor: entry.vendor,
+          source_url: entry.source_url,
+        }),
+      ]
+    );
+
+    res.status(201).json({
+      saved: true,
+      template: {
+        id: entry.id,
+        name: entry.name,
+        vendor: entry.vendor,
+      },
+      preview,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Saving marketplace preview failed' });
+  }
 });
 
 router.get('/presets/:id', requireRole(['owner', 'admin', 'member', 'viewer']), (req, res) => {
@@ -209,6 +318,57 @@ router.post('/import-preset/:id', requireRole(['owner', 'admin']), async (req: A
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Preset import failed' });
+  }
+});
+
+router.post('/import-marketplace/:id', requireRole(['owner', 'admin']), async (req: AuthRequest, res) => {
+  const companyId = req.header('x-company-id');
+  if (!companyId) {
+    return res.status(400).json({ error: 'Missing company ID' });
+  }
+
+  const marketplaceId = getPresetIdParam(req.params.id);
+  if (!marketplaceId) {
+    return res.status(400).json({ error: 'Invalid marketplace template ID' });
+  }
+
+  const entry = await getMarketplaceTemplateById(marketplaceId);
+  if (!entry) {
+    return res.status(404).json({ error: 'Marketplace template not found' });
+  }
+
+  try {
+    const result = await TemplateService.importCompany(companyId, entry.template, {
+      preserveCompanyIdentity: true,
+    });
+    await db.query(
+      `INSERT INTO audit_log (company_id, action, entity_type, details)
+       VALUES ($1, 'template.imported', 'template_marketplace', $2)`,
+      [
+        companyId,
+        JSON.stringify({
+          source: 'marketplace',
+          marketplace_id: entry.id,
+          marketplace_name: entry.name,
+          vendor: entry.vendor,
+          source_url: entry.source_url,
+          requested_by_user_id: req.user?.id ?? null,
+          requested_by_role: req.user?.role ?? null,
+          preserve_company_identity: true,
+          changes: result,
+        }),
+      ]
+    );
+    res.json({
+      template: {
+        id: entry.id,
+        name: entry.name,
+        vendor: entry.vendor,
+      },
+      result,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Marketplace import failed' });
   }
 });
 

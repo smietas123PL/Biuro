@@ -38,8 +38,8 @@ CREATE TABLE agents (
   role          TEXT NOT NULL,
   title         TEXT,
   reports_to    UUID REFERENCES agents(id) ON DELETE SET NULL,
-  runtime       TEXT NOT NULL DEFAULT 'claude',
-  model         TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+  runtime       TEXT NOT NULL DEFAULT 'gemini',
+  model         TEXT NOT NULL DEFAULT 'gemini-2.0-flash',
   system_prompt TEXT,
   config        JSONB DEFAULT '{}',
   status        TEXT NOT NULL DEFAULT 'idle'

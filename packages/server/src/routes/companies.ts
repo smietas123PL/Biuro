@@ -1,9 +1,16 @@
 import { Router } from 'express';
+import type { CompanyRuntimeSettingsResponse, RuntimeName } from '@biuro/shared';
 import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { AuthRequest } from '../utils/context.js';
 import { attachBudgetForecasts, buildBudgetForecast, buildDailySpendSeries, summarizeAgentBudgets, toFloat } from '../utils/budgets.js';
+import {
+  ALL_RUNTIMES,
+  extractCompanyRuntimeSettings,
+  getDefaultRuntimeSettings,
+  normalizeRuntimeOrder,
+} from '../runtime/preferences.js';
 
 const router: Router = Router();
 
@@ -30,6 +37,10 @@ const auditLogFilterSchema = z.object({
 const retrievalMetricsSchema = z.object({
   days: z.coerce.number().int().min(1).max(90).default(7),
 });
+const runtimeSettingsSchema = z.object({
+  primary_runtime: z.enum(['claude', 'openai', 'gemini']),
+  fallback_order: z.array(z.enum(['claude', 'openai', 'gemini'])).min(1).max(3),
+});
 
 function clampLimit(value: unknown, fallback: number, max: number) {
   const parsed = Number(value);
@@ -50,6 +61,20 @@ function getSingleQueryValue(value: unknown) {
   }
 
   return undefined;
+}
+
+function buildRuntimeSettingsPayload(config: unknown) {
+  const resolved = extractCompanyRuntimeSettings(config);
+  const defaults = getDefaultRuntimeSettings();
+  return {
+    primary_runtime: resolved.primaryRuntime,
+    fallback_order: resolved.fallbackOrder,
+    system_defaults: {
+      primary_runtime: defaults.primaryRuntime,
+      fallback_order: defaults.fallbackOrder,
+    },
+    available_runtimes: ALL_RUNTIMES,
+  };
 }
 
 // Policies Root (4.4/4.5)
@@ -140,6 +165,88 @@ router.get('/:id', requireRole(['owner', 'admin', 'member', 'viewer']), async (r
     if (result.rows.length === 0) return res.status(404).json({ error: 'Company not found' });
     res.json(result.rows[0]);
   } catch (err) { next(err); }
+});
+
+router.get('/:id/runtime-settings', requireRole(['owner', 'admin', 'member', 'viewer']), async (req, res, next) => {
+  try {
+    const result = await db.query('SELECT id, name, config FROM companies WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const payload: CompanyRuntimeSettingsResponse = {
+      company_id: result.rows[0].id,
+      company_name: result.rows[0].name,
+      ...buildRuntimeSettingsPayload(result.rows[0].config),
+    };
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/:id/runtime-settings', requireRole(['owner', 'admin']), async (req: AuthRequest, res, next) => {
+  try {
+    const parsed = runtimeSettingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error });
+    }
+
+    const normalizedFallbackOrder = normalizeRuntimeOrder(parsed.data.fallback_order, ALL_RUNTIMES);
+    const updatePayload = {
+      llm_primary_runtime: parsed.data.primary_runtime,
+      llm_fallback_order: normalizedFallbackOrder,
+    };
+
+    const result = await db.transaction(async (client) => {
+      const companyRes = await client.query('SELECT id, name, config FROM companies WHERE id = $1', [req.params.id]);
+      if (companyRes.rows.length === 0) {
+        return null;
+      }
+
+      const currentConfig = companyRes.rows[0].config && typeof companyRes.rows[0].config === 'object'
+        ? companyRes.rows[0].config
+        : {};
+
+      const mergedConfig = {
+        ...currentConfig,
+        ...updatePayload,
+      };
+
+      const updateRes = await client.query(
+        'UPDATE companies SET config = $2 WHERE id = $1 RETURNING id, name, config',
+        [req.params.id, JSON.stringify(mergedConfig)]
+      );
+
+      await client.query(
+        `INSERT INTO audit_log (company_id, action, entity_type, entity_id, details)
+         VALUES ($1, 'company.runtime_settings_updated', 'company', $1, $2)`,
+        [
+          req.params.id,
+          JSON.stringify({
+            primary_runtime: parsed.data.primary_runtime,
+            fallback_order: normalizedFallbackOrder,
+            updated_by: req.user?.id ?? null,
+          }),
+        ]
+      );
+
+      return updateRes.rows[0];
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const payload: CompanyRuntimeSettingsResponse = {
+      company_id: result.id,
+      company_name: result.name,
+      ...buildRuntimeSettingsPayload(result.config),
+    };
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Stats

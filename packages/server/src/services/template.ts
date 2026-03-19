@@ -1,11 +1,12 @@
 import type pg from 'pg';
+import type { TemplateImportDryRun as SharedTemplateImportDryRun } from '@biuro/shared';
 import { z } from 'zod';
 import { db } from '../db/client.js';
 
 const JsonObjectSchema = z.record(z.unknown());
 const SupportedRuntimeSchema = z.enum(['claude', 'openai', 'gemini']);
 type SupportedRuntime = z.infer<typeof SupportedRuntimeSchema>;
-const defaultTemplateRuntime: SupportedRuntime = 'claude';
+const defaultTemplateRuntime: SupportedRuntime = 'gemini';
 const supportedTemplateRuntimeSet = new Set<SupportedRuntime>(SupportedRuntimeSchema.options);
 
 function normalizeTemplateRuntime(value: unknown): SupportedRuntime {
@@ -97,81 +98,7 @@ export type TemplateImportExistingState = {
   policies: Array<{ name: string }>;
   budgets: Array<{ agent_id: string; agent_name: string }>;
 };
-export type TemplateImportDryRun = {
-  preserve_company_identity: boolean;
-  company: {
-    current_name: string;
-    current_mission: string | null;
-    incoming_name: string;
-    incoming_mission: string | null;
-    resulting_name: string;
-    resulting_mission: string | null;
-  };
-  current: {
-    goals: number;
-    agents: number;
-    tools: number;
-    policies: number;
-    budgets: number;
-  };
-  incoming: {
-    goals: number;
-    agents: number;
-    tools: number;
-    policies: number;
-    budgets: number;
-  };
-  changes: {
-    goals_to_add: number;
-    agents_to_add: number;
-    policies_to_add: number;
-    budgets_to_add: number;
-    tools_to_create: number;
-    tools_to_update: number;
-    total_new_records: number;
-  };
-  collisions: {
-    agent_names: string[];
-    goal_titles: string[];
-    policy_names: string[];
-    tool_names: string[];
-  };
-  record_changes: {
-    goals_to_add: string[];
-    agents_to_add: string[];
-    policies_to_add: string[];
-    tools_to_create: string[];
-    tools_to_update: string[];
-    budgets_to_add: Array<{
-      agent_name: string;
-      limit_usd: number;
-      spent_usd: number;
-    }>;
-  };
-  projected: {
-    goals: {
-      count: number;
-      names: string[];
-    };
-    agents: {
-      count: number;
-      names: string[];
-    };
-    tools: {
-      count: number;
-      names: string[];
-    };
-    policies: {
-      count: number;
-      names: string[];
-    };
-    budgets: {
-      count: number;
-      agent_names: string[];
-    };
-  };
-  warnings: string[];
-};
+export type TemplateImportDryRun = SharedTemplateImportDryRun;
 export type TemplatePreviewAuditDetails = {
   preset_id: string;
   preset_name: string;

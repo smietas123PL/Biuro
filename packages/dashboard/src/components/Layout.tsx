@@ -13,6 +13,7 @@ import {
   Layers3,
   PlugZap,
   Network,
+  Radar,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useEffect, useState } from 'react';
@@ -30,6 +31,7 @@ const navItems = [
   { icon: Layers3, label: 'Templates', path: '/templates' },
   { icon: PlugZap, label: 'Integrations', path: '/integrations' },
   { icon: Wrench, label: 'Tools', path: '/tools' },
+  { icon: Radar, label: 'Observability', path: '/observability' },
   { icon: ShieldCheck, label: 'Approvals', path: '/approvals' },
   { icon: Activity, label: 'Audit Log', path: '/audit' },
 ];

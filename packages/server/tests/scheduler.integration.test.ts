@@ -17,6 +17,12 @@ const loggerMock = vi.hoisted(() => ({
 }));
 
 const processAgentHeartbeatMock = vi.hoisted(() => vi.fn());
+const initializeSchedulerQueueMock = vi.hoisted(() => vi.fn());
+const readSchedulerWakeupsMock = vi.hoisted(() => vi.fn());
+const acknowledgeSchedulerWakeupMock = vi.hoisted(() => vi.fn());
+const enqueueCompanyWakeupMock = vi.hoisted(() => vi.fn());
+const closeSchedulerQueueMock = vi.hoisted(() => vi.fn());
+const isSchedulerQueueEnabledMock = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -32,6 +38,15 @@ vi.mock('../src/utils/logger.js', () => ({
 
 vi.mock('../src/orchestrator/heartbeat.js', () => ({
   processAgentHeartbeat: processAgentHeartbeatMock,
+}));
+
+vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
+  initializeSchedulerQueue: initializeSchedulerQueueMock,
+  readSchedulerWakeups: readSchedulerWakeupsMock,
+  acknowledgeSchedulerWakeup: acknowledgeSchedulerWakeupMock,
+  enqueueCompanyWakeup: enqueueCompanyWakeupMock,
+  closeSchedulerQueue: closeSchedulerQueueMock,
+  isSchedulerQueueEnabled: isSchedulerQueueEnabledMock,
 }));
 
 import { getActiveHeartbeatCount, startOrchestrator, stopOrchestrator } from '../src/orchestrator/scheduler.js';
@@ -54,6 +69,13 @@ describe('scheduler orchestration', () => {
     loggerMock.debug.mockReset();
     loggerMock.warn.mockReset();
     loggerMock.error.mockReset();
+    initializeSchedulerQueueMock.mockReset();
+    readSchedulerWakeupsMock.mockReset();
+    acknowledgeSchedulerWakeupMock.mockReset();
+    enqueueCompanyWakeupMock.mockReset();
+    closeSchedulerQueueMock.mockReset();
+    isSchedulerQueueEnabledMock.mockReset();
+    isSchedulerQueueEnabledMock.mockReturnValue(false);
     envMock.HEARTBEAT_INTERVAL_MS = 1000;
     envMock.MAX_CONCURRENT_HEARTBEATS = 2;
   });
@@ -172,5 +194,67 @@ describe('scheduler orchestration', () => {
 
     deferred.resolve();
     await Promise.resolve();
+  });
+
+  it('dispatches work from the scheduler queue when Redis wakeups are enabled', async () => {
+    vi.useRealTimers();
+    isSchedulerQueueEnabledMock.mockReturnValue(true);
+    initializeSchedulerQueueMock.mockResolvedValue(undefined);
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [{ company_id: 'company-1' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'agent-1' }],
+      });
+
+    readSchedulerWakeupsMock
+      .mockResolvedValueOnce([
+        {
+          id: 'wake-1',
+          companyId: 'company-1',
+          reason: 'task_created',
+          taskId: 'task-1',
+          agentId: null,
+          queuedAt: '2026-03-19T10:00:00.000Z',
+        },
+      ])
+      .mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return [];
+      });
+
+    processAgentHeartbeatMock.mockResolvedValue({
+      status: 'worked',
+      companyId: 'company-1',
+      taskId: 'task-1',
+    });
+
+    try {
+      startOrchestrator();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      expect(initializeSchedulerQueueMock).toHaveBeenCalledTimes(1);
+      const bootstrapQuery = dbMock.query.mock.calls.find(([text]) =>
+        String(text).includes("status IN ('backlog', 'assigned')")
+      );
+      const dispatchQuery = dbMock.query.mock.calls.find(([text]) =>
+        String(text).includes('FROM agents a')
+      );
+      expect(String(bootstrapQuery?.[0])).toContain("status IN ('backlog', 'assigned')");
+      expect(String(dispatchQuery?.[0])).toContain('FROM agents a');
+      expect(dispatchQuery?.[1]).toEqual(['company-1', 2]);
+      expect(processAgentHeartbeatMock).toHaveBeenCalledWith('agent-1');
+      expect(acknowledgeSchedulerWakeupMock).toHaveBeenCalledWith('wake-1');
+
+      await Promise.resolve();
+      expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith('company-1', 'heartbeat_follow_up', {
+        taskId: 'task-1',
+      });
+    } finally {
+      await stopOrchestrator();
+    }
+
+    expect(closeSchedulerQueueMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,7 +15,8 @@ const heartbeatTestSchema = `
     company_id UUID NOT NULL,
     name TEXT NOT NULL,
     role TEXT NOT NULL,
-    runtime TEXT NOT NULL DEFAULT 'openai',
+    title TEXT,
+    runtime TEXT NOT NULL DEFAULT 'gemini',
     model TEXT,
     system_prompt TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
@@ -48,6 +49,7 @@ const heartbeatTestSchema = `
     locked_by UUID,
     locked_at TIMESTAMPTZ,
     result TEXT,
+    metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
     completed_at TIMESTAMPTZ

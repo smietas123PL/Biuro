@@ -54,6 +54,15 @@ createdb autonomiczne_biuro
 # Run migrations
 pnpm --filter @biuro/server migrate
 
+# Inspect migration state
+pnpm --filter @biuro/server migrate:status
+
+# Verify recorded checksums vs files
+pnpm --filter @biuro/server migrate:verify
+
+# Create a new numbered migration file
+pnpm --filter @biuro/server migrate:create "add budget indexes"
+
 # Start development
 pnpm dev
 ```
@@ -1061,6 +1070,36 @@ cp .env.example .env
 
 # Launch
 docker compose up -d
+```
+
+### Observability Stack
+
+Prometheus, Grafana, OpenTelemetry Collector, and Tempo are included in `docker-compose.yml`.
+
+```bash
+# Start the full stack
+docker compose up -d
+
+  # Metrics
+  # API:        http://localhost:3100/metrics
+  # Worker:     http://localhost:9464/metrics
+  # Prometheus: http://localhost:9090
+  # Grafana:    http://localhost:3001
+  # Tempo:      http://localhost:3202
+  ```
+
+Grafana ships with a pre-provisioned `Autonomiczne Biuro Overview` dashboard, Prometheus scrapes both the API server and worker out of the box, and traces flow through the local OpenTelemetry Collector into Tempo.
+
+The Docker stack defaults `OTEL_EXPORTER_OTLP_ENDPOINT` to the in-cluster collector:
+
+```bash
+http://otel-collector:4318/v1/traces
+```
+
+For external distributed tracing, set `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env` to an OTLP HTTP traces endpoint such as:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318/v1/traces
 ```
 
 ### Tailscale (for solo entrepreneurs)

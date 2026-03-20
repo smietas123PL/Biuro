@@ -14,12 +14,18 @@ import {
   PlugZap,
   Network,
   Radar,
+  Sparkles,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useEffect, useState } from 'react';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
+import {
+  OnboardingProvider,
+  useOnboarding,
+} from '../context/OnboardingContext';
 import { CommandPalette } from './CommandPalette';
+import { OnboardingTour } from './OnboardingTour';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -37,6 +43,15 @@ const navItems = [
 ];
 
 export function Layout() {
+  return (
+    <OnboardingProvider>
+      <AuthenticatedLayout />
+      <OnboardingTour />
+    </OnboardingProvider>
+  );
+}
+
+function AuthenticatedLayout() {
   const {
     companies,
     selectedCompany,
@@ -51,6 +66,7 @@ export function Layout() {
   const [companyMission, setCompanyMission] = useState('');
   const [submittingCompany, setSubmittingCompany] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const { startTutorial } = useOnboarding();
 
   const handleCreateCompany = async () => {
     if (!companyName.trim()) return;
@@ -83,7 +99,10 @@ export function Layout() {
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-64 border-r bg-card flex flex-col">
+      <aside
+        className="flex w-64 flex-col border-r bg-card"
+        data-onboarding-target="main-sidebar"
+      >
         <div className="p-6 border-b">
           <h1 className="text-xl font-bold flex items-center gap-2">
             <ShieldCheck className="text-primary w-6 h-6" />
@@ -132,7 +151,10 @@ export function Layout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <header className="h-16 border-b flex items-center justify-between px-8 bg-white/50 backdrop-blur-sm sticky top-0 z-10">
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div
+            className="flex items-center gap-3 text-sm text-muted-foreground"
+            data-onboarding-target="company-controls"
+          >
             <span>Company:</span>
             <select
               id="company-select"
@@ -154,6 +176,7 @@ export function Layout() {
             </select>
             <button
               onClick={() => setShowCompanyForm((current) => !current)}
+              data-onboarding-target="new-company-button"
               className="rounded-md border px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
             >
               New Company
@@ -161,7 +184,17 @@ export function Layout() {
           </div>
           <div className="flex items-center gap-4">
             <button
+              type="button"
+              onClick={() => startTutorial()}
+              data-onboarding-target="tutorial-trigger"
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              <Sparkles className="h-4 w-4" />
+              Start tutorial
+            </button>
+            <button
               onClick={() => setShowCommandPalette(true)}
+              data-onboarding-target="command-search"
               className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
             >
               <Search className="h-4 w-4" />
@@ -219,7 +252,10 @@ export function Layout() {
           )}
 
           {!selectedCompany && !loading && (
-            <div className="mb-6 rounded-xl border border-dashed bg-card p-6 text-sm text-muted-foreground">
+            <div
+              className="mb-6 rounded-xl border border-dashed bg-card p-6 text-sm text-muted-foreground"
+              data-onboarding-target="company-empty-state"
+            >
               Create or choose a company to start working with agents and tasks.
             </div>
           )}

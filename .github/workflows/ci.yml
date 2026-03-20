@@ -67,15 +67,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Start docker stack
         env:
-          AUTH_ENABLED: 'false'
+          AUTH_ENABLED: 'true'
           DB_PASSWORD: ci_db_password
           GRAFANA_ADMIN_PASSWORD: ci_grafana_admin_password
+          HEARTBEAT_INTERVAL_MS: '5000'
           LLM_MOCK_MODE: 'true'
         run: docker compose up -d --build
 
-      - name: Run API and dashboard E2E smoke suite
+      - name: Run Playwright happy-path E2E
         run: pnpm test:e2e
 
       - name: Show container logs on failure

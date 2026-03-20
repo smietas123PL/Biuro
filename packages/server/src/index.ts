@@ -8,6 +8,7 @@ import routes from './routes/index.js';
 import { createServer } from 'http';
 import { initWSHub } from './ws.js';
 import { MCPService } from './services/mcp.js';
+import { closeEmbeddingCache } from './services/embeddings.js';
 import {
   observabilityMiddleware,
   metricsHandler,
@@ -18,6 +19,7 @@ import {
   initializeRealtimeEventBus,
   subscribeToCompanyEvents,
 } from './realtime/eventBus.js';
+import { runStartupMigrations } from './db/startupMigrations.js';
 import { buildHelmetOptions } from './security/helmet.js';
 
 initializeTracing({
@@ -135,6 +137,7 @@ async function shutdown(signal: string, exitCode: number = 0) {
     unsubscribeRealtimeEvents();
     await closeRealtimeEventBus();
     await MCPService.closeAllClients();
+    await closeEmbeddingCache();
     await shutdownTracing();
     await db.close();
     clearTimeout(forceExitTimer);
@@ -149,7 +152,12 @@ async function shutdown(signal: string, exitCode: number = 0) {
 
 const start = async () => {
   try {
-    // Test DB connection
+    const migrationClient = await db.getClient();
+    try {
+      await runStartupMigrations(migrationClient, logger);
+    } finally {
+      migrationClient.release();
+    }
     await db.query('SELECT 1');
     logger.info('Database connected');
     await initializeRealtimeEventBus({

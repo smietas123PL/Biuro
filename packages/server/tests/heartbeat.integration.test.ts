@@ -479,4 +479,233 @@ describe('heartbeat integration flows', () => {
       })
     );
   });
+
+  it('persists per-run retrieval and llm fallback telemetry in heartbeat details', async () => {
+    evaluatePolicyMock.mockResolvedValue({
+      allowed: true,
+      requires_approval: false,
+    });
+    checkSafetyMock.mockResolvedValue({ ok: true });
+    findRelatedMemoriesMock.mockImplementation(
+      async (
+        _companyId: string,
+        _query: string,
+        _limit: number,
+        options?: {
+          retrievalGuard?: {
+            allow: (
+              scope: 'memory',
+              consumer: string,
+              query: string
+            ) => { allowed: boolean };
+          };
+          onDiagnostic?: (payload: any) => void;
+        }
+      ) => {
+        options?.retrievalGuard?.allow(
+          'memory',
+          'heartbeat_memory',
+          'Investigate churn Look for the churn drivers.'
+        );
+        options?.onDiagnostic?.({
+          scope: 'memory',
+          consumer: 'heartbeat_memory',
+          query: 'Investigate churn Look for the churn drivers.',
+          resultCount: 1,
+          lexicalCandidateCount: 1,
+          vectorCandidateCount: 0,
+          overlapCount: 0,
+          fallbackUsed: true,
+          embeddingSource: 'fallback',
+          embeddingModel: 'local-hash-v1',
+        });
+        return ['Remember the last churn review.'];
+      }
+    );
+    buildAgentContextMock.mockImplementation(
+      async (
+        _agentId: string,
+        _taskId: string,
+        options?: {
+          retrievalGuard?: {
+            allow: (
+              scope: 'knowledge',
+              consumer: string,
+              query: string
+            ) => { allowed: boolean };
+          };
+          onRetrieval?: (payload: any) => void;
+        }
+      ) => {
+        options?.retrievalGuard?.allow(
+          'knowledge',
+          'agent_context',
+          'Look for the churn drivers.'
+        );
+        options?.onRetrieval?.({
+          scope: 'knowledge',
+          consumer: 'agent_context',
+          query: 'Look for the churn drivers.',
+          resultCount: 2,
+          lexicalCandidateCount: 2,
+          vectorCandidateCount: 2,
+          overlapCount: 1,
+          fallbackUsed: false,
+          embeddingSource: 'openai',
+          embeddingModel: 'text-embedding-3-small',
+        });
+        return {
+          company_name: 'QA Test Corp',
+          company_mission: 'Ship reliable software',
+          agent_name: 'Ada',
+          agent_role: 'Researcher',
+          goal_hierarchy: [],
+          current_task: {
+            title: 'Investigate churn',
+            description: 'Look for the churn drivers.',
+          },
+          history: [],
+        };
+      }
+    );
+    runtimeExecuteMock.mockResolvedValue({
+      thought: 'Done.',
+      actions: [],
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cost_usd: 0.25,
+      },
+      routing: {
+        selected_runtime: 'openai',
+        selected_model: 'gpt-4o',
+        attempts: [
+          {
+            runtime: 'gemini',
+            model: 'gemini-test',
+            status: 'fallback',
+            reason: '429 rate limit',
+          },
+          {
+            runtime: 'openai',
+            model: 'gpt-4o',
+            status: 'success',
+          },
+        ],
+      },
+    });
+    dbMock.transaction.mockImplementation(
+      async (
+        fn: (client: { query: typeof dbMock.query }) => Promise<unknown>
+      ) =>
+        fn({
+          query: vi.fn().mockResolvedValue({
+            rows: [
+              {
+                id: 'task-1',
+                company_id: 'company-1',
+                title: 'Investigate churn',
+                description: 'Look for the churn drivers.',
+              },
+            ],
+          }),
+        } as never)
+    );
+    dbMock.query.mockImplementation(async (text: string) => {
+      if (text.includes("UPDATE agents SET status = 'working'")) {
+        return { rows: [{ id: 'agent-1', company_id: 'company-1' }] };
+      }
+
+      if (text.includes('WITH seeded_budget AS')) {
+        return { rows: [] };
+      }
+
+      if (text === 'SELECT runtime, name FROM agents WHERE id = $1') {
+        return { rows: [{ runtime: 'openai', name: 'Ada' }] };
+      }
+
+      if (text === 'SELECT config FROM companies WHERE id = $1') {
+        return {
+          rows: [
+            {
+              config: {
+                llm_primary_runtime: 'gemini',
+                llm_fallback_order: ['gemini', 'openai'],
+              },
+            },
+          ],
+        };
+      }
+
+      if (
+        text ===
+        'SELECT state FROM agent_sessions WHERE agent_id = $1 AND task_id = $2'
+      ) {
+        return { rows: [] };
+      }
+
+      if (text.includes('SELECT COALESCE(SUM(cost_usd), 0)::float AS total')) {
+        return { rows: [{ total: 0.25 }] };
+      }
+
+      if (
+        text ===
+        'SELECT slack_webhook_url, discord_webhook_url FROM companies WHERE id = $1'
+      ) {
+        return {
+          rows: [
+            {
+              slack_webhook_url: null,
+              discord_webhook_url: null,
+            },
+          ],
+        };
+      }
+
+      return { rows: [] };
+    });
+
+    await processAgentHeartbeat('agent-1');
+
+    const auditInsert = dbMock.query.mock.calls.find(([text]) =>
+      String(text).includes('INSERT INTO audit_log')
+    );
+    const heartbeatInsert = dbMock.query.mock.calls.find(([text]) =>
+      String(text).includes(
+        'INSERT INTO heartbeats (agent_id, task_id, status, duration_ms, cost_usd, details)'
+      )
+    );
+
+    const auditDetails = JSON.parse(String(auditInsert?.[1]?.[3]));
+    const heartbeatDetails = JSON.parse(String(heartbeatInsert?.[1]?.[4]));
+
+    expect(auditDetails.heartbeat_execution).toMatchObject({
+      retrieval_budget: {
+        max_requests: 2,
+        consumed_requests: 2,
+        skipped_requests: 0,
+      },
+      retrieval_fallback_count: 1,
+      llm_fallback_count: 1,
+    });
+    expect(auditDetails.heartbeat_execution.retrievals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'memory',
+          consumer: 'heartbeat_memory',
+          fallback_used: true,
+          embedding_source: 'fallback',
+        }),
+        expect.objectContaining({
+          scope: 'knowledge',
+          consumer: 'agent_context',
+          fallback_used: false,
+          embedding_source: 'openai',
+        }),
+      ])
+    );
+    expect(heartbeatDetails.heartbeat_execution).toEqual(
+      auditDetails.heartbeat_execution
+    );
+  });
 });

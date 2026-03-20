@@ -11,6 +11,7 @@ import { AgentAction, AgentActionsSchema } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 import { handleHeartbeatAction } from './heartbeatActions.js';
 import { isAgentBudgetExceeded } from './heartbeatBudget.js';
+import type { HeartbeatExecutionTelemetrySnapshot } from './heartbeatExecutionTelemetry.js';
 import {
   persistSuccessfulHeartbeat,
   recordHeartbeat,
@@ -32,6 +33,118 @@ export type HeartbeatOutcome = {
 
 export { applyAgentBudgetSpend } from './heartbeatBudget.js';
 
+async function claimHeartbeatAgent(agentId: string) {
+  const claimRes = await db.query(
+    "UPDATE agents SET status = 'working' WHERE id = $1 AND status = 'idle' RETURNING id, company_id",
+    [agentId]
+  );
+
+  if (claimRes.rows.length === 0) {
+    return null;
+  }
+
+  return {
+    companyId: claimRes.rows[0].company_id as string,
+  };
+}
+
+async function enforceHeartbeatGuards(args: {
+  agentId: string;
+  companyId: string;
+  startedAt: number;
+}) {
+  const { agentId, companyId, startedAt } = args;
+  const rateLimitPolicy = await evaluatePolicy(companyId, 'rate_limit', {
+    agentId,
+  });
+  if (!rateLimitPolicy.allowed) {
+    logger.warn(
+      { agentId, reason: rateLimitPolicy.reason },
+      'Agent heartbeat blocked by rate limit policy'
+    );
+    await recordHeartbeat(agentId, 'idle', startedAt, {
+      reason: rateLimitPolicy.reason ?? 'agent rate limit exceeded',
+    });
+    return {
+      heartbeatStatus: 'idle' as const,
+      outcome: {
+        status: 'idle' as const,
+        companyId,
+        taskId: null,
+      },
+    };
+  }
+
+  const budgetExceeded = await isAgentBudgetExceeded(agentId);
+  if (budgetExceeded) {
+    logger.warn({ agentId }, 'Agent over budget, skipping heartbeat');
+    await recordHeartbeat(agentId, 'budget_exceeded', startedAt, {
+      reason: 'monthly budget exceeded',
+    });
+    return {
+      heartbeatStatus: 'budget_exceeded' as const,
+      outcome: {
+        status: 'budget_exceeded' as const,
+        companyId,
+        taskId: null,
+      },
+    };
+  }
+
+  return null;
+}
+
+async function checkoutHeartbeatTask(agentId: string) {
+  return db.transaction(async (client) => {
+    const res = await client.query(
+      `UPDATE tasks
+       SET status = 'in_progress', locked_by = $1, locked_at = now()
+       WHERE id = (
+         SELECT id FROM tasks
+         WHERE (assigned_to = $1 OR assigned_to IS NULL)
+           AND (
+             status IN ('backlog', 'assigned')
+             OR (status = 'in_progress' AND assigned_to = $1 AND locked_by IS NULL)
+           )
+         ORDER BY priority DESC, created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING *`,
+      [agentId]
+    );
+    return res.rows[0];
+  });
+}
+
+async function setTaskBlocked(taskId: string) {
+  await db.query(
+    "UPDATE tasks SET status = 'blocked', locked_by = NULL, locked_at = NULL WHERE id = $1",
+    [taskId]
+  );
+}
+
+async function releaseTaskLock(taskId: string) {
+  await db.query(
+    'UPDATE tasks SET locked_by = NULL, locked_at = NULL WHERE id = $1',
+    [taskId]
+  );
+}
+
+async function resetTaskAfterFailure(taskId: string) {
+  await db.query(
+    "UPDATE tasks SET status = 'backlog', locked_by = NULL, locked_at = NULL WHERE id = $1",
+    [taskId]
+  );
+}
+
+async function restoreAgentToIdle(agentId: string) {
+  await db.query(
+    "UPDATE agents SET status = 'idle' WHERE id = $1 AND status = 'working'",
+    [agentId]
+  );
+}
+
 export async function processAgentHeartbeat(agentId: string) {
   const startedAt = Date.now();
   return startActiveSpan(
@@ -43,82 +156,37 @@ export async function processAgentHeartbeat(agentId: string) {
         companyId: null,
         taskId: null,
       };
-      const claimRes = await db.query(
-        "UPDATE agents SET status = 'working' WHERE id = $1 AND status = 'idle' RETURNING id, company_id",
-        [agentId]
-      );
+      const claim = await claimHeartbeatAgent(agentId);
 
-      if (claimRes.rows.length === 0) {
+      if (!claim) {
         span.setAttribute('heartbeat.claimed', false);
         span.setAttribute('heartbeat.status', 'skipped');
         return outcome;
       }
 
-      const companyId = claimRes.rows[0].company_id as string;
+      const { companyId } = claim;
       let task: any;
       let heartbeatStatus = 'idle';
+      let executionTelemetry: HeartbeatExecutionTelemetrySnapshot | null = null;
 
       span.setAttribute('heartbeat.claimed', true);
       span.setAttribute('company.id', companyId);
       activeHeartbeatsGauge.inc();
 
       try {
-        const rateLimitPolicy = await evaluatePolicy(companyId, 'rate_limit', {
+        const guardResult = await enforceHeartbeatGuards({
           agentId,
+          companyId,
+          startedAt,
         });
-        if (!rateLimitPolicy.allowed) {
-          logger.warn(
-            { agentId, reason: rateLimitPolicy.reason },
-            'Agent heartbeat blocked by rate limit policy'
-          );
+        if (guardResult) {
+          heartbeatStatus = guardResult.heartbeatStatus;
           span.setAttribute('heartbeat.status', heartbeatStatus);
-          await recordHeartbeat(agentId, heartbeatStatus, startedAt, {
-            reason: rateLimitPolicy.reason ?? 'agent rate limit exceeded',
-          });
-          outcome = {
-            status: 'idle',
-            companyId,
-            taskId: null,
-          };
+          outcome = guardResult.outcome;
           return outcome;
         }
 
-        const budgetExceeded = await isAgentBudgetExceeded(agentId);
-        if (budgetExceeded) {
-          logger.warn({ agentId }, 'Agent over budget, skipping heartbeat');
-          heartbeatStatus = 'budget_exceeded';
-          span.setAttribute('heartbeat.status', heartbeatStatus);
-          await recordHeartbeat(agentId, heartbeatStatus, startedAt, {
-            reason: 'monthly budget exceeded',
-          });
-          outcome = {
-            status: 'budget_exceeded',
-            companyId,
-            taskId: null,
-          };
-          return outcome;
-        }
-
-        task = await db.transaction(async (client) => {
-          const res = await client.query(
-            `UPDATE tasks
-           SET status = 'in_progress', locked_by = $1, locked_at = now()
-           WHERE id = (
-             SELECT id FROM tasks
-             WHERE (assigned_to = $1 OR assigned_to IS NULL)
-               AND (
-                 status IN ('backlog', 'assigned')
-                 OR (status = 'in_progress' AND assigned_to = $1 AND locked_by IS NULL)
-               )
-             ORDER BY priority DESC, created_at ASC
-             LIMIT 1
-             FOR UPDATE SKIP LOCKED
-           )
-           RETURNING *`,
-            [agentId]
-          );
-          return res.rows[0];
-        });
+        task = await checkoutHeartbeatTask(agentId);
 
         if (!task) {
           span.setAttribute('heartbeat.status', heartbeatStatus);
@@ -142,10 +210,7 @@ export async function processAgentHeartbeat(agentId: string) {
         if (!safety.ok) {
           heartbeatStatus = 'blocked';
           span.setAttribute('heartbeat.status', heartbeatStatus);
-          await db.query(
-            "UPDATE tasks SET status = 'blocked', locked_by = NULL, locked_at = NULL WHERE id = $1",
-            [task.id]
-          );
+          await setTaskBlocked(task.id);
           await autoPauseAgent(agentId, safety.reason!);
           outcome = {
             status: 'blocked',
@@ -157,9 +222,20 @@ export async function processAgentHeartbeat(agentId: string) {
 
         logger.info({ agentId, taskId: task.id }, 'Agent starting task work');
 
-        const { agentName, context, runtime } = await prepareHeartbeatExecution(
-          agentId,
-          task
+        const preparedExecution = await prepareHeartbeatExecution(agentId, task);
+        const { agentName, context, runtime } = preparedExecution;
+        executionTelemetry = preparedExecution.executionTelemetry.snapshot();
+        span.setAttribute(
+          'heartbeat.retrieval_count',
+          executionTelemetry.retrievals.length
+        );
+        span.setAttribute(
+          'heartbeat.retrieval_fallback_count',
+          executionTelemetry.retrieval_fallback_count
+        );
+        span.setAttribute(
+          'heartbeat.retrieval_skipped_count',
+          executionTelemetry.retrieval_budget.skipped_requests
         );
 
         await broadcastCompanyEvent(
@@ -192,7 +268,16 @@ export async function processAgentHeartbeat(agentId: string) {
           task,
           response,
           startedAt,
+          executionTelemetry,
         });
+        const llmFallbackCount =
+          response.routing?.attempts.filter(
+            (attempt) => attempt.status === 'fallback'
+          ).length ?? 0;
+        span.setAttribute(
+          'heartbeat.llm_fallback_count',
+          llmFallbackCount
+        );
 
         span.setAttribute('heartbeat.cost_usd', persistence.costUsd);
         span.setAttribute('heartbeat.duration_ms', persistence.durationMs);
@@ -209,10 +294,7 @@ export async function processAgentHeartbeat(agentId: string) {
           await handleHeartbeatAction(agentId, task, action);
         }
 
-        await db.query(
-          'UPDATE tasks SET locked_by = NULL, locked_at = NULL WHERE id = $1',
-          [task.id]
-        );
+        await releaseTaskLock(task.id);
       } catch (err) {
         heartbeatStatus = 'error';
         outcome = {
@@ -230,21 +312,16 @@ export async function processAgentHeartbeat(agentId: string) {
         await recordHeartbeat(agentId, heartbeatStatus, startedAt, {
           error: err instanceof Error ? err.message : 'Unknown heartbeat error',
           task_id: task?.id ?? null,
+          heartbeat_execution: executionTelemetry,
         });
 
         if (task?.id) {
-          await db.query(
-            "UPDATE tasks SET status = 'backlog', locked_by = NULL, locked_at = NULL WHERE id = $1",
-            [task.id]
-          );
+          await resetTaskAfterFailure(task.id);
         }
       } finally {
         recordHeartbeatMetric(heartbeatStatus, Date.now() - startedAt);
         activeHeartbeatsGauge.dec();
-        await db.query(
-          "UPDATE agents SET status = 'idle' WHERE id = $1 AND status = 'working'",
-          [agentId]
-        );
+        await restoreAgentToIdle(agentId);
       }
 
       return outcome;

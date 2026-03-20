@@ -1,23 +1,38 @@
+import { Suspense, lazy, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import AgentsPage from './pages/AgentsPage';
-import TasksPage from './pages/TasksPage';
-import ApprovalsPage from './pages/ApprovalsPage';
-import AuditLogPage from './pages/AuditLogPage';
-import AgentDetailPage from './pages/AgentDetailPage';
-import TaskDetailPage from './pages/TaskDetailPage';
-import DashboardPage from './pages/DashboardPage';
-import GoalsPage from './pages/GoalsPage';
-import BudgetsPage from './pages/BudgetsPage';
-import TemplatesPage from './pages/TemplatesPage';
-import ToolsPage from './pages/ToolsPage';
-import AuthPage from './pages/AuthPage';
-import SettingsPage from './pages/SettingsPage';
-import IntegrationsPage from './pages/IntegrationsPage';
-import OrgChartPage from './pages/OrgChartPage';
-import ObservabilityPage from './pages/ObservabilityPage';
 import { useAuth } from './context/AuthContext';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+const AgentsPage = lazy(() => import('./pages/AgentsPage'));
+const TasksPage = lazy(() => import('./pages/TasksPage'));
+const ApprovalsPage = lazy(() => import('./pages/ApprovalsPage'));
+const AuditLogPage = lazy(() => import('./pages/AuditLogPage'));
+const AgentDetailPage = lazy(() => import('./pages/AgentDetailPage'));
+const TaskDetailPage = lazy(() => import('./pages/TaskDetailPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const GoalsPage = lazy(() => import('./pages/GoalsPage'));
+const BudgetsPage = lazy(() => import('./pages/BudgetsPage'));
+const TemplatesPage = lazy(() => import('./pages/TemplatesPage'));
+const ToolsPage = lazy(() => import('./pages/ToolsPage'));
+const AuthPage = lazy(() => import('./pages/AuthPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
+const OrgChartPage = lazy(() => import('./pages/OrgChartPage'));
+const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+      Loading view...
+    </div>
+  );
+}
+
+function RouteBoundary({ children }: { children: ReactNode }) {
+  return <ErrorBoundary>{children}</ErrorBoundary>;
+}
 
 function App() {
   const { isAuthenticated, loading } = useAuth();
@@ -33,38 +48,147 @@ function App() {
   return (
     <>
       <NetworkStatusBanner />
-      <Routes>
-        <Route
-          path="/auth"
-          element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />}
-        />
-        <Route
-          path="/"
-          element={
-            isAuthenticated ? <Layout /> : <Navigate to="/auth" replace />
-          }
-        >
-          <Route index element={<DashboardPage />} />
-          <Route path="agents" element={<AgentsPage />} />
-          <Route path="agents/:id" element={<AgentDetailPage />} />
-          <Route path="tasks" element={<TasksPage />} />
-          <Route path="tasks/:id" element={<TaskDetailPage />} />
-          <Route path="goals" element={<GoalsPage />} />
-          <Route path="org-chart" element={<OrgChartPage />} />
-          <Route path="budgets" element={<BudgetsPage />} />
-          <Route path="templates" element={<TemplatesPage />} />
-          <Route path="integrations" element={<IntegrationsPage />} />
-          <Route path="tools" element={<ToolsPage />} />
-          <Route path="observability" element={<ObservabilityPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="approvals" element={<ApprovalsPage />} />
-          <Route path="audit" element={<AuditLogPage />} />
-        </Route>
-        <Route
-          path="*"
-          element={<Navigate to={isAuthenticated ? '/' : '/auth'} replace />}
-        />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route
+            path="/auth"
+            element={
+              isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />
+            }
+          />
+          <Route
+            path="/"
+            element={
+              isAuthenticated ? <Layout /> : <Navigate to="/auth" replace />
+            }
+          >
+            <Route
+              index
+              element={
+                <RouteBoundary>
+                  <DashboardPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="agents"
+              element={
+                <RouteBoundary>
+                  <AgentsPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="agents/:id"
+              element={
+                <RouteBoundary>
+                  <AgentDetailPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="tasks"
+              element={
+                <RouteBoundary>
+                  <TasksPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="tasks/:id"
+              element={
+                <RouteBoundary>
+                  <TaskDetailPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="goals"
+              element={
+                <RouteBoundary>
+                  <GoalsPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="org-chart"
+              element={
+                <RouteBoundary>
+                  <OrgChartPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="budgets"
+              element={
+                <RouteBoundary>
+                  <BudgetsPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="templates"
+              element={
+                <RouteBoundary>
+                  <TemplatesPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="integrations"
+              element={
+                <RouteBoundary>
+                  <IntegrationsPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="tools"
+              element={
+                <RouteBoundary>
+                  <ToolsPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="observability"
+              element={
+                <RouteBoundary>
+                  <ObservabilityPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <RouteBoundary>
+                  <SettingsPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="approvals"
+              element={
+                <RouteBoundary>
+                  <ApprovalsPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="audit"
+              element={
+                <RouteBoundary>
+                  <AuditLogPage />
+                </RouteBoundary>
+              }
+            />
+          </Route>
+          <Route
+            path="*"
+            element={<Navigate to={isAuthenticated ? '/' : '/auth'} replace />}
+          />
+        </Routes>
+      </Suspense>
     </>
   );
 }

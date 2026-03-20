@@ -2,15 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
+  ArrowRight,
   BrainCircuit,
+  CheckCircle2,
   Clock3,
+  ListTodo,
   RadioTower,
   ShieldAlert,
   Users,
+  WalletCards,
 } from 'lucide-react';
 import { useApi, useWebSocket, type ApiTraceSnapshot } from '../hooks/useApi';
+import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
+import { useOnboarding } from '../context/OnboardingContext';
 import { buildGrafanaTraceExploreUrl } from '../lib/grafana';
+import { getChecklistDismissedKey } from '../lib/onboarding';
 import { TraceLinkCallout } from '../components/TraceLinkCallout';
 
 type CompanyStats = {
@@ -264,7 +271,10 @@ function summarizeMemoryLesson(content: string) {
 
 export default function DashboardPage() {
   const { request, loading, error, lastTrace } = useApi();
+  const { user } = useAuth();
   const { selectedCompany, selectedCompanyId } = useCompany();
+  const { hasCompleted, startTutorial, status: onboardingStatus } =
+    useOnboarding();
   const [stats, setStats] = useState<CompanyStats>(emptyStats);
   const [budgetTotals, setBudgetTotals] =
     useState<BudgetTotals>(emptyBudgetTotals);
@@ -278,6 +288,7 @@ export default function DashboardPage() {
   const [traceError, setTraceError] = useState<string | null>(null);
   const [costPulse, setCostPulse] = useState<number | null>(null);
   const [budgetToasts, setBudgetToasts] = useState<BudgetToast[]>([]);
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
   const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as {
     event: string;
     data?: {
@@ -538,6 +549,18 @@ export default function DashboardPage() {
     return () => window.clearTimeout(timeout);
   }, [budgetToasts]);
 
+  useEffect(() => {
+    if (!user?.id || !selectedCompanyId) {
+      setChecklistDismissed(false);
+      return;
+    }
+
+    const dismissed =
+      localStorage.getItem(getChecklistDismissedKey(user.id, selectedCompanyId)) ===
+      'dismissed';
+    setChecklistDismissed(dismissed);
+  }, [selectedCompanyId, user?.id]);
+
   const topSources = retrievalMetrics?.by_source.slice(0, 3) ?? [];
   const topConsumers = retrievalMetrics?.by_consumer.slice(0, 3) ?? [];
   const recentRetrievals = retrievalMetrics?.recent.slice(0, 4) ?? [];
@@ -551,10 +574,65 @@ export default function DashboardPage() {
       ),
     [liveThoughts]
   );
+  const checklistItems = useMemo(
+    () => [
+      {
+        id: 'agent',
+        label: 'Hire your first agent',
+        description: 'Create a teammate who can execute workstreams.',
+        done: stats.agent_count > 0,
+        href: '/agents',
+        cta: 'Open agents',
+        icon: Users,
+      },
+      {
+        id: 'task',
+        label: 'Create a first task',
+        description: 'Turn the first workflow into an assignable item.',
+        done: stats.task_count > 0,
+        href: '/tasks',
+        cta: 'Open tasks',
+        icon: ListTodo,
+      },
+      {
+        id: 'budget',
+        label: 'Set an operating budget',
+        description: 'Define a spending cap before agents scale up usage.',
+        done: budgetTotals.limit_usd > 0,
+        href: '/budgets',
+        cta: 'Open budgets',
+        icon: WalletCards,
+      },
+      {
+        id: 'approvals',
+        label: 'Clear pending approvals',
+        description: 'Review queued governance decisions that need a human.',
+        done: stats.pending_approvals === 0,
+        href: '/approvals',
+        cta: 'Review approvals',
+        icon: ShieldAlert,
+      },
+    ],
+    [
+      budgetTotals.limit_usd,
+      stats.agent_count,
+      stats.pending_approvals,
+      stats.task_count,
+    ]
+  );
+  const remainingChecklistCount = checklistItems.filter((item) => !item.done).length;
+  const showChecklist =
+    hasCompleted &&
+    onboardingStatus !== 'active' &&
+    !checklistDismissed &&
+    selectedCompany;
 
   if (!selectedCompany) {
     return (
-      <div className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground">
+      <div
+        className="rounded-xl border border-dashed p-8 text-sm text-muted-foreground"
+        data-onboarding-target="dashboard-empty-state"
+      >
         Choose a company to see live metrics.
       </div>
     );
@@ -632,7 +710,127 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+      {showChecklist ? (
+        <div
+          className="checklist-enter rounded-[28px] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-6 shadow-sm"
+          data-onboarding-target="post-onboarding-checklist"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">
+                Next Steps
+              </div>
+              <h3 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                Turn the walkthrough into your first working setup
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                The product tour is done. This checklist adapts to the current
+                company state so the next action is obvious, even in a fresh
+                workspace.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-sky-200 bg-white/80 px-4 py-3 text-right">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                Progress
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-foreground">
+                {checklistItems.length - remainingChecklistCount}/{checklistItems.length}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {remainingChecklistCount === 0
+                  ? 'Workspace looks ready'
+                  : `${remainingChecklistCount} step${remainingChecklistCount === 1 ? '' : 's'} left`}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-2">
+            {checklistItems.map((item, index) => (
+              <div
+                key={item.id}
+                className="checklist-item-enter rounded-2xl border bg-white/80 p-4 shadow-sm"
+                style={{
+                  animationDelay: `${index * 60}ms`,
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl border ${
+                      item.done
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-sky-200 bg-sky-50 text-sky-700'
+                    }`}
+                  >
+                    {item.done ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <item.icon className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-medium text-foreground">
+                        {item.label}
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-1 text-[11px] font-medium uppercase tracking-wide ${
+                          item.done
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-sky-100 text-sky-700'
+                        }`}
+                      >
+                        {item.done ? 'Done' : 'Next'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      {item.description}
+                    </p>
+                    <div className="mt-3">
+                      <Link
+                        to={item.href}
+                        className="inline-flex items-center gap-2 text-sm font-medium text-foreground transition-colors hover:text-primary"
+                      >
+                        {item.done ? 'Review' : item.cta}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => startTutorial()}
+              className="rounded-full border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              Replay tutorial
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (user?.id && selectedCompanyId) {
+                  localStorage.setItem(
+                    getChecklistDismissedKey(user.id, selectedCompanyId),
+                    'dismissed'
+                  );
+                }
+                setChecklistDismissed(true);
+              }}
+              className="rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Hide checklist
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div
+        className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]"
+        data-onboarding-target="dashboard-metrics"
+      >
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -788,7 +986,10 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div
+          className="rounded-2xl border bg-card p-6 shadow-sm"
+          data-onboarding-target="thought-stream"
+        >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold">Retrieval Quality</h3>
@@ -849,7 +1050,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div
+          className="rounded-2xl border bg-card p-6 shadow-sm"
+          data-onboarding-target="activity-feed"
+        >
           <h3 className="text-lg font-semibold">Recent Retrievals</h3>
           <div className="mt-4 space-y-3">
             {recentRetrievals.map((item, index) => (

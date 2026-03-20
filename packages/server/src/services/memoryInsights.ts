@@ -26,7 +26,7 @@ type RecentLessonRow = {
 };
 
 type RevisitedQueryRow = {
-  query: string | null;
+  query_preview: string | null;
   total: number | string;
 };
 
@@ -211,16 +211,16 @@ export async function getMemoryInsights(companyId: string, days: number) {
       ),
       db.query<RevisitedQueryRow>(
         `SELECT
-         query,
+         query_preview,
          COUNT(*)::int AS total
        FROM retrieval_metrics
        WHERE company_id = $1
          AND scope = 'memory'
          AND created_at >= now() - make_interval(days => $2)
-         AND query IS NOT NULL
-         AND length(trim(query)) > 0
-       GROUP BY query
-       ORDER BY total DESC, query ASC
+         AND query_preview IS NOT NULL
+         AND length(trim(query_preview)) > 0
+       GROUP BY query_preview
+       ORDER BY total DESC, query_preview ASC
        LIMIT 5`,
         [companyId, days]
       ),
@@ -252,7 +252,7 @@ export async function getMemoryInsights(companyId: string, days: number) {
       latest_memory_at: row.latest_memory_at,
     })),
     revisited_queries: revisitedQueriesRes.rows.map((row) => ({
-      query: row.query ?? '',
+      query: row.query_preview ?? '',
       total: toNumber(row.total),
     })),
     recent_lessons: recentLessons.map((row) => ({

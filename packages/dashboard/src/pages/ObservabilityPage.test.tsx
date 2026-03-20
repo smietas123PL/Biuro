@@ -16,6 +16,50 @@ describe('ObservabilityPage', () => {
     useApiMock.mockReset();
 
     requestMock.mockImplementation(async (path: string) => {
+      if (path === '/observability/heartbeat-runs/recent?limit=12') {
+        return {
+          count: 2,
+          items: [
+            {
+              heartbeat_id: 'heartbeat-1',
+              agent_id: 'agent-1',
+              agent_name: 'Ada',
+              task_id: 'task-1',
+              task_title: 'Investigate churn',
+              status: 'worked',
+              created_at: '2026-03-19T09:00:00.000Z',
+              duration_ms: 1900,
+              cost_usd: 0.42,
+              llm_selected_runtime: 'openai',
+              llm_selected_model: 'gpt-4o',
+              llm_fallback_count: 1,
+              retrieval_count: 2,
+              retrieval_fallback_count: 1,
+              retrieval_skipped_count: 0,
+              budget_capped: false,
+            },
+            {
+              heartbeat_id: 'heartbeat-2',
+              agent_id: 'agent-2',
+              agent_name: 'Ben',
+              task_id: 'task-2',
+              task_title: 'Review launch plan',
+              status: 'worked',
+              created_at: '2026-03-19T08:55:00.000Z',
+              duration_ms: 1200,
+              cost_usd: 0.18,
+              llm_selected_runtime: 'gemini',
+              llm_selected_model: 'gemini-2.0-flash',
+              llm_fallback_count: 0,
+              retrieval_count: 2,
+              retrieval_fallback_count: 0,
+              retrieval_skipped_count: 1,
+              budget_capped: false,
+            },
+          ],
+        };
+      }
+
       if (path === '/observability/traces/recent?limit=100') {
         return {
           service: 'autonomiczne-biuro',
@@ -180,6 +224,14 @@ describe('ObservabilityPage', () => {
         }
       );
       expect(requestMock).toHaveBeenCalledWith(
+        '/observability/heartbeat-runs/recent?limit=12',
+        undefined,
+        {
+          suppressError: true,
+          trackTrace: false,
+        }
+      );
+      expect(requestMock).toHaveBeenCalledWith(
         '/observability/traces/trace-a1234567890',
         undefined,
         {
@@ -190,6 +242,10 @@ describe('ObservabilityPage', () => {
     });
 
     expect(screen.getByText('Observability')).toBeTruthy();
+    expect(screen.getByText('Heartbeat runtime health')).toBeTruthy();
+    expect(screen.getByText('LLM fallback runs')).toBeTruthy();
+    expect(screen.getAllByText('Retrieval skipped').length).toBeGreaterThan(0);
+    expect(screen.getByText('Investigate churn')).toBeTruthy();
     expect(screen.getByText('Recent trace sessions')).toBeTruthy();
     expect(screen.getByText('Trace detail')).toBeTruthy();
     expect(screen.getAllByText('http.get').length).toBeGreaterThanOrEqual(1);

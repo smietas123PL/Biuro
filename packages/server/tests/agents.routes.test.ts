@@ -15,11 +15,23 @@ vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      _req: express.Request,
+      _req: express.Request & {
+        user?: { id: string; companyId?: string; role?: string };
+      },
       _res: express.Response,
       next: express.NextFunction
-    ) =>
-      next(),
+    ) => {
+      const testCompanyIdHeader = _req.headers['x-test-company-id'];
+      _req.user = {
+        id: 'user-1',
+        companyId:
+          typeof testCompanyIdHeader === 'string'
+            ? testCompanyIdHeader
+            : undefined,
+        role: 'owner',
+      };
+      next();
+    },
 }));
 
 vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
@@ -270,10 +282,20 @@ describe('agent routes', () => {
     });
   });
 
+  function fetchWithCompany(path: string, init?: RequestInit) {
+    return fetch(path, {
+      ...init,
+      headers: {
+        'x-test-company-id': 'company-1',
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
+
   it('returns a filtered replay timeline with task and event-type metadata for session replay', async () => {
     mockReplayQueries();
 
-    const response = await fetch(
+    const response = await fetchWithCompany(
       `${baseUrl}/agent-1/replay?limit=5&from=2026-03-18T09:59:00.000Z&to=2026-03-18T10:05:00.000Z&task_id=task-1&types=message,session`
     );
 
@@ -348,7 +370,7 @@ describe('agent routes', () => {
   it('exports the filtered replay as an HTML attachment', async () => {
     mockReplayQueries();
 
-    const response = await fetch(
+    const response = await fetchWithCompany(
       `${baseUrl}/agent-1/replay/report?limit=5&task_id=task-1&types=message,session`
     );
 
@@ -369,7 +391,7 @@ describe('agent routes', () => {
   it('returns a task-to-task replay diff with summary deltas', async () => {
     mockReplayDiffQueries();
 
-    const response = await fetch(
+    const response = await fetchWithCompany(
       `${baseUrl}/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=20`
     );
 
@@ -428,7 +450,7 @@ describe('agent routes', () => {
     dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
       if (
         text ===
-        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1'
+        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1 AND company_id = $2'
       ) {
         return {
           rows: [
@@ -578,7 +600,7 @@ describe('agent routes', () => {
       throw new Error(`Unexpected query: ${text}`);
     });
 
-    const response = await fetch(`${baseUrl}/agent-1/replay/fork`, {
+    const response = await fetchWithCompany(`${baseUrl}/agent-1/replay/fork`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

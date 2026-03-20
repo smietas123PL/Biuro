@@ -8,6 +8,12 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_EMBEDDING_MODEL: z.string().optional(),
+  EMBEDDING_CACHE_TTL_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(86_400_000)
+    .default(6 * 60 * 60 * 1000),
   GOOGLE_API_KEY: z.string().optional(),
   CLAUDE_MODEL: z.string().optional(),
   OPENAI_MODEL: z.string().optional(),
@@ -76,6 +82,18 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  LLM_CIRCUIT_BREAKER_FAILURE_THRESHOLD: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .default(3),
+  LLM_CIRCUIT_BREAKER_COOLDOWN_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(3_600_000)
+    .default(60_000),
   LLM_ROUTER_FALLBACK_ORDER: z
     .string()
     .default('gemini,claude,openai')
@@ -94,6 +112,10 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().default(20),
   WS_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),
   WS_RATE_LIMIT_MAX: z.coerce.number().default(30),
+  WS_MESSAGE_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(10 * 1000),
+  WS_MESSAGE_RATE_LIMIT_MAX: z.coerce.number().default(25),
+  WS_BROADCAST_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(10 * 1000),
+  WS_BROADCAST_RATE_LIMIT_MAX: z.coerce.number().default(200),
   OTEL_SERVICE_NAME: z.string().default('autonomiczne-biuro'),
   OTEL_TRACE_CONSOLE_EXPORTER: z
     .enum(['true', 'false'])

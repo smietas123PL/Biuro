@@ -73,6 +73,17 @@ const digestSettingsSchema = z.object({
   hour_utc: z.number().int().min(0).max(23),
   minute_utc: z.number().int().min(0).max(59),
 });
+const rootPoliciesQuerySchema = z.object({
+  company_id: z.string().uuid(),
+});
+
+function getScopedCompanyId(req: AuthRequest) {
+  return (
+    req.user?.companyId ||
+    (typeof req.query.company_id === 'string' ? req.query.company_id : null) ||
+    (typeof req.body?.company_id === 'string' ? req.body.company_id : null)
+  );
+}
 
 function clampLimit(value: unknown, fallback: number, max: number) {
   const parsed = Number(value);
@@ -134,17 +145,22 @@ function buildDigestSettingsPayload(company: {
 router.get(
   '/policies',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
-      const { company_id } = req.query;
-      let q = 'SELECT * FROM policies';
-      let params: any[] = [];
-      if (company_id) {
-        q += ' WHERE company_id = $1';
-        params.push(company_id);
+      const parsed = rootPoliciesQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error });
       }
-      q += ' ORDER BY created_at DESC';
-      const result = await db.query(q, params);
+
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId || scopedCompanyId !== parsed.data.company_id) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+
+      const result = await db.query(
+        'SELECT * FROM policies WHERE company_id = $1 ORDER BY created_at DESC',
+        [scopedCompanyId]
+      );
       res.json(result.rows);
     } catch (err) {
       next(err);
@@ -155,12 +171,18 @@ router.get(
 router.post(
   '/policies',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const parsed = policySchema
         .extend({ company_id: z.string().uuid() })
         .safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId || scopedCompanyId !== parsed.data.company_id) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+
       const { company_id, name, description, type, rules } = parsed.data;
       const result = await db.query(
         'INSERT INTO policies (company_id, name, description, type, rules) VALUES ($1, $2, $3, $4, $5) RETURNING *',

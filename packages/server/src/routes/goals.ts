@@ -67,6 +67,7 @@ type GoalSuggestAgent = {
 
 function getCompanyId(req: AuthRequest) {
   return (
+    req.user?.companyId ||
     (typeof req.params.companyId === 'string' && req.params.companyId) ||
     req.header('x-company-id') ||
     (typeof req.body?.company_id === 'string' ? req.body.company_id : null)
@@ -547,12 +548,27 @@ async function insertGoalHierarchy(
 router.post(
   '/',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const parsed = createGoalSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
       const { company_id, parent_id, title, description } = parsed.data;
+      const scopedCompanyId = getCompanyId(req);
+      if (!scopedCompanyId || scopedCompanyId !== company_id) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+
+      if (parent_id) {
+        const parentGoalRes = await db.query(
+          'SELECT id FROM goals WHERE id = $1 AND company_id = $2',
+          [parent_id, scopedCompanyId]
+        );
+        if (parentGoalRes.rows.length === 0) {
+          return res.status(404).json({ error: 'Parent goal not found' });
+        }
+      }
+
       const result = await db.query(
         'INSERT INTO goals (company_id, parent_id, title, description) VALUES ($1, $2, $3, $4) RETURNING *',
         [company_id, parent_id, title, description]
@@ -720,11 +736,9 @@ router.post(
 router.get(
   '/',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
-      const companyId =
-        (typeof req.params.companyId === 'string' && req.params.companyId) ||
-        (typeof req.query.company_id === 'string' && req.query.company_id);
+      const companyId = getCompanyId(req);
       if (!companyId) {
         return res.status(400).json({ error: 'Missing company_id' });
       }
@@ -744,18 +758,27 @@ router.get(
 router.patch(
   '/:id',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const { status, title, description } = req.body;
+      const companyId = getCompanyId(req);
+      if (!companyId) {
+        return res.status(400).json({ error: 'Missing company_id' });
+      }
       const result = await db.query(
         `UPDATE goals SET 
         status = COALESCE($1, status),
         title = COALESCE($2, title),
         description = COALESCE($3, description),
         updated_at = now()
-       WHERE id = $4 RETURNING *`,
-        [status, title, description, req.params.id]
+       WHERE id = $4
+         AND company_id = $5
+       RETURNING *`,
+        [status, title, description, req.params.id, companyId]
       );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Goal not found' });
+      }
       res.json(result.rows[0]);
     } catch (err) {
       next(err);

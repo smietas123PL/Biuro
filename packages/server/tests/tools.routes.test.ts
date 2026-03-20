@@ -164,6 +164,25 @@ describe('tools routes', () => {
     expect(dbMock.query).toHaveBeenCalledTimes(3);
   });
 
+  it('rejects tool creation when body company_id does not match route company context', async () => {
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_id: '22222222-2222-2222-2222-222222222222',
+        name: 'web_search',
+        type: 'builtin',
+        config: { builtin: 'web_search' },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Tool company_id must match the authenticated company context',
+    });
+    expect(dbMock.query).not.toHaveBeenCalled();
+  });
+
   it('updates an existing tool', async () => {
     dbMock.query
       .mockResolvedValueOnce({

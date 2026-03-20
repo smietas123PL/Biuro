@@ -11,6 +11,13 @@ const interpretSchema = z.object({
   input: z.string().min(3).max(500),
 });
 
+function isCompanyNotFoundError(error: unknown) {
+  return (
+    error instanceof Error &&
+    /^Company\s.+\snot found$/.test(error.message.trim())
+  );
+}
+
 router.post(
   '/',
   requireRole(['owner', 'admin', 'member', 'viewer']),
@@ -55,6 +62,9 @@ router.post(
 
       res.json(plan);
     } catch (err) {
+      if (isCompanyNotFoundError(err)) {
+        return res.status(404).json({ error: 'Company not found' });
+      }
       next(err);
     }
   }

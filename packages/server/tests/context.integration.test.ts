@@ -43,7 +43,7 @@ describe('buildAgentContext integration flows', () => {
         };
       }
 
-      if (text === 'SELECT * FROM tasks WHERE id = $1') {
+      if (text === 'SELECT * FROM tasks WHERE id = $1 AND company_id = $2') {
         return {
           rows: [
             {
@@ -93,7 +93,10 @@ describe('buildAgentContext integration flows', () => {
         };
       }
 
-      if (text.includes('FROM messages')) {
+      if (
+        text.includes('FROM messages m') &&
+        text.includes('JOIN tasks t ON t.id = m.task_id')
+      ) {
         return {
           rows: [
             {
@@ -188,7 +191,7 @@ describe('buildAgentContext integration flows', () => {
         };
       }
 
-      if (text === 'SELECT * FROM tasks WHERE id = $1') {
+      if (text === 'SELECT * FROM tasks WHERE id = $1 AND company_id = $2') {
         return {
           rows: [
             {
@@ -208,7 +211,10 @@ describe('buildAgentContext integration flows', () => {
         return { rows: [] };
       }
 
-      if (text.includes('FROM messages')) {
+      if (
+        text.includes('FROM messages m') &&
+        text.includes('JOIN tasks t ON t.id = m.task_id')
+      ) {
         return { rows: [] };
       }
 
@@ -229,5 +235,39 @@ describe('buildAgentContext integration flows', () => {
         consumer: 'agent_context',
       }
     );
+  });
+
+  it('rejects tasks that do not belong to the agent company', async () => {
+    dbMock.query.mockImplementation(async (text: string) => {
+      if (text.includes('FROM agents a')) {
+        return {
+          rows: [
+            {
+              id: 'agent-1',
+              company_id: 'company-1',
+              name: 'Ada',
+              role: 'Researcher',
+              model: null,
+              system_prompt: null,
+              company_name: 'QA Test Corp',
+              company_mission: 'Ship reliable software',
+            },
+          ],
+        };
+      }
+
+      if (text === 'SELECT * FROM tasks WHERE id = $1 AND company_id = $2') {
+        return {
+          rows: [],
+        };
+      }
+
+      throw new Error(`Unexpected query: ${text}`);
+    });
+
+    await expect(buildAgentContext('agent-1', 'task-foreign')).rejects.toThrow(
+      'Task not found'
+    );
+    expect(searchMock).not.toHaveBeenCalled();
   });
 });

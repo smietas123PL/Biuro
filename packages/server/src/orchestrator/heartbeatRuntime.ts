@@ -3,8 +3,10 @@ import { runtimeRegistry } from '../runtime/registry.js';
 import { extractCompanyRuntimeSettings } from '../runtime/preferences.js';
 import { buildAgentContext } from './context.js';
 import { findRelatedMemories } from './memory.js';
+import { createHeartbeatExecutionTelemetry } from './heartbeatExecutionTelemetry.js';
 
 export async function prepareHeartbeatExecution(agentId: string, task: any) {
+  const executionTelemetry = createHeartbeatExecutionTelemetry(2);
   const memories = await findRelatedMemories(
     task.company_id,
     `${task.title} ${task.description}`,
@@ -13,6 +15,8 @@ export async function prepareHeartbeatExecution(agentId: string, task: any) {
       agentId,
       taskId: task.id,
       consumer: 'heartbeat_memory',
+      retrievalGuard: executionTelemetry.guard,
+      onDiagnostic: executionTelemetry.recordRetrieval,
     }
   );
 
@@ -34,7 +38,10 @@ export async function prepareHeartbeatExecution(agentId: string, task: any) {
     fallbackOrder: runtimeSettings.fallbackOrder,
   });
 
-  const context = await buildAgentContext(agentId, task.id);
+  const context = await buildAgentContext(agentId, task.id, {
+    retrievalGuard: executionTelemetry.guard,
+    onRetrieval: executionTelemetry.recordRetrieval,
+  });
   if (memories.length > 0) {
     context.additional_context =
       (context.additional_context || '') +
@@ -52,5 +59,5 @@ export async function prepareHeartbeatExecution(agentId: string, task: any) {
     });
   }
 
-  return { agentName, context, runtime };
+  return { agentName, context, runtime, executionTelemetry };
 }

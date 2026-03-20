@@ -5,6 +5,7 @@ import { canUseTool } from '../tools/registry.js';
 import { executeTool } from '../tools/executor.js';
 import { evaluatePolicy } from '../governance/policies.js';
 import { createApprovalRequest } from '../governance/approvals.js';
+import { broadcastCompanyEvent } from '../realtime/eventBus.js';
 import {
   broadcastCollaborationSignal,
   findDelegateAgent,
@@ -24,6 +25,23 @@ export async function handleHeartbeatAction(
       await db.query(
         "UPDATE tasks SET status = 'done', result = $1, completed_at = now() WHERE id = $2",
         [action.result, task.id]
+      );
+      await broadcastCollaborationSignal(task.company_id, task.id, 'status_update', {
+        agent_id: agentId,
+        status: 'done',
+      });
+      await broadcastCompanyEvent(
+        task.company_id,
+        'task.updated',
+        {
+          company_id: task.company_id,
+          task_id: task.id,
+          status: 'done',
+          assigned_to: task.assigned_to ?? null,
+          result: action.result,
+          source: 'heartbeat_complete',
+        },
+        'worker'
       );
       await storeMemory(
         task.company_id,
@@ -204,6 +222,22 @@ export async function handleHeartbeatAction(
       await db.query("UPDATE tasks SET status = 'blocked' WHERE id = $1", [
         task.id,
       ]);
+      await broadcastCollaborationSignal(task.company_id, task.id, 'status_update', {
+        agent_id: agentId,
+        status: 'blocked',
+      });
+      await broadcastCompanyEvent(
+        task.company_id,
+        'task.updated',
+        {
+          company_id: task.company_id,
+          task_id: task.id,
+          status: 'blocked',
+          assigned_to: task.assigned_to ?? null,
+          source: 'approval_requested',
+        },
+        'worker'
+      );
       break;
 
     case 'message':

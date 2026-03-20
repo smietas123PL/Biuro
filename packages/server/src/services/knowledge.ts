@@ -1,7 +1,25 @@
 import { db } from '../db/client.js';
 import { logger } from '../utils/logger.js';
-import { generateEmbedding, toPgVector } from './embeddings.js';
-import { recordRetrievalMetric } from './retrievalMetrics.js';
+import { generateEmbedding, toPgVector, type EmbeddingResult } from './embeddings.js';
+import {
+  recordRetrievalMetric,
+  type RetrievalScope,
+} from './retrievalMetrics.js';
+
+type RetrievalDiagnostic = {
+  scope: RetrievalScope;
+  consumer: string;
+  query: string;
+  resultCount: number;
+  lexicalCandidateCount: number;
+  vectorCandidateCount: number;
+  overlapCount: number;
+  fallbackUsed: boolean;
+  embeddingSource: string;
+  embeddingModel: string;
+  skipped?: boolean;
+  reason?: string;
+};
 
 function clampLimit(limit: number) {
   return Math.max(1, Math.min(limit, 25));
@@ -67,34 +85,97 @@ async function searchByEmbedding(
   limit: number
 ) {
   const embedding = await generateEmbedding(query);
-  const queryResult = await db.query(
-    `SELECT id, title, content, metadata, created_at, (embedding <=> $2::vector) AS distance
-     FROM company_knowledge
-     WHERE company_id = $1
-       AND embedding IS NOT NULL
-     ORDER BY embedding <=> $2::vector ASC, created_at DESC
-     LIMIT $3`,
-    [companyId, toPgVector(embedding.vector), limit]
-  );
+  try {
+    const queryResult = await db.query(
+      `SELECT id, title, content, metadata, created_at, (embedding <=> $2::vector) AS distance
+       FROM company_knowledge
+       WHERE company_id = $1
+         AND embedding IS NOT NULL
+       ORDER BY embedding <=> $2::vector ASC, created_at DESC
+       LIMIT $3`,
+      [companyId, toPgVector(embedding.vector), limit]
+    );
 
+    return {
+      rows: queryResult.rows,
+      embedding,
+      degraded: false,
+    };
+  } catch (error) {
+    logger.warn(
+      { error, companyId, limit },
+      'Vector knowledge search failed, degrading to lexical results'
+    );
+    return {
+      rows: [],
+      embedding,
+      degraded: true,
+      error,
+    };
+  }
+}
+
+async function searchLexicallySafe(
+  companyId: string,
+  normalizedQuery: string,
+  limit: number
+) {
+  try {
+    const result = await searchLexically(companyId, normalizedQuery, limit);
+    return {
+      rows: result.rows,
+      degraded: false,
+    };
+  } catch (error) {
+    logger.warn(
+      { error, companyId, limit },
+      'Lexical knowledge search failed, degrading to vector results'
+    );
+    return {
+      rows: [] as any[],
+      degraded: true,
+      error,
+    };
+  }
+}
+
+function scoreKnowledgeCandidate(
+  candidate: SearchCandidate,
+  vectorRowCount: number
+) {
+  const lexicalComponent = (candidate.lexical_score ?? 0) * 100;
+  const vectorComponent =
+    candidate.vector_rank !== undefined
+      ? Math.max(vectorRowCount - candidate.vector_rank, 0) * 10
+      : 0;
+  const distancePenalty = (candidate.distance ?? 1) * 5;
+  const hybridBonus =
+    candidate.lexical_score !== undefined && candidate.vector_rank !== undefined
+      ? 25
+      : 0;
+
+  return lexicalComponent + vectorComponent + hybridBonus - distancePenalty;
+}
+
+function sanitizeTopDistance(rows: any[]) {
+  const firstDistance = rows[0]?.distance;
+  return typeof firstDistance === 'number'
+    ? firstDistance
+    : Number.isFinite(Number(firstDistance))
+      ? Number(firstDistance)
+      : null;
+}
+
+function resolveEmbeddingTelemetry(
+  embedding?: EmbeddingResult | null
+) {
   return {
-    rows: queryResult.rows,
-    embedding,
+    embeddingSource: embedding?.source ?? 'unavailable',
+    embeddingModel: embedding?.model ?? 'unavailable',
   };
 }
 
-type SearchCandidate = {
-  id: string;
-  title: string;
-  content: string;
-  metadata: unknown;
-  created_at: string;
-  lexical_score?: number;
-  vector_rank?: number;
-  distance?: number;
-};
-
-function mergeKnowledgeResults(
+export function mergeKnowledgeResults(
   vectorRows: any[],
   lexicalRows: any[],
   limit: number
@@ -136,18 +217,8 @@ function mergeKnowledgeResults(
 
   return Array.from(candidates.values())
     .sort((left, right) => {
-      const leftScore =
-        (left.lexical_score ?? 0) * 100 +
-        (left.vector_rank !== undefined
-          ? Math.max(vectorRows.length - left.vector_rank, 0) * 10
-          : 0) -
-        (left.distance ?? 1) * 5;
-      const rightScore =
-        (right.lexical_score ?? 0) * 100 +
-        (right.vector_rank !== undefined
-          ? Math.max(vectorRows.length - right.vector_rank, 0) * 10
-          : 0) -
-        (right.distance ?? 1) * 5;
+      const leftScore = scoreKnowledgeCandidate(left, vectorRows.length);
+      const rightScore = scoreKnowledgeCandidate(right, vectorRows.length);
 
       if (rightScore !== leftScore) {
         return rightScore - leftScore;
@@ -161,6 +232,17 @@ function mergeKnowledgeResults(
     .slice(0, limit)
     .map(({ title, content, metadata }) => ({ title, content, metadata }));
 }
+
+type SearchCandidate = {
+  id: string;
+  title: string;
+  content: string;
+  metadata: unknown;
+  created_at: string;
+  lexical_score?: number;
+  vector_rank?: number;
+  distance?: number;
+};
 
 export const KnowledgeService = {
   async addDocument(
@@ -192,7 +274,12 @@ export const KnowledgeService = {
     companyId: string,
     query: string,
     limit: number = 5,
-    options: { agentId?: string; taskId?: string; consumer?: string } = {}
+    options: {
+      agentId?: string;
+      taskId?: string;
+      consumer?: string;
+      onDiagnostic?: (diagnostic: RetrievalDiagnostic) => void;
+    } = {}
   ) {
     logger.info({ companyId, query }, 'Searching company knowledge');
 
@@ -213,10 +300,15 @@ export const KnowledgeService = {
 
     const [vectorRes, lexicalRes] = await Promise.all([
       searchByEmbedding(companyId, normalizedQuery, safeLimit * 3),
-      searchLexically(companyId, normalizedQuery, safeLimit * 3),
+      searchLexicallySafe(companyId, normalizedQuery, safeLimit * 3),
     ]);
+    if (vectorRes.degraded && lexicalRes.degraded) {
+      throw vectorRes.error ?? lexicalRes.error ?? new Error('Knowledge search failed');
+    }
+    const vectorRows = vectorRes.rows;
+    const lexicalRows = lexicalRes.rows;
     const lexicalIds = new Set(lexicalRes.rows.map((row) => row.id as string));
-    const vectorIds = new Set(vectorRes.rows.map((row) => row.id as string));
+    const vectorIds = new Set(vectorRows.map((row) => row.id as string));
     const overlapCount = Array.from(vectorIds).filter((id) =>
       lexicalIds.has(id)
     ).length;
@@ -224,6 +316,7 @@ export const KnowledgeService = {
       resultCount: number,
       topDistance?: number | null
     ) => {
+      const embeddingTelemetry = resolveEmbeddingTelemetry(vectorRes.embedding);
       await recordRetrievalMetric({
         companyId,
         agentId: options.agentId,
@@ -233,41 +326,72 @@ export const KnowledgeService = {
         query: normalizedQuery,
         limitRequested: safeLimit,
         resultCount,
-        lexicalCandidateCount: lexicalRes.rows.length,
-        vectorCandidateCount: vectorRes.rows.length,
+        lexicalCandidateCount: lexicalRows.length,
+        vectorCandidateCount: vectorRows.length,
         overlapCount,
         topDistance,
-        embeddingSource: vectorRes.embedding.source,
-        embeddingModel: vectorRes.embedding.model,
+        embeddingSource: embeddingTelemetry.embeddingSource,
+        embeddingModel: embeddingTelemetry.embeddingModel,
         latencyMs: Date.now() - startedAt,
       });
     };
+    const emitDiagnostic = (args: {
+      resultCount: number;
+      fallbackUsed: boolean;
+      reason?: string;
+      skipped?: boolean;
+    }) => {
+      const embeddingTelemetry = resolveEmbeddingTelemetry(vectorRes.embedding);
+      options.onDiagnostic?.({
+        scope: 'knowledge',
+        consumer: options.consumer ?? 'unknown',
+        query: normalizedQuery,
+        resultCount: args.resultCount,
+        lexicalCandidateCount: lexicalRows.length,
+        vectorCandidateCount: vectorRows.length,
+        overlapCount,
+        fallbackUsed: args.fallbackUsed,
+        embeddingSource: embeddingTelemetry.embeddingSource,
+        embeddingModel: embeddingTelemetry.embeddingModel,
+        skipped: args.skipped,
+        reason: args.reason,
+      });
+    };
 
-    if (vectorRes.rows.length === 0 && lexicalRes.rows.length === 0) {
+    if (vectorRows.length === 0 && lexicalRows.length === 0) {
       await recordMetric(0, null);
+      emitDiagnostic({
+        resultCount: 0,
+        fallbackUsed: vectorRes.degraded || lexicalRes.degraded,
+      });
       return [];
     }
 
-    if (vectorRes.rows.length === 0) {
-      const lexicalResults = lexicalRes.rows
+    if (vectorRows.length === 0) {
+      const lexicalResults = lexicalRows
         .slice(0, safeLimit)
         .map(({ title, content, metadata }) => ({ title, content, metadata }));
       await recordMetric(lexicalResults.length, null);
+      emitDiagnostic({
+        resultCount: lexicalResults.length,
+        fallbackUsed: true,
+      });
       return lexicalResults;
     }
 
     const mergedResults = mergeKnowledgeResults(
-      vectorRes.rows,
-      lexicalRes.rows,
+      vectorRows,
+      lexicalRows,
       safeLimit
     );
-    const firstDistance = vectorRes.rows[0]?.distance;
     await recordMetric(
       mergedResults.length,
-      typeof firstDistance === 'number'
-        ? firstDistance
-        : Number(firstDistance ?? 0)
+      sanitizeTopDistance(vectorRows)
     );
+    emitDiagnostic({
+      resultCount: mergedResults.length,
+      fallbackUsed: vectorRes.degraded || lexicalRes.degraded,
+    });
     return mergedResults;
   },
 };

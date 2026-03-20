@@ -47,3 +47,61 @@
 .glass {
   @apply bg-white/10 backdrop-blur-md border border-white/20;
 }
+
+@keyframes onboarding-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes onboarding-spotlight-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes checklist-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.onboarding-panel-enter {
+  animation: onboarding-panel-enter 220ms ease-out;
+}
+
+.onboarding-spotlight-enter {
+  animation: onboarding-spotlight-enter 180ms ease-out;
+}
+
+.checklist-enter {
+  animation: checklist-enter 280ms ease-out;
+}
+
+.checklist-item-enter {
+  animation: checklist-enter 320ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-panel-enter,
+  .onboarding-spotlight-enter,
+  .checklist-enter,
+  .checklist-item-enter {
+    animation: none;
+  }
+}

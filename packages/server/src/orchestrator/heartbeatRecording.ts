@@ -2,6 +2,7 @@ import { db } from '../db/client.js';
 import { AgentResponse } from '../types/agent.js';
 import { broadcastCompanyEvent } from '../realtime/eventBus.js';
 import { broadcastCollaborationSignal } from '../services/collaboration.js';
+import type { HeartbeatExecutionTelemetrySnapshot } from './heartbeatExecutionTelemetry.js';
 import {
   applyAgentBudgetSpend,
   emitBudgetThresholdAlert,
@@ -28,13 +29,34 @@ export async function persistSuccessfulHeartbeat(args: {
   task: any;
   response: AgentResponse;
   startedAt: number;
+  executionTelemetry?: HeartbeatExecutionTelemetrySnapshot | null;
 }) {
-  const { agentId, agentName, task, response, startedAt } = args;
+  const { agentId, agentName, task, response, startedAt, executionTelemetry } =
+    args;
   const usage = response.usage;
   const costUsd = usage?.cost_usd ?? 0;
   const durationMs = Date.now() - startedAt;
   const budgetApplication = await applyAgentBudgetSpend(agentId, costUsd);
   const newState = usage || {};
+  const llmFallbackCount =
+    response.routing?.attempts.filter((attempt) => attempt.status === 'fallback')
+      .length ?? 0;
+  const heartbeatExecution =
+    executionTelemetry ??
+    ({
+      retrieval_budget: {
+        max_requests: 0,
+        consumed_requests: 0,
+        skipped_requests: 0,
+      },
+      retrievals: [],
+      retrieval_fallback_count: 0,
+      llm_fallback_count: llmFallbackCount,
+    } satisfies HeartbeatExecutionTelemetrySnapshot);
+  const mergedExecutionTelemetry: HeartbeatExecutionTelemetrySnapshot = {
+    ...heartbeatExecution,
+    llm_fallback_count: llmFallbackCount,
+  };
 
   await db.query(
     `INSERT INTO agent_sessions (agent_id, task_id, state)
@@ -56,6 +78,7 @@ export async function persistSuccessfulHeartbeat(args: {
         duration_ms: durationMs,
         budget_capped: !budgetApplication.applied,
         llm_routing: response.routing ?? null,
+        heartbeat_execution: mergedExecutionTelemetry,
       }),
       costUsd,
     ]
@@ -73,6 +96,7 @@ export async function persistSuccessfulHeartbeat(args: {
         thought: response.thought,
         budget_capped: !budgetApplication.applied,
         llm_routing: response.routing ?? null,
+        heartbeat_execution: mergedExecutionTelemetry,
       }),
     ]
   );

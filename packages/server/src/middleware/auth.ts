@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { db } from '../db/client.js';
-import { AuthRequest, contextStore } from '../utils/context.js';
+import { AuthRequest, contextStore, getContext } from '../utils/context.js';
 import { env } from '../env.js';
 
 function getRequestCompanyId(req: AuthRequest): string | undefined {
@@ -59,6 +59,7 @@ export function requireAuth() {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     const companyId = getRequestCompanyId(req);
     const token = req.headers.authorization?.split(' ')[1];
+    const existingContext = getContext();
 
     if (!env.AUTH_ENABLED) {
       req.user = {
@@ -68,8 +69,13 @@ export function requireAuth() {
       };
       return contextStore.run(
         companyId
-          ? { companyId, userId: req.user.id, role: req.user.role }
-          : { userId: req.user.id },
+          ? {
+              ...existingContext,
+              companyId,
+              userId: req.user.id,
+              role: req.user.role,
+            }
+          : { ...existingContext, userId: req.user.id },
         () => {
           next();
         }
@@ -99,8 +105,13 @@ export function requireAuth() {
       req.user = { id: session.user_id, companyId, role };
       return contextStore.run(
         companyId
-          ? { companyId, userId: session.user_id, role }
-          : { userId: session.user_id },
+          ? {
+              ...existingContext,
+              companyId,
+              userId: session.user_id,
+              role,
+            }
+          : { ...existingContext, userId: session.user_id },
         () => {
           next();
         }
@@ -115,6 +126,7 @@ export function requireRole(roles: string[]) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     const companyId = getRequestCompanyId(req);
     const token = req.headers.authorization?.split(' ')[1];
+    const existingContext = getContext();
 
     if (!env.AUTH_ENABLED) {
       req.user = {
@@ -124,8 +136,13 @@ export function requireRole(roles: string[]) {
       };
       return contextStore.run(
         companyId
-          ? { companyId, role: 'owner', userId: req.user.id }
-          : { userId: req.user.id },
+          ? {
+              ...existingContext,
+              companyId,
+              role: 'owner',
+              userId: req.user.id,
+            }
+          : { ...existingContext, userId: req.user.id },
         () => {
           next();
         }
@@ -157,9 +174,17 @@ export function requireRole(roles: string[]) {
       req.user = authData;
 
       // Wrap subsequent middleware/routes in company context for RLS
-      contextStore.run({ companyId, userId, role: authData.role }, () => {
+      contextStore.run(
+        {
+          ...existingContext,
+          companyId,
+          userId,
+          role: authData.role,
+        },
+        () => {
         next();
-      });
+        }
+      );
     } catch (err) {
       res.status(500).json({ error: 'Auth check failed' });
     }

@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
 }
 
 export interface RequestContext {
+  requestId?: string;
   companyId?: string;
   userId?: string;
   role?: string;

@@ -8,6 +8,7 @@ import { ArrowDown, ArrowUp, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
+import { useOnboarding } from '../context/OnboardingContext';
 import { useApi } from '../hooks/useApi';
 
 function runtimeTone(runtime: RuntimeName) {
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const { selectedCompany, selectedCompanyId, companies } = useCompany();
   const { request, loading, error } = useApi();
+  const { hasCompleted, startTutorial } = useOnboarding();
   const [runtimeSettings, setRuntimeSettings] =
     useState<CompanyRuntimeSettingsResponse | null>(null);
   const [digestSettings, setDigestSettings] =
@@ -259,6 +261,36 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
+
+      <section className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">Product Walkthrough</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Replay the first-run tutorial whenever you want to onboard a new
+              teammate or revisit the core UI.
+            </p>
+          </div>
+          <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-medium text-sky-700">
+            {hasCompleted ? 'Completed once' : 'Ready to launch'}
+          </span>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => startTutorial()}
+            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Start tutorial
+          </button>
+          <div className="text-sm text-muted-foreground">
+            The tutorial opens on top of the live UI, supports skip/back, and
+            automatically returns you to the Dashboard when a step depends on
+            live metrics.
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">

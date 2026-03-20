@@ -2,6 +2,7 @@ import { db } from '../db/client.js';
 import { AgentContext } from '../types/agent.js';
 import { KnowledgeService } from '../services/knowledge.js';
 import { getAgentTools } from '../tools/registry.js';
+import type { HeartbeatRetrievalDiagnostic, HeartbeatRetrievalGuard } from './heartbeatExecutionTelemetry.js';
 
 function getAllowedBashCommands(toolConfig: unknown): string[] {
   if (!toolConfig || typeof toolConfig !== 'object') {
@@ -58,7 +59,11 @@ function formatToolForPrompt(tool: any) {
 
 export async function buildAgentContext(
   agentId: string,
-  taskId: string
+  taskId: string,
+  options: {
+    retrievalGuard?: HeartbeatRetrievalGuard;
+    onRetrieval?: (diagnostic: HeartbeatRetrievalDiagnostic) => void;
+  } = {}
 ): Promise<AgentContext> {
   // 1. Get Agent, Company, and Task
   const agentRes = await db.query(
@@ -71,7 +76,10 @@ export async function buildAgentContext(
   if (agentRes.rows.length === 0) throw new Error('Agent not found');
   const agent = agentRes.rows[0];
 
-  const taskRes = await db.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+  const taskRes = await db.query(
+    'SELECT * FROM tasks WHERE id = $1 AND company_id = $2',
+    [taskId, agent.company_id]
+  );
   if (taskRes.rows.length === 0) throw new Error('Task not found');
   const task = taskRes.rows[0];
   const tools = await getAgentTools(agentId);
@@ -99,11 +107,14 @@ export async function buildAgentContext(
 
   // 3. Get History (Last 20 messages)
   const messagesRes = await db.query(
-    `SELECT * FROM messages 
-     WHERE task_id = $1 
+    `SELECT m.*
+     FROM messages m
+     JOIN tasks t ON t.id = m.task_id
+     WHERE m.task_id = $1
+       AND t.company_id = $2
      ORDER BY created_at DESC 
      LIMIT 20`,
-    [taskId]
+    [taskId, agent.company_id]
   );
 
   const history = messagesRes.rows.reverse().map((m) => ({
@@ -115,16 +126,46 @@ export async function buildAgentContext(
   }));
 
   // 4. Search Knowledge Base
-  const knowledgeRes = await KnowledgeService.search(
-    agent.company_id,
-    task.description || task.title,
-    5,
-    {
-      agentId,
-      taskId,
-      consumer: 'agent_context',
-    }
+  const knowledgeQuery = task.description || task.title;
+  let knowledgeRes: Array<{
+    title: string;
+    content: string;
+    metadata: unknown;
+  }> = [];
+  const retrievalAllowance = options.retrievalGuard?.allow(
+    'knowledge',
+    'agent_context',
+    knowledgeQuery
   );
+
+  if (retrievalAllowance?.allowed === false) {
+    options.onRetrieval?.({
+      scope: 'knowledge',
+      consumer: 'agent_context',
+      query: knowledgeQuery,
+      resultCount: 0,
+      lexicalCandidateCount: 0,
+      vectorCandidateCount: 0,
+      overlapCount: 0,
+      fallbackUsed: false,
+      embeddingSource: 'unavailable',
+      embeddingModel: 'unavailable',
+      skipped: true,
+      reason: retrievalAllowance.reason,
+    });
+  } else {
+    knowledgeRes = await KnowledgeService.search(
+      agent.company_id,
+      knowledgeQuery,
+      5,
+      {
+        agentId,
+        taskId,
+        consumer: 'agent_context',
+        onDiagnostic: options.onRetrieval,
+      }
+    );
+  }
   const knowledge_context =
     knowledgeRes.length > 0
       ? `COMPANY KNOWLEDGE:\n${knowledgeRes.map((k) => `--- ${k.title} ---\n${k.content}`).join('\n')}`

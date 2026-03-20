@@ -9,5 +9,7 @@ pnpm-debug.log*
 .vscode/
 .idea/
 coverage/
+playwright-report/
+test-results/
 tmp/
 workspace/

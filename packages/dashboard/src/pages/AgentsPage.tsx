@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pause, Play, UserMinus, Plus, X, GitBranchPlus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useApi } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
+import { useOnboarding } from '../context/OnboardingContext';
 
 const initialForm = {
   name: '',
@@ -61,10 +62,15 @@ function buildAgentTree(agents: AgentRecord[]) {
 export default function AgentsPage() {
   const { request, loading, error } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
+  const { currentStep, status } = useOnboarding();
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [showHireModal, setShowHireModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialForm);
+  const wasTutorialHireStepOpen = useRef(false);
+
+  const tutorialWantsHireModal =
+    status === 'active' && currentStep?.id === 'agents-hire-modal';
 
   const fetchAgents = async () => {
     if (!selectedCompanyId) {
@@ -79,6 +85,19 @@ export default function AgentsPage() {
   useEffect(() => {
     void fetchAgents();
   }, [selectedCompanyId]);
+
+  useEffect(() => {
+    if (tutorialWantsHireModal) {
+      setShowHireModal(true);
+      wasTutorialHireStepOpen.current = true;
+      return;
+    }
+
+    if (wasTutorialHireStepOpen.current) {
+      setShowHireModal(false);
+      wasTutorialHireStepOpen.current = false;
+    }
+  }, [tutorialWantsHireModal]);
 
   const handleAction = async (
     agentId: string,
@@ -129,7 +148,10 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div
+        className="flex items-center justify-between"
+        data-onboarding-target="agents-primary-actions"
+      >
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Agents</h2>
           <p className="text-sm text-muted-foreground">
@@ -151,7 +173,10 @@ export default function AgentsPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border bg-card p-6 shadow-sm">
+      <div
+        className="rounded-2xl border bg-card p-6 shadow-sm"
+        data-onboarding-target="agents-organization-view"
+      >
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold">Organization View</h3>
@@ -301,7 +326,10 @@ export default function AgentsPage() {
 
       {showHireModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-xl">
+          <div
+            className="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-xl"
+            data-onboarding-target="agents-hire-modal"
+          >
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-semibold">Hire Agent</h3>

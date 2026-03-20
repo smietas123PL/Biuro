@@ -7,7 +7,7 @@ export const BillingService = {
       'SELECT balance FROM company_credits WHERE company_id = $1',
       [companyId]
     );
-    return res.rows[0]?.balance || 0;
+    return Number(res.rows[0]?.balance ?? 0);
   },
 
   async addCredits(

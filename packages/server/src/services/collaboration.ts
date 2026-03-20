@@ -177,6 +177,29 @@ function mapMessageKind(
   return 'message';
 }
 
+export function deriveCollaborationSignalKind(
+  type: string | null | undefined,
+  fromAgent: string | null | undefined
+) {
+  if (!fromAgent) {
+    return 'supervisor_message';
+  }
+
+  if (type === 'delegation') {
+    return 'delegation';
+  }
+
+  if (type === 'status_update' || type === 'approval_request') {
+    return 'status_update';
+  }
+
+  if (type === 'tool_result' || type === 'tool_call') {
+    return 'tool_activity';
+  }
+
+  return 'message';
+}
+
 function extractHeartbeatThought(details: Record<string, unknown> | null) {
   return normalizeText(details?.thought, '');
 }

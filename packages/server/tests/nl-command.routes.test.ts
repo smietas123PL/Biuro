@@ -255,4 +255,55 @@ describe('natural language command route', () => {
       'Pausing agents requires owner or admin access.'
     );
   });
+
+  it('returns 400 when company context is missing', async () => {
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-role': 'owner',
+      },
+      body: JSON.stringify({
+        input: 'open tasks',
+      }),
+    });
+
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({
+      error: 'Missing company context for natural language command',
+    });
+    expect(dbMock.query).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the active company does not exist', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-company-id': 'company-missing',
+        'x-test-role': 'owner',
+      },
+      body: JSON.stringify({
+        input: 'open tasks',
+      }),
+    });
+
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({
+      error: 'Company not found',
+    });
+    expect(dbMock.query).toHaveBeenCalledTimes(3);
+    const auditInsert = dbMock.query.mock.calls.find((call) =>
+      String(call[0]).includes('nl_command.planned')
+    );
+    expect(auditInsert).toBeUndefined();
+  });
 });

@@ -7,6 +7,12 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { CompanyProvider } from './context/CompanyContext';
 import { AUTH_TOKEN_KEY, COMPANY_STORAGE_KEY } from './lib/session';
+import {
+  ONBOARDING_VERSION,
+  getChecklistDismissedKey,
+  getOnboardingSeenVersionKey,
+  getOnboardingStorageKey,
+} from './lib/onboarding';
 
 type CapturedRequest = {
   method: string;
@@ -108,24 +114,19 @@ async function startTestApiServer(): Promise<TestApiServer> {
     }
 
     if (method === 'GET' && url === '/api/companies/company-1/stats') {
-      res.writeHead(200, {
-        'content-type': 'application/json',
+      json(res, 200, {
+        agent_count: 3,
+        active_agents: 1,
+        idle_agents: 2,
+        paused_agents: 0,
+        task_count: 7,
+        pending_tasks: 2,
+        completed_tasks: 5,
+        blocked_tasks: 0,
+        goal_count: 2,
+        pending_approvals: 1,
+        daily_cost_usd: 1.2345,
       });
-      res.end(
-        JSON.stringify({
-          agent_count: 3,
-          active_agents: 1,
-          idle_agents: 2,
-          paused_agents: 0,
-          task_count: 7,
-          pending_tasks: 2,
-          completed_tasks: 5,
-          blocked_tasks: 0,
-          goal_count: 2,
-          pending_approvals: 1,
-          daily_cost_usd: 1.2345,
-        })
-      );
       return;
     }
 
@@ -195,6 +196,64 @@ async function startTestApiServer(): Promise<TestApiServer> {
       return;
     }
 
+    if (method === 'GET' && url === '/api/companies/company-1/agents') {
+      json(res, 200, [
+        {
+          id: 'agent-1',
+          name: 'Atlas',
+          role: 'operator',
+          title: 'Operations Lead',
+          runtime: 'gemini',
+          reports_to: null,
+          status: 'working',
+        },
+        {
+          id: 'agent-2',
+          name: 'Nova',
+          role: 'analyst',
+          title: 'Research Analyst',
+          runtime: 'openai',
+          reports_to: 'agent-1',
+          status: 'idle',
+        },
+      ]);
+      return;
+    }
+
+    if (method === 'GET' && url === '/api/companies/company-1/tasks') {
+      json(res, 200, [
+        {
+          id: 'task-1',
+          title: 'Prepare weekly operating summary',
+          description: 'Summarize blockers and completed execution for the week.',
+          status: 'in_progress',
+          priority: 9,
+          assigned_to: 'agent-1',
+          created_at: '2026-03-19T08:00:00.000Z',
+        },
+      ]);
+      return;
+    }
+
+    if (method === 'GET' && url === '/api/companies/company-1/approvals') {
+      json(res, 200, [
+        {
+          id: 'approval-1',
+          status: 'pending',
+          reason: 'Send outbound message to a new customer segment',
+          payload: { campaign: 'q2-outreach', contacts: 42 },
+          requested_by_agent: 'Atlas',
+        },
+      ]);
+      return;
+    }
+
+    if (method === 'POST' && url === '/api/observability/client-events') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     json(res, 404, { error: `Unhandled route: ${method} ${url}` });
   });
 
@@ -223,6 +282,30 @@ async function startTestApiServer(): Promise<TestApiServer> {
   };
 }
 
+function renderApp(route = '/') {
+  render(
+    <MemoryRouter initialEntries={[route]}>
+      <AuthProvider>
+        <CompanyProvider>
+          <App />
+        </CompanyProvider>
+      </AuthProvider>
+    </MemoryRouter>
+  );
+}
+
+function getAnalyticsEventNames(requests: CapturedRequest[]) {
+  return requests
+    .filter(
+      (request) =>
+        request.method === 'POST' &&
+        request.url === '/api/observability/client-events'
+    )
+    .map(
+      (request) => (request.body as { name?: string } | null)?.name ?? 'unknown'
+    );
+}
+
 describe('App API-backed auth flow', () => {
   let apiServer: TestApiServer;
   let nativeFetch: typeof fetch;
@@ -230,6 +313,7 @@ describe('App API-backed auth flow', () => {
   beforeEach(async () => {
     apiServer = await startTestApiServer();
     nativeFetch = globalThis.fetch;
+    HTMLElement.prototype.scrollIntoView = vi.fn();
 
     vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
       const rawUrl =
@@ -241,32 +325,28 @@ describe('App API-backed auth flow', () => {
       const resolvedUrl = rawUrl.startsWith('/')
         ? `${apiServer.baseUrl}${rawUrl}`
         : rawUrl;
-
       const { signal: _signal, ...restInit } = init ?? {};
       return nativeFetch(resolvedUrl, restInit);
     });
+
     vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
     window.history.replaceState({}, '', '/auth');
+    localStorage.clear();
   });
 
   afterEach(async () => {
     await apiServer.close();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it('logs in through the auth screen and hydrates the dashboard from live API responses', async () => {
     const user = userEvent.setup();
 
-    render(
-      <MemoryRouter initialEntries={['/auth']}>
-        <AuthProvider>
-          <CompanyProvider>
-            <App />
-          </CompanyProvider>
-        </AuthProvider>
-      </MemoryRouter>
-    );
+    renderApp('/auth');
 
-    await user.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await user.type(await screen.findByLabelText('Email'), 'ada@example.com');
     await user.type(screen.getByLabelText('Password'), 'password123');
     await user.click(screen.getAllByRole('button', { name: 'Log in' })[1]);
 
@@ -306,5 +386,162 @@ describe('App API-backed auth flow', () => {
         )
       ).toBe(true);
     });
+  });
+
+  it('starts the onboarding on first run, persists the version, and lets the user replay it', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
+
+    renderApp('/');
+
+    await waitFor(() => {
+      expect(screen.getByText('Overview')).toBeTruthy();
+    });
+
+    expect(await screen.findByText('Poznaj Biuro w 2 minuty')).toBeTruthy();
+    expect(localStorage.getItem(getOnboardingStorageKey('user-1'))).toBeNull();
+    expect(
+      localStorage.getItem(getOnboardingSeenVersionKey('user-1'))
+    ).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Pomiń' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Poznaj Biuro w 2 minuty')).toBeNull();
+    });
+
+    expect(localStorage.getItem(getOnboardingStorageKey('user-1'))).toBe(
+      'completed'
+    );
+    expect(localStorage.getItem(getOnboardingSeenVersionKey('user-1'))).toBe(
+      ONBOARDING_VERSION
+    );
+
+    await waitFor(() => {
+      const eventNames = getAnalyticsEventNames(apiServer.requests);
+      expect(eventNames).toContain('onboarding_started');
+      expect(eventNames).toContain('onboarding_step_viewed');
+      expect(eventNames).toContain('onboarding_skipped');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Start tutorial' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Poznaj Biuro w 2 minuty')).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(getAnalyticsEventNames(apiServer.requests)).toContain(
+        'onboarding_replayed'
+      );
+    });
+  });
+
+  it('guides the user across dashboard, agents, tasks, and approvals screens', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
+
+    renderApp('/');
+
+    expect(await screen.findByText('Poznaj Biuro w 2 minuty')).toBeTruthy();
+
+    for (let index = 0; index < 7; index += 1) {
+      await user.click(screen.getByRole('button', { name: 'Dalej' }));
+    }
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { name: 'Agents' }).length).toBeGreaterThan(0);
+      expect(
+        screen.getByText('Tutaj budujesz i obsługujesz zespół agentów.')
+      ).toBeTruthy();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Dalej' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Nowego agenta dodajesz z tego formularza.')
+      ).toBeTruthy();
+      expect(
+        screen.getAllByRole('heading', { name: 'Hire Agent' }).length
+      ).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Dalej' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Organizacja pokazuje relacje między agentami.')
+      ).toBeTruthy();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Dalej' }));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { name: 'Tasks' }).length).toBeGreaterThan(0);
+      expect(
+        screen.getByText('Backlog i wykonanie zbierasz w Tasks.')
+      ).toBeTruthy();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Dalej' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Nowe zadanie uruchamiasz z prostego formularza.')
+      ).toBeTruthy();
+      expect(
+        screen.getAllByRole('heading', { name: 'Create Task' }).length
+      ).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Dalej' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Lista zadań pokazuje priorytety i przypisania.')
+      ).toBeTruthy();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Dalej' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'Governance Approvals' })
+      ).toBeTruthy();
+      expect(
+        screen.getByText(
+          'Krytyczne decyzje trafiają do approvals, zanim pójdą dalej.'
+        )
+      ).toBeTruthy();
+    });
+  });
+
+  it('shows a post-onboarding checklist and lets the user dismiss it per company', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
+    localStorage.setItem(getOnboardingStorageKey('user-1'), 'completed');
+    localStorage.setItem(
+      getOnboardingSeenVersionKey('user-1'),
+      ONBOARDING_VERSION
+    );
+
+    renderApp('/');
+
+    expect(await screen.findByText('Next Steps')).toBeTruthy();
+    expect(
+      screen.getByText('Turn the walkthrough into your first working setup')
+    ).toBeTruthy();
+    expect(screen.getByText('Clear pending approvals')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Hide checklist' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Next Steps')).toBeNull();
+    });
+
+    expect(
+      localStorage.getItem(getChecklistDismissedKey('user-1', 'company-1'))
+    ).toBe('dismissed');
   });
 });

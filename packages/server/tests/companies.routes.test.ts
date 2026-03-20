@@ -23,12 +23,25 @@ vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      _req: express.Request,
+      _req: express.Request & {
+        user?: { id: string; companyId?: string };
+        body?: { company_id?: string };
+        query?: { company_id?: string };
+        params?: { id?: string };
+      },
       _res: express.Response,
       next: express.NextFunction
     ) => {
-      (_req as express.Request & { user?: { id: string } }).user = {
+      _req.user = {
         id: 'user-1',
+        companyId:
+          _req.params?.id ||
+          (typeof _req.query?.company_id === 'string'
+            ? _req.query.company_id
+            : undefined) ||
+          (typeof _req.body?.company_id === 'string'
+            ? _req.body.company_id
+            : undefined),
       };
       next();
     },
@@ -39,6 +52,7 @@ import companiesRouter from '../src/routes/companies.js';
 describe('companies settings routes', () => {
   let server: Server;
   let baseUrl: string;
+  let rootUrl: string;
 
   beforeEach(async () => {
     dbMock.query.mockReset();
@@ -62,7 +76,8 @@ describe('companies settings routes', () => {
       throw new Error('Expected server to listen on a TCP port');
     }
 
-    baseUrl = `http://127.0.0.1:${address.port}/api/companies/company-1`;
+    rootUrl = `http://127.0.0.1:${address.port}/api/companies`;
+    baseUrl = `${rootUrl}/company-1`;
   });
 
   afterEach(async () => {
@@ -283,6 +298,199 @@ describe('companies settings routes', () => {
     );
   });
 
+  it('returns root policy list scoped to the requested company', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'policy-1',
+          company_id: '11111111-1111-1111-1111-111111111111',
+          name: 'Approval for external calls',
+        },
+      ],
+    });
+
+    const response = await fetch(
+      `${rootUrl}/policies?company_id=11111111-1111-1111-1111-111111111111`
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual([
+      expect.objectContaining({
+        id: 'policy-1',
+        name: 'Approval for external calls',
+      }),
+    ]);
+    expect(dbMock.query).toHaveBeenCalledWith(
+      'SELECT * FROM policies WHERE company_id = $1 ORDER BY created_at DESC',
+      ['11111111-1111-1111-1111-111111111111']
+    );
+  });
+
+  it('creates a root policy only within the authenticated company scope', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'policy-1',
+          company_id: '11111111-1111-1111-1111-111111111111',
+          name: 'Approval for external calls',
+          type: 'approval_required',
+        },
+      ],
+    });
+
+    const response = await fetch(`${rootUrl}/policies`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        company_id: '11111111-1111-1111-1111-111111111111',
+        name: 'Approval for external calls',
+        description: 'Require review before outbound actions.',
+        type: 'approval_required',
+        rules: {
+          threshold: 1,
+        },
+      }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data).toMatchObject({
+      id: 'policy-1',
+      company_id: '11111111-1111-1111-1111-111111111111',
+      name: 'Approval for external calls',
+    });
+    expect(dbMock.query).toHaveBeenCalledWith(
+      'INSERT INTO policies (company_id, name, description, type, rules) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [
+        '11111111-1111-1111-1111-111111111111',
+        'Approval for external calls',
+        'Require review before outbound actions.',
+        'approval_required',
+        JSON.stringify({ threshold: 1 }),
+      ]
+    );
+  });
+
+  it('rejects root policy access when company scope does not match the request context', async () => {
+    const response = await fetch(
+      `${rootUrl}/policies?company_id=22222222-2222-2222-2222-222222222222`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          company_id: '11111111-1111-1111-1111-111111111111',
+          name: 'Restricted policy',
+          type: 'approval_required',
+        }),
+      }
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data).toEqual({ error: 'Forbidden: Company access denied' });
+    expect(dbMock.query).not.toHaveBeenCalled();
+  });
+
+  it('returns retrieval metrics summary for dashboard analytics', async () => {
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            searches: 9,
+            knowledge_searches: 6,
+            memory_searches: 3,
+            avg_latency_ms: 118.5,
+            avg_result_count: 4.2,
+            avg_overlap_count: 1.1,
+            zero_result_rate_pct: 11.11,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            embedding_source: 'openai',
+            total: 7,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            consumer: 'agent_context',
+            total: 5,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            scope: 'memory',
+            consumer: 'heartbeat_memory',
+            result_count: 3,
+            overlap_count: 1,
+            top_distance: 0.123456,
+            embedding_source: 'openai',
+            created_at: '2026-03-19T08:40:00.000Z',
+          },
+        ],
+      });
+
+    const response = await fetch(`${baseUrl}/retrieval-metrics?days=7`);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({
+      range_days: 7,
+      totals: {
+        searches: 9,
+        knowledge_searches: 6,
+        memory_searches: 3,
+        avg_latency_ms: 118.5,
+        avg_result_count: 4.2,
+        avg_overlap_count: 1.1,
+        zero_result_rate_pct: 11.11,
+      },
+      by_source: [
+        {
+          embedding_source: 'openai',
+          total: 7,
+        },
+      ],
+      by_consumer: [
+        {
+          consumer: 'agent_context',
+          total: 5,
+        },
+      ],
+      recent: [
+        expect.objectContaining({
+          scope: 'memory',
+          consumer: 'heartbeat_memory',
+          result_count: 3,
+          overlap_count: 1,
+          embedding_source: 'openai',
+        }),
+      ],
+    });
+
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('AVG(latency_ms)'),
+      ['company-1', 7]
+    );
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('SELECT scope, consumer, result_count, overlap_count, top_distance, embedding_source, created_at'),
+      ['company-1', 7]
+    );
+  });
+
   it('returns memory insights with recurring lessons and reuse signals', async () => {
     dbMock.query
       .mockResolvedValueOnce({
@@ -333,7 +541,7 @@ describe('companies settings routes', () => {
       .mockResolvedValueOnce({
         rows: [
           {
-            query: 'onboarding churn',
+            query_preview: 'onboarding churn',
             total: 3,
           },
         ],
@@ -383,6 +591,11 @@ describe('companies settings routes', () => {
           count: 2,
         }),
       ])
+    );
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('query_preview'),
+      ['company-1', 30]
     );
   });
 });

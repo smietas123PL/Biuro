@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  ObservabilityRecentHeartbeatRunsResponse,
   ObservabilityRecentTracesResponse,
   ObservabilitySpanItem,
   ObservabilityTraceDetailResponse,
@@ -95,6 +96,8 @@ function buildTraceSummaries(
 
 export default function ObservabilityPage() {
   const { request, loading, error, lastTrace } = useApi();
+  const [heartbeatRunData, setHeartbeatRunData] =
+    useState<ObservabilityRecentHeartbeatRunsResponse | null>(null);
   const [recentTraceData, setRecentTraceData] =
     useState<ObservabilityRecentTracesResponse | null>(null);
   const [traceDetail, setTraceDetail] =
@@ -107,20 +110,38 @@ export default function ObservabilityPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    const loadRecentTraces = async () => {
-      const data = (await request(
-        '/observability/traces/recent?limit=100',
-        undefined,
-        {
+    const loadObservabilityData = async () => {
+      const [traceData, heartbeatData] = await Promise.all([
+        request('/observability/traces/recent?limit=100', undefined, {
           suppressError: true,
           trackTrace: false,
-        }
-      )) as ObservabilityRecentTracesResponse;
-      setRecentTraceData(data);
+        }) as Promise<ObservabilityRecentTracesResponse>,
+        request('/observability/heartbeat-runs/recent?limit=12', undefined, {
+          suppressError: true,
+          trackTrace: false,
+        }) as Promise<ObservabilityRecentHeartbeatRunsResponse>,
+      ]);
+      setRecentTraceData(traceData);
+      setHeartbeatRunData(heartbeatData);
     };
 
-    void loadRecentTraces();
+    void loadObservabilityData();
   }, [request]);
+
+  const heartbeatSummary = useMemo(() => {
+    const items = heartbeatRunData?.items ?? [];
+    return {
+      totalRuns: items.length,
+      llmFallbackRuns: items.filter((item) => item.llm_fallback_count > 0)
+        .length,
+      retrievalFallbackRuns: items.filter(
+        (item) => item.retrieval_fallback_count > 0
+      ).length,
+      retrievalSkippedRuns: items.filter(
+        (item) => item.retrieval_skipped_count > 0
+      ).length,
+    };
+  }, [heartbeatRunData]);
 
   const traceSummaries = useMemo(
     () =>
@@ -239,6 +260,111 @@ export default function ObservabilityPage() {
           {error}
         </div>
       )}
+
+      <section className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-lg font-semibold">
+              <ActivitySquare className="h-5 w-5 text-amber-600" />
+              Heartbeat runtime health
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Recent worker runs with retrieval pressure, fallback usage and
+              selected runtime.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <DetailStat
+              label="Recent runs"
+              value={String(heartbeatSummary.totalRuns)}
+            />
+            <DetailStat
+              label="LLM fallback runs"
+              value={String(heartbeatSummary.llmFallbackRuns)}
+            />
+            <DetailStat
+              label="Retrieval fallback runs"
+              value={String(heartbeatSummary.retrievalFallbackRuns)}
+            />
+            <DetailStat
+              label="Retrieval skipped"
+              value={String(heartbeatSummary.retrievalSkippedRuns)}
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          {(heartbeatRunData?.items ?? []).map((run) => (
+            <div
+              key={run.heartbeat_id}
+              className="rounded-2xl border bg-muted/10 p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-foreground">
+                    {run.agent_name}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {run.task_title ?? 'No task attached'}
+                  </div>
+                </div>
+                <span
+                  className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
+                    run.status === 'worked'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {run.status}
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="rounded-full border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                  {Math.round(run.duration_ms)} ms
+                </span>
+                <span className="rounded-full border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                  ${run.cost_usd.toFixed(2)}
+                </span>
+                <span className="rounded-full border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                  {run.llm_selected_runtime ?? 'runtime n/a'}
+                </span>
+                {run.budget_capped && (
+                  <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+                    budget capped
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <MiniMetric
+                  label="LLM fallback"
+                  value={String(run.llm_fallback_count)}
+                />
+                <MiniMetric
+                  label="Retrieval fallback"
+                  value={String(run.retrieval_fallback_count)}
+                />
+                <MiniMetric
+                  label="Retrieval skipped"
+                  value={String(run.retrieval_skipped_count)}
+                />
+              </div>
+
+              <div className="mt-3 text-xs text-muted-foreground">
+                {run.retrieval_count} retrievals ·{' '}
+                {new Date(run.created_at).toLocaleString()}
+              </div>
+            </div>
+          ))}
+
+          {(heartbeatRunData?.items?.length ?? 0) === 0 && !loading && (
+            <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground lg:col-span-2 xl:col-span-3">
+              No recent heartbeat runs were captured for this company yet.
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-2xl border bg-card p-5 shadow-sm">
@@ -498,6 +624,17 @@ function DetailStat({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="mt-2 text-lg font-semibold text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border bg-background p-3">
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 text-base font-semibold text-foreground">{value}</div>
     </div>
   );
 }

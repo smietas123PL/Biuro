@@ -8,6 +8,7 @@ import {
 } from './orchestrator/scheduler.js';
 import { runtimeRegistry } from './runtime/registry.js';
 import { MCPService } from './services/mcp.js';
+import { closeEmbeddingCache } from './services/embeddings.js';
 import { env } from './env.js';
 import { startMetricsServer } from './observability/metricsServer.js';
 import { initializeTracing, shutdownTracing } from './observability/tracing.js';
@@ -19,6 +20,7 @@ import {
   closeSchedulerQueue,
   initializeSchedulerQueue,
 } from './orchestrator/schedulerQueue.js';
+import { runStartupMigrations } from './db/startupMigrations.js';
 
 initializeTracing({
   serviceName: `${env.OTEL_SERVICE_NAME}-worker`,
@@ -58,6 +60,7 @@ async function shutdown(signal: string, exitCode: number = 0) {
     await closeSchedulerQueue();
     await closeRealtimeEventBus();
     await MCPService.closeAllClients();
+    await closeEmbeddingCache();
     await shutdownTracing();
     await db.close();
     clearTimeout(forceExitTimer);
@@ -74,7 +77,12 @@ async function initWorker() {
   logger.info('Starting Autonomiczne Biuro Worker...');
 
   try {
-    // 1. Check DB
+    const migrationClient = await db.getClient();
+    try {
+      await runStartupMigrations(migrationClient, logger);
+    } finally {
+      migrationClient.release();
+    }
     await db.query('SELECT 1');
     logger.info('Worker connected to Database');
     await initializeRealtimeEventBus({

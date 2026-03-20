@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock, Play, AlertCircle, Plus, X } from 'lucide-react';
-import { useApi } from '../hooks/useApi';
+import { useApi, useWebSocket } from '../hooks/useApi';
 import { useCompany } from '../context/CompanyContext';
+import { useOnboarding } from '../context/OnboardingContext';
 
 const initialForm = {
   title: '',
@@ -13,11 +14,26 @@ const initialForm = {
 export default function TasksPage() {
   const { request, loading, error } = useApi();
   const { selectedCompany, selectedCompanyId } = useCompany();
+  const { currentStep, status } = useOnboarding();
   const [tasks, setTasks] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialForm);
+  const wasTutorialCreateStepOpen = useRef(false);
+  const lastEvent = useWebSocket(selectedCompanyId ?? undefined) as
+    | {
+        event: string;
+        data?: {
+          task_id?: string;
+          status?: string;
+          assigned_to?: string | null;
+        };
+      }
+    | null;
+
+  const tutorialWantsCreateModal =
+    status === 'active' && currentStep?.id === 'tasks-create-modal';
 
   const fetchTasks = async () => {
     if (!selectedCompanyId) {
@@ -43,6 +59,27 @@ export default function TasksPage() {
     void fetchTasks();
     void fetchAgents();
   }, [selectedCompanyId]);
+
+  useEffect(() => {
+    if (!lastEvent || lastEvent.event !== 'task.updated') {
+      return;
+    }
+
+    void fetchTasks();
+  }, [lastEvent, selectedCompanyId]);
+
+  useEffect(() => {
+    if (tutorialWantsCreateModal) {
+      setShowCreateModal(true);
+      wasTutorialCreateStepOpen.current = true;
+      return;
+    }
+
+    if (wasTutorialCreateStepOpen.current) {
+      setShowCreateModal(false);
+      wasTutorialCreateStepOpen.current = false;
+    }
+  }, [tutorialWantsCreateModal]);
 
   const handleCreateTask = async () => {
     if (!selectedCompanyId || !form.title.trim()) return;
@@ -89,7 +126,10 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div
+        className="flex items-center justify-between"
+        data-onboarding-target="tasks-primary-actions"
+      >
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Tasks</h2>
           <p className="text-sm text-muted-foreground">
@@ -111,11 +151,15 @@ export default function TasksPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4">
+      <div
+        className="grid grid-cols-1 gap-4"
+        data-onboarding-target="tasks-list"
+      >
         {tasks.map((task) => (
           <div
             key={task.id}
             className="p-4 bg-card border rounded-lg shadow-sm hover:border-primary/50 transition-all flex items-start justify-between"
+            data-testid={`task-card-${task.id}`}
           >
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -126,7 +170,10 @@ export default function TasksPage() {
                 {task.description}
               </p>
               <div className="flex items-center gap-4 pt-2">
-                <div className="text-xs font-mono bg-muted px-2 py-0.5 rounded uppercase">
+                <div
+                  className="text-xs font-mono bg-muted px-2 py-0.5 rounded uppercase"
+                  data-testid={`task-status-${task.id}`}
+                >
                   {task.status}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -153,7 +200,10 @@ export default function TasksPage() {
 
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-xl">
+          <div
+            className="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-xl"
+            data-onboarding-target="tasks-create-modal"
+          >
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-semibold">Create Task</h3>

@@ -19,12 +19,21 @@ vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      req: express.Request,
+      req: express.Request & {
+        user?: { id: string; companyId?: string; role: string };
+      },
       _res: express.Response,
       next: express.NextFunction
     ) => {
-      (req as express.Request & { user?: { id: string; role: string } }).user =
-        { id: 'user-1', role: 'owner' };
+      const testCompanyIdHeader = req.headers['x-test-company-id'];
+      req.user = {
+        id: 'user-1',
+        companyId:
+          typeof testCompanyIdHeader === 'string'
+            ? testCompanyIdHeader
+            : undefined,
+        role: 'owner',
+      };
       next();
     },
 }));
@@ -62,10 +71,6 @@ describe('template marketplace routes', () => {
 
     const app = express();
     app.use(express.json());
-    app.use((req, _res, next) => {
-      req.headers['x-company-id'] = 'company-1';
-      next();
-    });
     app.use('/api/templates', templatesRouter);
 
     server = createServer(app);
@@ -93,6 +98,16 @@ describe('template marketplace routes', () => {
     });
   });
 
+  function fetchWithCompany(path: string, init?: RequestInit) {
+    return fetch(path, {
+      ...init,
+      headers: {
+        'x-test-company-id': 'company-1',
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
+
   it('lists marketplace templates from the service catalog', async () => {
     listMarketplaceTemplatesMock.mockResolvedValue({
       catalog: {
@@ -103,7 +118,7 @@ describe('template marketplace routes', () => {
       templates: [{ id: 'market-1', name: 'Support Ops Pack' }],
     });
 
-    const response = await fetch(`${baseUrl}/marketplace`);
+    const response = await fetchWithCompany(`${baseUrl}/marketplace`);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -137,9 +152,12 @@ describe('template marketplace routes', () => {
     });
     dbMock.query.mockResolvedValue({ rowCount: 1, rows: [] });
 
-    const response = await fetch(`${baseUrl}/import-marketplace/market-1`, {
+    const response = await fetchWithCompany(
+      `${baseUrl}/import-marketplace/market-1`,
+      {
       method: 'POST',
-    });
+      }
+    );
     const data = await response.json();
 
     expect(response.status).toBe(200);

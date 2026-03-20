@@ -30,11 +30,23 @@ vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      _req: express.Request,
+      req: express.Request & {
+        user?: { id: string; companyId?: string; role?: string };
+      },
       _res: express.Response,
       next: express.NextFunction
-    ) =>
-      next(),
+    ) => {
+      const testCompanyIdHeader = req.headers['x-test-company-id'];
+      req.user = {
+        id: 'user-1',
+        companyId:
+          typeof testCompanyIdHeader === 'string'
+            ? testCompanyIdHeader
+            : undefined,
+        role: 'owner',
+      };
+      next();
+    },
 }));
 
 vi.mock('../src/services/notifications.js', () => ({
@@ -140,7 +152,7 @@ describe('integration routes', () => {
 
     const response = await fetch(`${baseUrl}/overview`, {
       headers: {
-        'x-company-id': 'company-1',
+        'x-test-company-id': 'company-1',
         'x-forwarded-proto': 'https',
         'x-forwarded-host': 'biuro.example.com',
       },
@@ -232,7 +244,7 @@ describe('integration routes', () => {
       method: 'PATCH',
       headers: {
         'content-type': 'application/json',
-        'x-company-id': 'company-1',
+        'x-test-company-id': 'company-1',
       },
       body: JSON.stringify({
         slack_webhook_url: 'https://hooks.slack.test/services/abc',
@@ -281,7 +293,7 @@ describe('integration routes', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-company-id': 'company-1',
+        'x-test-company-id': 'company-1',
       },
       body: JSON.stringify({
         type: 'slack',
@@ -330,7 +342,7 @@ describe('integration routes', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-company-id': 'company-1',
+        'x-test-company-id': 'company-1',
       },
       body: JSON.stringify({
         type: 'discord',
@@ -357,6 +369,24 @@ describe('integration routes', () => {
       target_url: 'https://discord.test/api/webhooks/stored',
       error: 'Webhook failed: 500 Internal Server Error',
     });
+  });
+
+  it('rejects integration config writes without company context', async () => {
+    const response = await fetch(`${baseUrl}/config`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slack_webhook_url: 'https://hooks.slack.test/services/abc',
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Missing company context',
+    });
+    expect(dbMock.query).not.toHaveBeenCalled();
   });
 
   it('stores inbound Discord messages against a task matched by discord_channel metadata', async () => {

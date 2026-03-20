@@ -21,8 +21,12 @@ export type RetrievalMetricInput = {
   latencyMs: number;
 };
 
+function normalizeQuery(query: string) {
+  return query.trim().replace(/\s+/g, ' ');
+}
+
 export function buildQueryPreview(query: string, maxLength: number = 160) {
-  const normalized = query.trim().replace(/\s+/g, ' ');
+  const normalized = normalizeQuery(query);
   if (normalized.length <= maxLength) {
     return normalized;
   }
@@ -32,6 +36,7 @@ export function buildQueryPreview(query: string, maxLength: number = 160) {
 
 export async function recordRetrievalMetric(input: RetrievalMetricInput) {
   try {
+    const normalizedQuery = normalizeQuery(input.query);
     await db.query(
       `INSERT INTO retrieval_metrics (
          company_id,
@@ -60,8 +65,8 @@ export async function recordRetrievalMetric(input: RetrievalMetricInput) {
         input.taskId ?? null,
         input.scope,
         input.consumer,
-        buildQueryPreview(input.query),
-        input.query.trim().length,
+        buildQueryPreview(normalizedQuery),
+        normalizedQuery.length,
         input.limitRequested,
         input.resultCount,
         input.lexicalCandidateCount,

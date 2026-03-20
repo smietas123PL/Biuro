@@ -2,11 +2,14 @@ import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireRole } from '../middleware/auth.js';
+import type { AuthRequest } from '../utils/context.js';
 import {
   broadcastCollaborationSignal,
+  deriveCollaborationSignalKind,
   getTaskCollaborationSnapshot,
 } from '../services/collaboration.js';
 import { enqueueCompanyWakeup } from '../orchestrator/schedulerQueue.js';
+import { broadcastCompanyEvent } from '../realtime/eventBus.js';
 
 const router: Router = Router();
 
@@ -20,11 +23,21 @@ const createTaskSchema = z.object({
   priority: z.number().default(0),
 });
 
+const taskMessageSchema = z.object({
+  content: z.string().trim().min(1),
+  from_agent: z.string().uuid().optional(),
+  to_agent: z.string().uuid().optional(),
+});
+
+function getScopedCompanyId(req: AuthRequest) {
+  return req.user?.companyId ?? null;
+}
+
 // Create
 router.post(
   '/',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const parsed = createTaskSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
@@ -38,6 +51,21 @@ router.post(
         assigned_to,
         priority,
       } = parsed.data;
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId || scopedCompanyId !== company_id) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      if (assigned_to) {
+        const agentRes = await db.query(
+          'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+          [assigned_to, scopedCompanyId]
+        );
+        if (agentRes.rows.length === 0) {
+          return res
+            .status(404)
+            .json({ error: 'Assigned agent not found in this company' });
+        }
+      }
       const status = assigned_to ? 'assigned' : 'backlog';
       const result = await db.query(
         `INSERT INTO tasks (company_id, goal_id, parent_id, title, description, assigned_to, priority, status) 
@@ -64,6 +92,18 @@ router.post(
         taskId: task.id,
         agentId: task.assigned_to ?? null,
       });
+      await broadcastCompanyEvent(
+        company_id,
+        'task.updated',
+        {
+          company_id,
+          task_id: task.id,
+          status: task.status,
+          assigned_to: task.assigned_to ?? null,
+          source: 'task_created',
+        },
+        'api'
+      );
 
       res.status(201).json(task);
     } catch (err) {
@@ -76,10 +116,14 @@ router.post(
 router.get(
   '/:id',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
       const result = await db.query(
         `SELECT
          t.*,
@@ -88,8 +132,9 @@ router.get(
          a.status AS assigned_to_status
        FROM tasks t
        LEFT JOIN agents a ON a.id = t.assigned_to
-       WHERE t.id = $1`,
-        [req.params.id]
+       WHERE t.id = $1
+         AND t.company_id = $2`,
+        [req.params.id, scopedCompanyId]
       );
       if (result.rows.length === 0)
         return res.status(404).json({ error: 'Task not found' });
@@ -104,20 +149,46 @@ router.get(
 router.post(
   '/:id/messages',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const taskId = Array.isArray(req.params.id)
         ? req.params.id[0]
         : req.params.id;
       if (!taskId || taskId === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
       const taskRes = await db.query(
-        'SELECT company_id FROM tasks WHERE id = $1',
-        [taskId]
+        'SELECT company_id FROM tasks WHERE id = $1 AND company_id = $2',
+        [taskId, scopedCompanyId]
       );
       if (taskRes.rows.length === 0)
         return res.status(404).json({ error: 'Task not found' });
-      const { content, from_agent, to_agent } = req.body;
+      const parsed = taskMessageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error });
+      }
+      const { content, from_agent, to_agent } = parsed.data;
+      if (from_agent) {
+        const fromAgentRes = await db.query(
+          'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+          [from_agent, scopedCompanyId]
+        );
+        if (fromAgentRes.rows.length === 0) {
+          return res.status(404).json({ error: 'Sender agent not found' });
+        }
+      }
+      if (to_agent) {
+        const toAgentRes = await db.query(
+          'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+          [to_agent, scopedCompanyId]
+        );
+        if (toAgentRes.rows.length === 0) {
+          return res.status(404).json({ error: 'Recipient agent not found' });
+        }
+      }
       const result = await db.query(
         `INSERT INTO messages (company_id, task_id, from_agent, to_agent, content, type)
        VALUES ($1, $2, $3, $4, $5, 'message') RETURNING *`,
@@ -132,7 +203,7 @@ router.post(
       await broadcastCollaborationSignal(
         taskRes.rows[0].company_id,
         taskId,
-        from_agent ? 'message' : 'supervisor_message',
+        deriveCollaborationSignalKind('message', from_agent ?? null),
         {
           from_agent_id: from_agent || null,
           to_agent_id: to_agent || null,
@@ -150,13 +221,22 @@ router.post(
 router.get(
   '/:id/messages',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
       const result = await db.query(
-        'SELECT * FROM messages WHERE task_id = $1 ORDER BY created_at ASC',
-        [req.params.id]
+        `SELECT m.*
+         FROM messages m
+         JOIN tasks t ON t.id = m.task_id
+         WHERE m.task_id = $1
+           AND t.company_id = $2
+         ORDER BY m.created_at ASC`,
+        [req.params.id, scopedCompanyId]
       );
       res.json(result.rows);
     } catch (err) {
@@ -168,13 +248,24 @@ router.get(
 router.get(
   '/:id/collaboration',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const taskId = Array.isArray(req.params.id)
         ? req.params.id[0]
         : req.params.id;
       if (!taskId || taskId === 'undefined') {
         return res.status(400).json({ error: 'Invalid ID' });
+      }
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      const taskRes = await db.query(
+        'SELECT id FROM tasks WHERE id = $1 AND company_id = $2',
+        [taskId, scopedCompanyId]
+      );
+      if (taskRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Task not found' });
       }
 
       const snapshot = await getTaskCollaborationSnapshot(taskId);
@@ -193,11 +284,13 @@ router.get(
 router.get(
   '/',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
-      const { company_id, assigned_to, status } = req.query;
-      if (!company_id)
+      const { assigned_to, status } = req.query;
+      const company_id = getScopedCompanyId(req);
+      if (!company_id) {
         return res.status(400).json({ error: 'Missing company_id' });
+      }
       let q = 'SELECT * FROM tasks WHERE company_id = $1';
       let params: any[] = [company_id];
 
@@ -223,12 +316,16 @@ router.get(
 router.patch(
   '/:id/status',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const { status } = req.body;
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
       const result = await db.query(
-        'UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2 RETURNING *',
-        [status, req.params.id]
+        'UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2 AND company_id = $3 RETURNING *',
+        [status, req.params.id, scopedCompanyId]
       );
       if (result.rows.length === 0)
         return res.status(404).json({ error: 'Task not found' });
@@ -241,6 +338,18 @@ router.patch(
           agentId: task.assigned_to ?? null,
         });
       }
+      await broadcastCompanyEvent(
+        task.company_id,
+        'task.updated',
+        {
+          company_id: task.company_id,
+          task_id: task.id,
+          status: task.status,
+          assigned_to: task.assigned_to ?? null,
+          source: 'status_patch',
+        },
+        'api'
+      );
       res.json(task);
     } catch (err) {
       next(err);
@@ -252,9 +361,24 @@ router.patch(
 router.patch(
   '/:id/assign',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const { assigned_to } = req.body;
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      if (assigned_to) {
+        const agentRes = await db.query(
+          'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+          [assigned_to, scopedCompanyId]
+        );
+        if (agentRes.rows.length === 0) {
+          return res
+            .status(404)
+            .json({ error: 'Assigned agent not found in this company' });
+        }
+      }
       const result = await db.query(
         `UPDATE tasks
        SET assigned_to = $1,
@@ -265,16 +389,32 @@ router.patch(
            END,
            updated_at = now()
        WHERE id = $2
+         AND company_id = $3
        RETURNING *`,
-        [assigned_to, req.params.id]
+        [assigned_to, req.params.id, scopedCompanyId]
       );
       const task = result.rows[0];
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
       if (task) {
         await enqueueCompanyWakeup(task.company_id, 'task_assignment_changed', {
           taskId: task.id,
           agentId: task.assigned_to ?? null,
         });
       }
+      await broadcastCompanyEvent(
+        task.company_id,
+        'task.updated',
+        {
+          company_id: task.company_id,
+          task_id: task.id,
+          status: task.status,
+          assigned_to: task.assigned_to ?? null,
+          source: 'assignment_patch',
+        },
+        'api'
+      );
       res.json(task);
     } catch (err) {
       next(err);

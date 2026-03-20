@@ -223,16 +223,25 @@ export async function resolveApproval(
   status: 'approved' | 'rejected',
   notes?: string,
   options?: {
+    companyId?: string;
     source?: ApprovalResolutionSource;
     resolvedBy?: string | null;
   }
 ) {
-  const approvalLookup = await db.query(
-    `SELECT a.*, t.title AS task_title
+  const approvalLookupParams: Array<string | null> = [approvalId];
+  let approvalLookupQuery = `SELECT a.*, t.title AS task_title
      FROM approvals a
      LEFT JOIN tasks t ON t.id = a.task_id
-     WHERE a.id = $1`,
-    [approvalId]
+     WHERE a.id = $1`;
+
+  if (options?.companyId) {
+    approvalLookupParams.push(options.companyId);
+    approvalLookupQuery += ` AND a.company_id = $2`;
+  }
+
+  const approvalLookup = await db.query(
+    approvalLookupQuery,
+    approvalLookupParams
   );
 
   if (approvalLookup.rows.length === 0) {

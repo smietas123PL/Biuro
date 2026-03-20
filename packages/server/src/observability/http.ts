@@ -1,7 +1,9 @@
+import crypto from 'node:crypto';
 import { SpanStatusCode } from '@opentelemetry/api';
 import type express from 'express';
 import { startActiveSpan, getTraceId } from './tracing.js';
 import { recordHttpRequestMetric } from './metrics.js';
+import { contextStore, getContext } from '../utils/context.js';
 
 function normalizeRoute(req: express.Request) {
   const routePath = typeof req.route?.path === 'string' ? req.route.path : '';
@@ -17,6 +19,10 @@ export function observabilityMiddleware(
   next: express.NextFunction
 ) {
   const startedAt = performance.now();
+  const requestId =
+    typeof req.headers['x-request-id'] === 'string'
+      ? req.headers['x-request-id']
+      : crypto.randomUUID();
 
   void startActiveSpan(
     `http.${req.method.toLowerCase()}`,
@@ -30,6 +36,7 @@ export function observabilityMiddleware(
       new Promise<void>((resolve) => {
         const traceId = span.spanContext().traceId;
         res.setHeader('x-trace-id', traceId);
+        res.setHeader('x-request-id', requestId);
 
         res.once('finish', () => {
           const durationMs = performance.now() - startedAt;
@@ -58,7 +65,16 @@ export function observabilityMiddleware(
           resolve();
         });
 
-        next();
+        const existingContext = getContext();
+        contextStore.run(
+          {
+            ...existingContext,
+            requestId,
+          },
+          () => {
+            next();
+          }
+        );
       })
   );
 }

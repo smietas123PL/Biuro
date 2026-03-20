@@ -20,7 +20,8 @@
     "test:coverage": "pnpm --filter @biuro/server test:coverage && pnpm --filter @biuro/dashboard test:coverage && node scripts/checkCoverage.mjs",
     "test:cli": "pnpm --filter @biuro/cli test",
     "test:dashboard": "pnpm --filter @biuro/dashboard test",
-    "test:e2e": "node run_tests.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:legacy": "node run_tests.mjs",
     "migrate": "pnpm --filter @biuro/server migrate",
     "migrate:status": "pnpm --filter @biuro/server migrate:status",
     "migrate:verify": "pnpm --filter @biuro/server migrate:verify",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.58.2",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.0.1",

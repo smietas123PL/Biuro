@@ -6,6 +6,7 @@ const dbMock = vi.hoisted(() => ({
   query: vi.fn(),
 }));
 const enqueueCompanyWakeupMock = vi.hoisted(() => vi.fn());
+const broadcastCompanyEventMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -15,15 +16,31 @@ vi.mock('../src/orchestrator/schedulerQueue.js', () => ({
   enqueueCompanyWakeup: enqueueCompanyWakeupMock,
 }));
 
+vi.mock('../src/realtime/eventBus.js', () => ({
+  broadcastCompanyEvent: broadcastCompanyEventMock,
+}));
+
 vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      _req: express.Request,
+      _req: express.Request & {
+        user?: { id: string; companyId?: string; role?: string };
+      },
       _res: express.Response,
       next: express.NextFunction
-    ) =>
-      next(),
+    ) => {
+      const testCompanyIdHeader = _req.headers['x-test-company-id'];
+      _req.user = {
+        id: 'user-1',
+        companyId:
+          typeof testCompanyIdHeader === 'string'
+            ? testCompanyIdHeader
+            : undefined,
+        role: 'owner',
+      };
+      next();
+    },
 }));
 
 import tasksRouter from '../src/routes/tasks.js';
@@ -35,6 +52,7 @@ describe('task routes', () => {
   beforeEach(async () => {
     dbMock.query.mockReset();
     enqueueCompanyWakeupMock.mockReset();
+    broadcastCompanyEventMock.mockReset();
 
     const app = express();
     app.use(express.json());
@@ -65,8 +83,21 @@ describe('task routes', () => {
     });
   });
 
+  function fetchWithCompany(path: string, init?: RequestInit) {
+    return fetch(path, {
+      ...init,
+      headers: {
+        'x-test-company-id': '11111111-1111-4111-8111-111111111111',
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
+
   it('returns a collaboration snapshot across a delegated task tree', async () => {
     dbMock.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 'task-child' }],
+      })
       .mockResolvedValueOnce({
         rows: [{ id: 'task-root' }],
       })
@@ -167,7 +198,9 @@ describe('task routes', () => {
         rows: [],
       });
 
-    const response = await fetch(`${baseUrl}/task-child/collaboration`);
+    const response = await fetchWithCompany(
+      `${baseUrl}/task-child/collaboration`
+    );
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -209,10 +242,13 @@ describe('task routes', () => {
   it('creates a task and enqueues a scheduler wakeup', async () => {
     dbMock.query
       .mockResolvedValueOnce({
+        rows: [{ id: '22222222-2222-4222-8222-222222222222' }],
+      })
+      .mockResolvedValueOnce({
         rows: [
           {
             id: 'task-1',
-            company_id: 'company-1',
+            company_id: '11111111-1111-4111-8111-111111111111',
             title: 'Launch QA sweep',
             description: 'Validate release blockers.',
             assigned_to: 'agent-1',
@@ -222,7 +258,7 @@ describe('task routes', () => {
       })
       .mockResolvedValueOnce({ rows: [] });
 
-    const response = await fetch(baseUrl, {
+    const response = await fetchWithCompany(baseUrl, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -248,6 +284,18 @@ describe('task routes', () => {
         taskId: 'task-1',
         agentId: 'agent-1',
       }
+    );
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'task.updated',
+      {
+        company_id: '11111111-1111-4111-8111-111111111111',
+        task_id: 'task-1',
+        status: 'assigned',
+        assigned_to: 'agent-1',
+        source: 'task_created',
+      },
+      'api'
     );
   });
 });

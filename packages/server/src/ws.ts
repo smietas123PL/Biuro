@@ -13,6 +13,8 @@ export class WSHub {
   private wss: WebSocketServer;
   private clients: Map<string, Set<WebSocket>> = new Map(); // companyId -> Set of WS
   private connectionAttempts: Map<string, number[]> = new Map();
+  private messageAttempts: Map<string, number[]> = new Map();
+  private broadcastAttempts: Map<string, number[]> = new Map();
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server, path: '/ws' });
@@ -92,6 +94,14 @@ export class WSHub {
       wsConnectionAttemptsTotal.inc({ outcome: 'accepted' });
       this.updateSnapshot();
 
+      ws.on('message', () => {
+        const messageKey = `${companyId}:${clientIp}`;
+        if (!this.allowMessage(messageKey)) {
+          logger.warn({ companyId, clientIp }, 'WS message rate limit exceeded');
+          this.closeClient(ws, 4429, 'Too many websocket messages');
+        }
+      });
+
       ws.on('close', () => {
         const companyClients = this.clients.get(companyId);
         companyClients?.delete(ws);
@@ -152,9 +162,51 @@ export class WSHub {
     return true;
   }
 
+  private allowMessage(messageKey: string) {
+    const now = Date.now();
+    const windowStart = now - env.WS_MESSAGE_RATE_LIMIT_WINDOW_MS;
+    const recentAttempts = (this.messageAttempts.get(messageKey) ?? []).filter(
+      (timestamp) => timestamp > windowStart
+    );
+
+    if (recentAttempts.length >= env.WS_MESSAGE_RATE_LIMIT_MAX) {
+      this.messageAttempts.set(messageKey, recentAttempts);
+      return false;
+    }
+
+    recentAttempts.push(now);
+    this.messageAttempts.set(messageKey, recentAttempts);
+    return true;
+  }
+
+  private allowBroadcast(companyId: string) {
+    const now = Date.now();
+    const windowStart = now - env.WS_BROADCAST_RATE_LIMIT_WINDOW_MS;
+    const recentBroadcasts = (this.broadcastAttempts.get(companyId) ?? []).filter(
+      (timestamp) => timestamp > windowStart
+    );
+
+    if (recentBroadcasts.length >= env.WS_BROADCAST_RATE_LIMIT_MAX) {
+      this.broadcastAttempts.set(companyId, recentBroadcasts);
+      return false;
+    }
+
+    recentBroadcasts.push(now);
+    this.broadcastAttempts.set(companyId, recentBroadcasts);
+    return true;
+  }
+
   broadcast(companyId: string, event: string, data: any) {
     const targets = this.clients.get(companyId);
     if (!targets) return;
+
+    if (!this.allowBroadcast(companyId)) {
+      logger.warn(
+        { companyId, event },
+        'Dropping websocket broadcast because broadcast rate limit was exceeded'
+      );
+      return;
+    }
 
     const payload = JSON.stringify({
       event,

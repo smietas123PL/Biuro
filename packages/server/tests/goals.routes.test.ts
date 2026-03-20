@@ -19,11 +19,25 @@ vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      _req: express.Request,
+      _req: express.Request & {
+        user?: { id: string; companyId?: string; role?: string };
+        body?: { company_id?: string };
+        params?: { companyId?: string };
+      },
       _res: express.Response,
       next: express.NextFunction
-    ) =>
-      next(),
+    ) => {
+      const testCompanyIdHeader = _req.headers['x-test-company-id'];
+      _req.user = {
+        id: 'user-1',
+        companyId:
+          typeof testCompanyIdHeader === 'string'
+            ? testCompanyIdHeader
+            : _req.params?.companyId,
+        role: 'owner',
+      };
+      next();
+    },
 }));
 
 vi.mock('../src/runtime/registry.js', () => ({
@@ -72,6 +86,26 @@ describe('goals routes', () => {
       });
     });
   });
+
+  function fetchWithCompany(path: string, init?: RequestInit) {
+    return fetch(path, {
+      ...init,
+      headers: {
+        'x-test-company-id': 'company-1',
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
+
+  function fetchWithUuidCompany(path: string, init?: RequestInit) {
+    return fetch(path, {
+      ...init,
+      headers: {
+        'x-test-company-id': '11111111-1111-4111-8111-111111111111',
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
 
   it('generates an AI goal decomposition and writes an audit entry', async () => {
     runtimeExecuteMock.mockResolvedValue({
@@ -180,7 +214,7 @@ describe('goals routes', () => {
       throw new Error(`Unexpected query: ${text}`);
     });
 
-    const response = await fetch(`${baseUrl}/ai-decompose`, {
+    const response = await fetchWithCompany(`${baseUrl}/ai-decompose`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -273,7 +307,7 @@ describe('goals routes', () => {
       throw new Error(`Unexpected query: ${text}`);
     });
 
-    const response = await fetch(`${baseUrl}/ai-decompose/apply`, {
+    const response = await fetchWithCompany(`${baseUrl}/ai-decompose/apply`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -335,5 +369,108 @@ describe('goals routes', () => {
       created_task_ids: ['task-db-1'],
       created_task_count: 1,
     });
+  });
+
+  it('creates a goal only inside the authenticated company scope', async () => {
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [{ id: '22222222-2222-4222-8222-222222222222' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'goal-1',
+            company_id: '11111111-1111-4111-8111-111111111111',
+            parent_id: '22222222-2222-4222-8222-222222222222',
+            title: 'Lock launch scope',
+          },
+        ],
+      });
+
+    const response = await fetchWithUuidCompany(baseUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        company_id: '11111111-1111-4111-8111-111111111111',
+        parent_id: '22222222-2222-4222-8222-222222222222',
+        title: 'Lock launch scope',
+        description: 'Define the first visible milestone.',
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      id: 'goal-1',
+      company_id: '11111111-1111-4111-8111-111111111111',
+      parent_id: '22222222-2222-4222-8222-222222222222',
+    });
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      1,
+      'SELECT id FROM goals WHERE id = $1 AND company_id = $2',
+      [
+        '22222222-2222-4222-8222-222222222222',
+        '11111111-1111-4111-8111-111111111111',
+      ]
+    );
+  });
+
+  it('rejects goal creation when body company_id does not match the request scope', async () => {
+    const response = await fetchWithUuidCompany(baseUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        company_id: '22222222-2222-4222-8222-222222222222',
+        title: 'Lock launch scope',
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Forbidden: Company access denied',
+    });
+    expect(dbMock.query).not.toHaveBeenCalled();
+  });
+
+  it('updates a goal only within the scoped company', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'goal-1',
+          company_id: 'company-1',
+          title: 'Updated goal',
+          status: 'active',
+        },
+      ],
+    });
+
+    const response = await fetchWithUuidCompany(`${baseUrl}/goal-1`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Updated goal',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: 'goal-1',
+      title: 'Updated goal',
+    });
+    expect(String(dbMock.query.mock.calls[0]?.[0])).toContain(
+      'AND company_id = $5'
+    );
+    expect(dbMock.query.mock.calls[0]?.[1]).toEqual([
+      undefined,
+      'Updated goal',
+      undefined,
+      'goal-1',
+      '11111111-1111-4111-8111-111111111111',
+    ]);
   });
 });

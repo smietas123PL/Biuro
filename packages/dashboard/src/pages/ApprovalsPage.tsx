@@ -49,7 +49,10 @@ export default function ApprovalsPage() {
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div
+        className="space-y-4"
+        data-onboarding-target="approvals-queue"
+      >
         {approvals
           .filter((approval) => approval.status === 'pending')
           .map((approval) => (

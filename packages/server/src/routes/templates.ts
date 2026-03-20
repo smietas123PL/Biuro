@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
 import type {
   TemplateAISuggestResponse,
@@ -51,6 +51,11 @@ type TemplateSuggestAgent = {
   title: string | null;
   status: string;
 };
+
+function getCompanyId(req: AuthRequest | Request) {
+  const authReq = req as AuthRequest;
+  return authReq.user?.companyId || req.header('x-company-id') || null;
+}
 
 function normalizeSuggestText(value: string) {
   return value
@@ -261,7 +266,7 @@ router.post(
   '/ai-suggest',
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req: AuthRequest, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }
@@ -357,7 +362,7 @@ router.get(
   '/marketplace/:id/dry-run',
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }
@@ -401,7 +406,7 @@ router.post(
   '/marketplace/:id/save-preview',
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req: AuthRequest, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }
@@ -491,7 +496,7 @@ router.get(
   '/presets/:id/dry-run',
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }
@@ -531,7 +536,7 @@ router.post(
   '/presets/:id/save-preview',
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req: AuthRequest, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }
@@ -586,7 +591,7 @@ router.post(
 
 // 1. Export company configuration
 router.get('/export', requireRole(['owner', 'admin']), async (req, res) => {
-  const companyId = req.header('x-company-id');
+  const companyId = getCompanyId(req);
   if (!companyId) {
     return res.status(400).json({ error: 'Missing company ID' });
   }
@@ -604,7 +609,7 @@ router.post(
   '/import',
   requireRole(['owner', 'admin']),
   async (req: AuthRequest, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }
@@ -645,7 +650,7 @@ router.post(
   '/import-preset/:id',
   requireRole(['owner', 'admin']),
   async (req: AuthRequest, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }
@@ -701,7 +706,7 @@ router.post(
   '/import-marketplace/:id',
   requireRole(['owner', 'admin']),
   async (req: AuthRequest, res) => {
-    const companyId = req.header('x-company-id');
+    const companyId = getCompanyId(req);
     if (!companyId) {
       return res.status(400).json({ error: 'Missing company ID' });
     }

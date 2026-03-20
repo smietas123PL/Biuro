@@ -4,6 +4,7 @@ import { db } from '../db/client.js';
 import { requireRole } from '../middleware/auth.js';
 import { executeStandaloneTool } from '../tools/executor.js';
 import { seedDefaultTools } from '../tools/seed.js';
+import type { AuthRequest } from '../utils/context.js';
 
 const router: Router = Router({ mergeParams: true });
 
@@ -39,13 +40,14 @@ const testToolSchema = z.object({
   input: z.record(z.any()).optional(),
 });
 
-function getCompanyId(req: {
-  params: Record<string, unknown>;
-  query: Record<string, unknown>;
-}) {
+function getCompanyId(
+  req: Pick<AuthRequest, 'user' | 'params' | 'query' | 'body'>
+) {
   return (
+    (typeof req.user?.companyId === 'string' && req.user.companyId) ||
     (typeof req.params.companyId === 'string' && req.params.companyId) ||
     (typeof req.query.company_id === 'string' && req.query.company_id) ||
+    (typeof req.body?.company_id === 'string' && req.body.company_id) ||
     null
   );
 }
@@ -107,17 +109,30 @@ async function listAgentsForTool(toolIds: string[]) {
 }
 
 // Create tool
-router.post('/', requireRole(['owner', 'admin']), async (req, res, next) => {
+router.post(
+  '/',
+  requireRole(['owner', 'admin']),
+  async (req: AuthRequest, res, next) => {
   try {
+    const companyId = getCompanyId(req);
+    if (!companyId)
+      return res.status(400).json({ error: 'Missing company_id' });
+
     const parsed = toolSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error });
-    const { company_id, name, description, type, config } = parsed.data;
+    if (parsed.data.company_id !== companyId) {
+      return res.status(400).json({
+        error: 'Tool company_id must match the authenticated company context',
+      });
+    }
+
+    const { name, description, type, config } = parsed.data;
     const result = await db.query(
       `INSERT INTO tools (company_id, name, description, type, config)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
       [
-        company_id,
+        companyId,
         name,
         description ?? null,
         type,
@@ -128,7 +143,8 @@ router.post('/', requireRole(['owner', 'admin']), async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+  }
+);
 
 router.post(
   '/seed',

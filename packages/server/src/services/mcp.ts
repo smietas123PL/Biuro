@@ -10,6 +10,7 @@ interface MCPServerConfig {
 
 export class MCPService {
   private static clients: Map<string, Client> = new Map();
+  private static transports: Map<string, StdioClientTransport> = new Map();
 
   static async getClient(
     name: string,
@@ -34,6 +35,7 @@ export class MCPService {
     try {
       await client.connect(transport);
       this.clients.set(name, client);
+      this.transports.set(name, transport);
       return client;
     } catch (err) {
       await transport.close().catch((closeErr: unknown) => {
@@ -80,12 +82,22 @@ export class MCPService {
     }
 
     this.clients.delete(name);
+    const transport = this.transports.get(name);
+    this.transports.delete(name);
 
     try {
       await client.close();
       logger.info({ name }, 'Closed MCP client');
     } catch (err) {
       logger.warn({ err, name }, 'Failed to close MCP client cleanly');
+    }
+
+    if (transport) {
+      try {
+        await transport.close();
+      } catch (err) {
+        logger.warn({ err, name }, 'Failed to close MCP transport cleanly');
+      }
     }
 
     return true;
@@ -98,5 +110,13 @@ export class MCPService {
     }
 
     await Promise.all(clientNames.map((name) => this.closeClient(name)));
+  }
+
+  static async cleanup(serverName: string) {
+    return this.closeClient(serverName);
+  }
+
+  static async shutdown() {
+    await this.closeAllClients();
   }
 }

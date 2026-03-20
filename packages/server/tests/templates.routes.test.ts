@@ -19,11 +19,23 @@ vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      _req: express.Request,
+      _req: express.Request & {
+        user?: { id: string; companyId?: string; role?: string };
+      },
       _res: express.Response,
       next: express.NextFunction
-    ) =>
-      next(),
+    ) => {
+      const testCompanyIdHeader = _req.headers['x-test-company-id'];
+      _req.user = {
+        id: 'user-1',
+        companyId:
+          typeof testCompanyIdHeader === 'string'
+            ? testCompanyIdHeader
+            : undefined,
+        role: 'owner',
+      };
+      next();
+    },
 }));
 
 vi.mock('../src/runtime/registry.js', () => ({
@@ -72,6 +84,16 @@ describe('template routes', () => {
       });
     });
   });
+
+  function fetchWithCompany(path: string, init?: RequestInit) {
+    return fetch(path, {
+      ...init,
+      headers: {
+        'x-test-company-id': 'company-1',
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
 
   it('falls back to the default runtime when importing a template with an unknown runtime', async () => {
     const clientQueryMock = vi.fn(async (text: string, params?: any[]) => {
@@ -127,11 +149,10 @@ describe('template routes', () => {
     );
     dbMock.query.mockResolvedValue({ rows: [], rowCount: 1 });
 
-    const response = await fetch(`${baseUrl}/import`, {
+    const response = await fetchWithCompany(`${baseUrl}/import`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-company-id': 'company-1',
       },
       body: JSON.stringify({
         version: '1.1',
@@ -271,11 +292,10 @@ describe('template routes', () => {
       throw new Error(`Unexpected query: ${text}`);
     });
 
-    const response = await fetch(`${baseUrl}/ai-suggest`, {
+    const response = await fetchWithCompany(`${baseUrl}/ai-suggest`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-company-id': 'company-1',
       },
       body: JSON.stringify({
         prompt:
@@ -299,5 +319,23 @@ describe('template routes', () => {
     expect(getRuntimeMock).toHaveBeenCalledWith('claude', {
       fallbackOrder: ['openai', 'gemini', 'claude'],
     });
+  });
+
+  it('rejects template AI suggestions without company context', async () => {
+    const response = await fetch(`${baseUrl}/ai-suggest`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: 'review competitor pricing changes',
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Missing company ID',
+    });
+    expect(dbMock.query).not.toHaveBeenCalled();
   });
 });

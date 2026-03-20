@@ -11,6 +11,8 @@ export type {
   ObservabilitySpanItem,
   ObservabilityRecentTracesResponse,
   ObservabilityTraceDetailResponse,
+  ObservabilityHeartbeatRunItem,
+  ObservabilityRecentHeartbeatRunsResponse,
 } from './observability.js';
 export type {
   TemplateSource,

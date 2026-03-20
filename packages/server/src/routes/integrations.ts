@@ -6,6 +6,7 @@ import { IntegrationService } from '../services/integrations.js';
 import { NotificationService } from '../services/notifications.js';
 import { env } from '../env.js';
 import { requireRole } from '../middleware/auth.js';
+import type { AuthRequest } from '../utils/context.js';
 
 const router: Router = Router();
 type RawBodyRequest = Request & { rawBody?: string };
@@ -96,16 +97,22 @@ function normalizeOptionalUrl(value?: string | null) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function getCompanyId(req: AuthRequest) {
+  return (
+    req.user?.companyId ||
+    (typeof req.header('x-company-id') === 'string'
+      ? req.header('x-company-id')
+      : undefined) ||
+    null
+  );
+}
+
 router.get(
   '/overview',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     const baseUrl = getPublicBaseUrl(req);
-    const companyIdHeader = req.header('x-company-id');
-    const companyId =
-      companyIdHeader && companyIdHeader !== 'undefined'
-        ? companyIdHeader
-        : null;
+    const companyId = getCompanyId(req);
 
     try {
       let outgoing = {
@@ -254,10 +261,10 @@ function getSlackApprovalStatus(args: {
 router.patch(
   '/config',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
-    const companyId = req.header('x-company-id');
+  async (req: AuthRequest, res, next) => {
+    const companyId = getCompanyId(req);
     if (!companyId) {
-      return res.status(400).json({ error: 'Missing x-company-id header' });
+      return res.status(400).json({ error: 'Missing company context' });
     }
 
     const parsed = integrationConfigSchema.safeParse(req.body);
@@ -316,10 +323,10 @@ router.patch(
 router.post(
   '/test-webhook',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
-    const companyId = req.header('x-company-id');
+  async (req: AuthRequest, res, next) => {
+    const companyId = getCompanyId(req);
     if (!companyId) {
-      return res.status(400).json({ error: 'Missing x-company-id header' });
+      return res.status(400).json({ error: 'Missing company context' });
     }
 
     const parsed = integrationTestSchema.safeParse(req.body);

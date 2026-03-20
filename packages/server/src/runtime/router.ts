@@ -3,6 +3,7 @@ import { startActiveSpan } from '../observability/tracing.js';
 import { AgentContext, AgentResponse, IAgentRuntime } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 import { defaultModelsByRuntime } from './defaultModels.js';
+import { runtimeCircuitBreaker } from './circuitBreaker.js';
 import { isRuntimeName, type RuntimeName } from './preferences.js';
 
 type RoutingAttempt = NonNullable<AgentResponse['routing']>['attempts'][number];
@@ -68,6 +69,20 @@ function resolveAttemptModel(
   return defaultModelsByRuntime[attemptRuntime];
 }
 
+function resolveDirectRuntimeName(
+  preferredRuntime: string,
+  availableRuntimes: RuntimeName[]
+) {
+  if (
+    isRuntimeName(preferredRuntime) &&
+    availableRuntimes.includes(preferredRuntime)
+  ) {
+    return preferredRuntime;
+  }
+
+  return availableRuntimes[0] ?? null;
+}
+
 export class MultiProviderRuntimeRouter implements IAgentRuntime {
   constructor(
     private readonly preferredRuntime: string,
@@ -79,25 +94,33 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
 
   async execute(context: AgentContext): Promise<AgentResponse> {
     if (!env.LLM_ROUTER_ENABLED) {
-      const runtimeName = isRuntimeName(this.preferredRuntime)
-        ? this.preferredRuntime
-        : 'gemini';
+      const runtimeName = resolveDirectRuntimeName(
+        this.preferredRuntime,
+        Array.from(this.runtimes.keys())
+      );
+      if (!runtimeName) {
+        throw new Error('No LLM runtimes available');
+      }
       const runtime = this.runtimes.get(runtimeName);
       if (!runtime) {
         throw new Error(`Runtime ${runtimeName} not available`);
       }
 
       const response = await runtime.execute(context);
+      const selectedModel = resolveAttemptModel(
+        this.preferredRuntime,
+        runtimeName,
+        context.agent_model
+      );
       return {
         ...response,
         routing: {
           selected_runtime: runtimeName,
-          selected_model:
-            context.agent_model || defaultModelsByRuntime[runtimeName],
+          selected_model: selectedModel,
           attempts: [
             {
               runtime: runtimeName,
-              model: context.agent_model || defaultModelsByRuntime[runtimeName],
+              model: selectedModel,
               status: 'success',
             },
           ],
@@ -131,6 +154,29 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
         context.agent_model
       );
 
+      if (!runtimeCircuitBreaker.canAttempt(runtimeName)) {
+        const remainingMs = runtimeCircuitBreaker.getOpenRemainingMs(runtimeName);
+        attempts.push({
+          runtime: runtimeName,
+          model,
+          status:
+            index < attemptChain.length - 1
+              ? 'fallback'
+              : 'failed',
+          reason: `Circuit breaker open for ${remainingMs}ms`,
+        });
+        logger.warn(
+          {
+            preferredRuntime: this.preferredRuntime,
+            runtimeName,
+            model,
+            remainingMs,
+          },
+          'Skipping runtime because circuit breaker is open'
+        );
+        continue;
+      }
+
       try {
         const response = await startActiveSpan(
           'llm.router.attempt',
@@ -156,6 +202,7 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
           model,
           status: 'success',
         });
+        runtimeCircuitBreaker.recordSuccess(runtimeName);
 
         logger.info(
           {
@@ -178,6 +225,9 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
       } catch (error) {
         const retryable = isRetryableRuntimeError(error);
         const reason = error instanceof Error ? error.message : String(error);
+        const breakerOpened = retryable
+          ? runtimeCircuitBreaker.recordFailure(runtimeName)
+          : false;
         attempts.push({
           runtime: runtimeName,
           model,
@@ -195,6 +245,7 @@ export class MultiProviderRuntimeRouter implements IAgentRuntime {
             runtimeName,
             model,
             retryable,
+            breakerOpened,
             reason,
           },
           retryable && index < attemptChain.length - 1

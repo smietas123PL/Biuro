@@ -6,6 +6,7 @@ import { defaultModelsByRuntime } from '../runtime/defaultModels.js';
 import { extractCompanyRuntimeSettings } from '../runtime/preferences.js';
 import { runtimeRegistry } from '../runtime/registry.js';
 import { enqueueCompanyWakeup } from '../orchestrator/schedulerQueue.js';
+import type { AuthRequest } from '../utils/context.js';
 
 const router: Router = Router();
 
@@ -105,6 +106,10 @@ function formatReplaySummary(value: unknown, fallback: string) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function getScopedCompanyId(req: AuthRequest) {
+  return req.user?.companyId ?? null;
 }
 
 type ReplayEventType = 'heartbeat' | 'audit' | 'message' | 'session';
@@ -905,6 +910,7 @@ function buildReplayReportHtml(payload: ReplayPayload) {
 
 async function buildReplayPayload(
   agentId: string,
+  companyId: string,
   params: z.infer<typeof replayQuerySchema>
 ): Promise<ReplayPayload | null> {
   const { from, to, task_id, types, limit } = params;
@@ -913,8 +919,8 @@ async function buildReplayPayload(
   const selectedTypes = types ?? [];
 
   const agentResult = await db.query(
-    'SELECT id, company_id, name, role, status FROM agents WHERE id = $1',
-    [agentId]
+    'SELECT id, company_id, name, role, status FROM agents WHERE id = $1 AND company_id = $2',
+    [agentId, companyId]
   );
 
   if (agentResult.rows.length === 0) {
@@ -1103,7 +1109,7 @@ async function buildReplayPayload(
 router.post(
   '/',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const parsed = hireSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
@@ -1120,6 +1126,21 @@ router.post(
         reports_to,
         monthly_budget_usd,
       } = parsed.data;
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId || scopedCompanyId !== company_id) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      if (reports_to) {
+        const managerRes = await db.query(
+          'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+          [reports_to, scopedCompanyId]
+        );
+        if (managerRes.rows.length === 0) {
+          return res
+            .status(404)
+            .json({ error: 'Manager agent not found in this company' });
+        }
+      }
       const monthlyBudgetUsd = monthly_budget_usd ?? 0;
       const agent = await db.transaction(async (client) => {
         const result = await client.query(
@@ -1170,10 +1191,10 @@ router.post(
 router.get(
   '/',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
-      const { company_id } = req.query;
-      if (!company_id || typeof company_id !== 'string')
+      const company_id = getScopedCompanyId(req);
+      if (!company_id)
         return res.status(400).json({ error: 'Missing company_id' });
       const result = await db.query(
         'SELECT * FROM agents WHERE company_id = $1 ORDER BY created_at ASC',
@@ -1190,13 +1211,18 @@ router.get(
 router.get(
   '/:id',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
-      const result = await db.query('SELECT * FROM agents WHERE id = $1', [
-        req.params.id,
-      ]);
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      const result = await db.query(
+        'SELECT * FROM agents WHERE id = $1 AND company_id = $2',
+        [req.params.id, scopedCompanyId]
+      );
       if (result.rows.length === 0)
         return res.status(404).json({ error: 'Agent not found' });
       res.json(result.rows[0]);
@@ -1210,13 +1236,17 @@ router.get(
 router.get(
   '/org-chart/:companyId',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.companyId || req.params.companyId === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId || scopedCompanyId !== req.params.companyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
       const result = await db.query(
         'SELECT id, name, role, title, reports_to FROM agents WHERE company_id = $1',
-        [req.params.companyId]
+        [scopedCompanyId]
       );
       res.json(result.rows);
     } catch (err) {
@@ -1229,13 +1259,21 @@ router.get(
 router.post(
   '/:id/pause',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
-      await db.query("UPDATE agents SET status = 'paused' WHERE id = $1", [
-        req.params.id,
-      ]);
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      const result = await db.query(
+        "UPDATE agents SET status = 'paused' WHERE id = $1 AND company_id = $2 RETURNING id",
+        [req.params.id, scopedCompanyId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Agent not found' });
+      }
       res.json({ ok: true });
     } catch (err) {
       next(err);
@@ -1246,14 +1284,21 @@ router.post(
 router.post(
   '/:id/resume',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
       const result = await db.query(
-        "UPDATE agents SET status = 'idle' WHERE id = $1 RETURNING id, company_id",
-        [req.params.id]
+        "UPDATE agents SET status = 'idle' WHERE id = $1 AND company_id = $2 RETURNING id, company_id",
+        [req.params.id, scopedCompanyId]
       );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Agent not found' });
+      }
       if (result.rows[0]?.company_id) {
         await enqueueCompanyWakeup(
           String(result.rows[0].company_id),
@@ -1273,13 +1318,21 @@ router.post(
 router.post(
   '/:id/terminate',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
-      await db.query("UPDATE agents SET status = 'terminated' WHERE id = $1", [
-        req.params.id,
-      ]);
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      const result = await db.query(
+        "UPDATE agents SET status = 'terminated' WHERE id = $1 AND company_id = $2 RETURNING id",
+        [req.params.id, scopedCompanyId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Agent not found' });
+      }
       res.json({ ok: true });
     } catch (err) {
       next(err);
@@ -1290,17 +1343,23 @@ router.post(
 router.get(
   '/:id/heartbeats',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
       const result = await db.query(
         `SELECT status, created_at AS timestamp, duration_ms, cost_usd, details
-       FROM heartbeats
-       WHERE agent_id = $1
+       FROM heartbeats h
+       JOIN agents a ON a.id = h.agent_id
+       WHERE h.agent_id = $1
+         AND a.company_id = $2
        ORDER BY created_at DESC
        LIMIT 10`,
-        [req.params.id]
+        [req.params.id, scopedCompanyId]
       );
       res.json(result.rows);
     } catch (err) {
@@ -1312,7 +1371,7 @@ router.get(
 router.get(
   '/:id/replay',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
@@ -1322,8 +1381,16 @@ router.get(
 
       const parsed = replayQuerySchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
 
-      const payload = await buildReplayPayload(agentId, parsed.data);
+      const payload = await buildReplayPayload(
+        agentId,
+        scopedCompanyId,
+        parsed.data
+      );
       if (!payload) return res.status(404).json({ error: 'Agent not found' });
 
       res.json(payload);
@@ -1336,7 +1403,7 @@ router.get(
 router.get(
   '/:id/replay/report',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
@@ -1346,8 +1413,16 @@ router.get(
 
       const parsed = replayQuerySchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
 
-      const payload = await buildReplayPayload(agentId, parsed.data);
+      const payload = await buildReplayPayload(
+        agentId,
+        scopedCompanyId,
+        parsed.data
+      );
       if (!payload) return res.status(404).json({ error: 'Agent not found' });
 
       const filename = `agent-replay-${slugifyFilename(payload.agent.name)}-${payload.generated_at.slice(0, 10)}.html`;
@@ -1366,7 +1441,7 @@ router.get(
 router.get(
   '/:id/replay/diff',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
@@ -1376,6 +1451,10 @@ router.get(
 
       const parsed = replayDiffQuerySchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
 
       const { from, to, left_task_id, right_task_id, types, limit } =
         parsed.data;
@@ -1392,11 +1471,11 @@ router.get(
         limit,
       };
 
-      const leftPayload = await buildReplayPayload(agentId, {
+      const leftPayload = await buildReplayPayload(agentId, scopedCompanyId, {
         ...sharedParams,
         task_id: left_task_id,
       });
-      const rightPayload = await buildReplayPayload(agentId, {
+      const rightPayload = await buildReplayPayload(agentId, scopedCompanyId, {
         ...sharedParams,
         task_id: right_task_id,
       });
@@ -1437,7 +1516,7 @@ router.get(
 router.post(
   '/:id/failure-explanation',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
@@ -1447,8 +1526,12 @@ router.post(
 
       const parsed = failureExplanationRequestSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
 
-      const replayPayload = await buildReplayPayload(agentId, {
+      const replayPayload = await buildReplayPayload(agentId, scopedCompanyId, {
         from: undefined,
         to: undefined,
         task_id: parsed.data.task_id,
@@ -1520,7 +1603,7 @@ router.post(
 router.post(
   '/:id/replay/fork',
   requireRole(['owner', 'admin', 'member']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
@@ -1530,8 +1613,12 @@ router.post(
 
       const parsed = replayForkSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
 
-      const replayPayload = await buildReplayPayload(agentId, {
+      const replayPayload = await buildReplayPayload(agentId, scopedCompanyId, {
         from: undefined,
         to: undefined,
         task_id: parsed.data.task_id,
@@ -1563,8 +1650,9 @@ router.post(
       const sourceTaskResult = await db.query(
         `SELECT id, company_id, goal_id, parent_id, title, description, priority
        FROM tasks
-       WHERE id = $1`,
-        [anchorEvent.task_id]
+       WHERE id = $1
+         AND company_id = $2`,
+        [anchorEvent.task_id, scopedCompanyId]
       );
       if (sourceTaskResult.rows.length === 0) {
         return res.status(404).json({ error: 'Source task not found' });
@@ -1743,13 +1831,18 @@ router.post(
 router.get(
   '/:id/budgets',
   requireRole(['owner', 'admin', 'member', 'viewer']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       if (!req.params.id || req.params.id === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
-      const agentCheck = await db.query('SELECT id FROM agents WHERE id = $1', [
-        req.params.id,
-      ]);
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
+      const agentCheck = await db.query(
+        'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+        [req.params.id, scopedCompanyId]
+      );
       if (agentCheck.rows.length === 0)
         return res.status(404).json({ error: 'Agent not found' });
 
@@ -1770,23 +1863,29 @@ router.get(
 router.post(
   '/:id/tools/:toolId',
   requireRole(['owner', 'admin']),
-  async (req, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const { id, toolId } = req.params;
       if (!id || id === 'undefined' || !toolId || toolId === 'undefined')
         return res.status(400).json({ error: 'Invalid ID' });
+      const scopedCompanyId = getScopedCompanyId(req);
+      if (!scopedCompanyId) {
+        return res.status(403).json({ error: 'Forbidden: Company access denied' });
+      }
 
       // Verify tool exists
-      const toolCheck = await db.query('SELECT id FROM tools WHERE id = $1', [
-        toolId,
-      ]);
+      const toolCheck = await db.query(
+        'SELECT id FROM tools WHERE id = $1 AND company_id = $2',
+        [toolId, scopedCompanyId]
+      );
       if (toolCheck.rows.length === 0)
         return res.status(404).json({ error: 'Tool not found' });
 
       // Verify agent exists
-      const agentCheck = await db.query('SELECT id FROM agents WHERE id = $1', [
-        id,
-      ]);
+      const agentCheck = await db.query(
+        'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+        [id, scopedCompanyId]
+      );
       if (agentCheck.rows.length === 0)
         return res.status(404).json({ error: 'Agent not found' });
 

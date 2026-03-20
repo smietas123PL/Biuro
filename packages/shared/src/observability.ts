@@ -45,3 +45,28 @@ export type ObservabilityTraceDetailResponse = {
   };
   items: ObservabilitySpanItem[];
 };
+
+export type ObservabilityHeartbeatRunItem = {
+  heartbeat_id: string;
+  agent_id: string;
+  agent_name: string;
+  task_id: string | null;
+  task_title: string | null;
+  status: string;
+  created_at: string;
+  duration_ms: number;
+  cost_usd: number;
+  llm_selected_runtime: string | null;
+  llm_selected_model: string | null;
+  llm_fallback_count: number;
+  retrieval_count: number;
+  retrieval_fallback_count: number;
+  retrieval_skipped_count: number;
+  budget_capped: boolean;
+};
+
+export type ObservabilityRecentHeartbeatRunsResponse = {
+  generated_at: string;
+  count: number;
+  items: ObservabilityHeartbeatRunItem[];
+};

@@ -9,6 +9,9 @@ import {
   it,
   vi,
 } from 'vitest';
+const dbMock = vi.hoisted(() => ({
+  query: vi.fn(),
+}));
 import {
   metricsHandler,
   observabilityMiddleware,
@@ -19,15 +22,43 @@ import {
   startActiveSpan,
 } from '../src/observability/tracing.js';
 
+vi.mock('../src/db/client.js', () => ({
+  db: dbMock,
+}));
+
 vi.mock('../src/middleware/auth.js', () => ({
+  requireAuth:
+    () =>
+    (
+      req: express.Request & {
+        user?: { id: string; companyId?: string; role?: string };
+      },
+      _res: express.Response,
+      next: express.NextFunction
+    ) => {
+      req.user = {
+        id: 'user-1',
+        companyId: '11111111-1111-1111-1111-111111111111',
+        role: 'owner',
+      };
+      next();
+    },
   requireRole:
     () =>
     (
-      _req: express.Request,
+      req: express.Request & {
+        user?: { id: string; companyId?: string; role?: string };
+      },
       _res: express.Response,
       next: express.NextFunction
-    ) =>
-      next(),
+    ) => {
+      req.user = {
+        id: 'user-1',
+        companyId: '11111111-1111-1111-1111-111111111111',
+        role: 'owner',
+      };
+      next();
+    },
 }));
 
 describe('observability routes', () => {
@@ -42,7 +73,11 @@ describe('observability routes', () => {
   });
 
   beforeEach(async () => {
+    dbMock.query.mockReset();
+    dbMock.query.mockResolvedValue({ rows: [] });
+
     const app = express();
+    app.use(express.json());
     app.use(observabilityMiddleware);
     app.get('/metrics', metricsHandler);
     app.get('/api/demo', (_req, res) => {
@@ -132,5 +167,103 @@ describe('observability routes', () => {
     expect(payload.summary.span_count).toBeGreaterThanOrEqual(1);
     expect(Array.isArray(payload.items)).toBe(true);
     expect(payload.items[0].trace_id).toBe(traceId);
+  });
+
+  it('accepts validated client-side observability events', async () => {
+    const response = await fetch(`${baseUrl}/api/observability/client-events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'onboarding_started',
+        tutorial_version: 'v1',
+        step_id: 'welcome',
+        step_index: 0,
+        total_steps: 6,
+        route: '/dashboard',
+        source: 'manual',
+        occurred_at: '2026-03-20T08:00:00.000Z',
+        metadata: {
+          replay: false,
+        },
+      }),
+    });
+
+    expect(response.status).toBe(204);
+  });
+
+  it('returns recent heartbeat run summaries for the active company', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'heartbeat-1',
+          agent_id: 'agent-1',
+          agent_name: 'Ada',
+          task_id: 'task-1',
+          task_title: 'Investigate churn',
+          status: 'worked',
+          created_at: '2026-03-20T10:00:00.000Z',
+          duration_ms: 1800,
+          cost_usd: 0.42,
+          details: {
+            budget_capped: false,
+            llm_routing: {
+              selected_runtime: 'openai',
+              selected_model: 'gpt-4o',
+            },
+            heartbeat_execution: {
+              retrieval_budget: {
+                max_requests: 2,
+                consumed_requests: 2,
+                skipped_requests: 1,
+              },
+              retrievals: [
+                {
+                  scope: 'memory',
+                  consumer: 'heartbeat_memory',
+                },
+                {
+                  scope: 'knowledge',
+                  consumer: 'agent_context',
+                },
+              ],
+              retrieval_fallback_count: 1,
+              llm_fallback_count: 1,
+            },
+          },
+        },
+      ],
+    });
+
+    const response = await fetch(
+      `${baseUrl}/api/observability/heartbeat-runs/recent?limit=5`
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.count).toBe(1);
+    expect(payload.items[0]).toEqual({
+      heartbeat_id: 'heartbeat-1',
+      agent_id: 'agent-1',
+      agent_name: 'Ada',
+      task_id: 'task-1',
+      task_title: 'Investigate churn',
+      status: 'worked',
+      created_at: '2026-03-20T10:00:00.000Z',
+      duration_ms: 1800,
+      cost_usd: 0.42,
+      llm_selected_runtime: 'openai',
+      llm_selected_model: 'gpt-4o',
+      llm_fallback_count: 1,
+      retrieval_count: 2,
+      retrieval_fallback_count: 1,
+      retrieval_skipped_count: 1,
+      budget_capped: false,
+    });
+    expect(dbMock.query).toHaveBeenCalledWith(
+      expect.stringContaining('FROM heartbeats h'),
+      ['11111111-1111-1111-1111-111111111111', 5]
+    );
   });
 });

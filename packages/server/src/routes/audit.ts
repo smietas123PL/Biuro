@@ -1,22 +1,24 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { db } from '../db/client.js';
 
 const router: Router = Router();
 
+const auditQuerySchema = z.object({
+  company_id: z.string().uuid(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
 router.get('/', async (req, res, next) => {
   try {
-    const { company_id } = req.query;
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-    if (!company_id) {
-      const result = await db.query(
-        'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT $1',
-        [limit]
-      );
-      return res.json(result.rows);
+    const parsed = auditQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error });
     }
+
     const result = await db.query(
       'SELECT * FROM audit_log WHERE company_id = $1 ORDER BY created_at DESC LIMIT $2',
-      [company_id, limit]
+      [parsed.data.company_id, parsed.data.limit]
     );
     res.json(result.rows);
   } catch (err) {

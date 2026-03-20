@@ -6,6 +6,7 @@ const requestMock = vi.hoisted(() => vi.fn());
 const useApiMock = vi.hoisted(() => vi.fn());
 const useCompanyMock = vi.hoisted(() => vi.fn());
 const useAuthMock = vi.hoisted(() => vi.fn());
+const useOnboardingMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../hooks/useApi', () => ({
   useApi: () => useApiMock(),
@@ -19,12 +20,17 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
+vi.mock('../context/OnboardingContext', () => ({
+  useOnboarding: () => useOnboardingMock(),
+}));
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     requestMock.mockReset();
     useApiMock.mockReset();
     useCompanyMock.mockReset();
     useAuthMock.mockReset();
+    useOnboardingMock.mockReset();
 
     useApiMock.mockReturnValue({
       request: requestMock,
@@ -41,6 +47,10 @@ describe('SettingsPage', () => {
         full_name: 'Ada Lovelace',
         email: 'ada@example.com',
       },
+    });
+    useOnboardingMock.mockReturnValue({
+      hasCompleted: true,
+      startTutorial: vi.fn(),
     });
   });
 

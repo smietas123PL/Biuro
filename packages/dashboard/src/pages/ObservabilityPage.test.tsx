@@ -5,15 +5,21 @@ import ObservabilityPage from './ObservabilityPage';
 
 const requestMock = vi.hoisted(() => vi.fn());
 const useApiMock = vi.hoisted(() => vi.fn());
+const useCompanyMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../hooks/useApi', () => ({
   useApi: () => useApiMock(),
+}));
+
+vi.mock('../context/CompanyContext', () => ({
+  useCompany: () => useCompanyMock(),
 }));
 
 describe('ObservabilityPage', () => {
   beforeEach(() => {
     requestMock.mockReset();
     useApiMock.mockReset();
+    useCompanyMock.mockReset();
 
     requestMock.mockImplementation(async (path: string) => {
       if (path === '/observability/heartbeat-runs/recent?limit=12') {
@@ -204,6 +210,9 @@ describe('ObservabilityPage', () => {
         status: 200,
         capturedAt: '2026-03-19T09:01:00.000Z',
       },
+    });
+    useCompanyMock.mockReturnValue({
+      selectedCompanyId: 'company-1',
     });
   });
 

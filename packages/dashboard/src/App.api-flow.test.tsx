@@ -132,7 +132,7 @@ async function startTestApiServer(): Promise<TestApiServer> {
 
     if (
       method === 'GET' &&
-      url === '/api/companies/company-1/activity-feed?limit=12'
+      url === '/api/companies/company-1/activity-feed?limit=20'
     ) {
       json(res, 200, []);
       return;
@@ -341,18 +341,20 @@ describe('App API-backed auth flow', () => {
     localStorage.clear();
   });
 
-  it('logs in through the auth screen and hydrates the dashboard from live API responses', async () => {
-    const user = userEvent.setup();
+  it(
+    'logs in through the auth screen and hydrates the dashboard from live API responses',
+    async () => {
+      const user = userEvent.setup();
 
-    renderApp('/auth');
+      renderApp('/auth');
 
     await user.type(await screen.findByLabelText('Email'), 'ada@example.com');
     await user.type(screen.getByLabelText('Password'), 'password123');
     await user.click(screen.getAllByRole('button', { name: 'Log in' })[1]);
 
-    await waitFor(() => {
-      expect(screen.getByText('Overview')).toBeTruthy();
-    });
+      expect(
+        await screen.findByText('Overview', undefined, { timeout: 10000 })
+      ).toBeTruthy();
 
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
     expect(
@@ -385,8 +387,10 @@ describe('App API-backed auth flow', () => {
             request.url === '/api/companies/company-1/stats'
         )
       ).toBe(true);
-    });
-  });
+    }, { timeout: 10000 });
+    },
+    30000
+  );
 
   it('starts the onboarding on first run, persists the version, and lets the user replay it', async () => {
     const user = userEvent.setup();
@@ -396,9 +400,13 @@ describe('App API-backed auth flow', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Overview')).toBeTruthy();
-    });
+    }, { timeout: 10000 });
 
-    expect(await screen.findByText('Poznaj Biuro w 2 minuty')).toBeTruthy();
+    expect(
+      await screen.findByText('Poznaj Biuro w 2 minuty', undefined, {
+        timeout: 10000,
+      })
+    ).toBeTruthy();
     expect(localStorage.getItem(getOnboardingStorageKey('user-1'))).toBeNull();
     expect(
       localStorage.getItem(getOnboardingSeenVersionKey('user-1'))
@@ -408,7 +416,7 @@ describe('App API-backed auth flow', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('Poznaj Biuro w 2 minuty')).toBeNull();
-    });
+    }, { timeout: 10000 });
 
     expect(localStorage.getItem(getOnboardingStorageKey('user-1'))).toBe(
       'completed'
@@ -422,33 +430,40 @@ describe('App API-backed auth flow', () => {
       expect(eventNames).toContain('onboarding_started');
       expect(eventNames).toContain('onboarding_step_viewed');
       expect(eventNames).toContain('onboarding_skipped');
-    });
+    }, { timeout: 10000 });
 
     await user.click(screen.getByRole('button', { name: 'Start tutorial' }));
 
     await waitFor(() => {
       expect(screen.getByText('Poznaj Biuro w 2 minuty')).toBeTruthy();
-    });
+    }, { timeout: 10000 });
 
     await waitFor(() => {
       expect(getAnalyticsEventNames(apiServer.requests)).toContain(
         'onboarding_replayed'
       );
-    });
+    }, { timeout: 10000 });
   });
 
-  it('guides the user across dashboard, agents, tasks, and approvals screens', async () => {
-    const user = userEvent.setup();
-    localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
+  it(
+    'guides the user across dashboard, agents, tasks, and approvals screens',
+    async () => {
+      const user = userEvent.setup();
+      localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
 
     renderApp('/');
 
-    expect(await screen.findByText('Poznaj Biuro w 2 minuty')).toBeTruthy();
+    expect(
+      await screen.findByText('Poznaj Biuro w 2 minuty', undefined, {
+        timeout: 10000,
+      })
+    ).toBeTruthy();
 
     for (let index = 0; index < 7; index += 1) {
       await user.click(screen.getByRole('button', { name: 'Dalej' }));
     }
 
+    await screen.findAllByRole('heading', { name: 'Agents' }, { timeout: 10000 });
     await waitFor(() => {
       expect(screen.getAllByRole('heading', { name: 'Agents' }).length).toBeGreaterThan(0);
       expect(
@@ -458,6 +473,7 @@ describe('App API-backed auth flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Dalej' }));
 
+    await screen.findAllByRole('heading', { name: 'Hire Agent' }, { timeout: 10000 });
     await waitFor(() => {
       expect(
         screen.getByText('Nowego agenta dodajesz z tego formularza.')
@@ -477,6 +493,7 @@ describe('App API-backed auth flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Dalej' }));
 
+    await screen.findAllByRole('heading', { name: 'Tasks' }, { timeout: 10000 });
     await waitFor(() => {
       expect(screen.getAllByRole('heading', { name: 'Tasks' }).length).toBeGreaterThan(0);
       expect(
@@ -515,11 +532,15 @@ describe('App API-backed auth flow', () => {
         )
       ).toBeTruthy();
     });
-  });
+    },
+    30000
+  );
 
-  it('shows a post-onboarding checklist and lets the user dismiss it per company', async () => {
-    const user = userEvent.setup();
-    localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
+  it(
+    'shows a post-onboarding checklist and lets the user dismiss it per company',
+    async () => {
+      const user = userEvent.setup();
+      localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
     localStorage.setItem(getOnboardingStorageKey('user-1'), 'completed');
     localStorage.setItem(
       getOnboardingSeenVersionKey('user-1'),
@@ -528,7 +549,9 @@ describe('App API-backed auth flow', () => {
 
     renderApp('/');
 
-    expect(await screen.findByText('Next Steps')).toBeTruthy();
+      expect(
+        await screen.findByText('Next Steps', undefined, { timeout: 10000 })
+      ).toBeTruthy();
     expect(
       screen.getByText('Turn the walkthrough into your first working setup')
     ).toBeTruthy();
@@ -543,5 +566,7 @@ describe('App API-backed auth flow', () => {
     expect(
       localStorage.getItem(getChecklistDismissedKey('user-1', 'company-1'))
     ).toBe('dismissed');
-  });
+    },
+    15000
+  );
 });

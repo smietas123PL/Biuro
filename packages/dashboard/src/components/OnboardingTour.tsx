@@ -186,12 +186,26 @@ export function OnboardingTour() {
       return null;
     }
 
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
     const padding = currentStep.spotlightPadding ?? 12;
+    const top = Math.max(targetRect.top - padding, VIEWPORT_GUTTER);
+    const left = Math.max(targetRect.left - padding, VIEWPORT_GUTTER);
+
     return {
-      top: Math.max(targetRect.top - padding, VIEWPORT_GUTTER),
-      left: Math.max(targetRect.left - padding, VIEWPORT_GUTTER),
-      width: Math.max(targetRect.width + padding * 2, 0),
-      height: Math.max(targetRect.height + padding * 2, 0),
+      top,
+      left,
+      width: Math.max(
+        Math.min(targetRect.width + padding * 2, viewportWidth - left - VIEWPORT_GUTTER),
+        0
+      ),
+      height: Math.max(
+        Math.min(
+          targetRect.height + padding * 2,
+          viewportHeight - top - VIEWPORT_GUTTER
+        ),
+        0
+      ),
     };
   }, [currentStep, targetRect]);
 
@@ -265,12 +279,19 @@ export function OnboardingTour() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[80]">
-      <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]" />
+      {getBackdropSegments(spotlightRect).map((segment, index) => (
+        <div
+          key={index}
+          aria-hidden="true"
+          className="absolute bg-slate-950/60"
+          style={segment}
+        />
+      ))}
 
       {spotlightRect ? (
         <div
           aria-hidden="true"
-          className="onboarding-spotlight-enter pointer-events-none absolute rounded-[28px] border border-white/70 shadow-[0_0_0_9999px_rgba(15,23,42,0.4)] transition-all duration-200"
+          className="onboarding-spotlight-enter pointer-events-none absolute z-[83] rounded-[28px] border border-white/70 transition-all duration-200"
           style={{
             top: spotlightRect.top,
             left: spotlightRect.left,
@@ -287,7 +308,7 @@ export function OnboardingTour() {
         aria-labelledby={`onboarding-step-title-${currentStep.id}`}
         aria-describedby={`onboarding-step-description-${currentStep.id}`}
         tabIndex={-1}
-        className="onboarding-panel-enter pointer-events-auto absolute w-[min(360px,calc(100vw-2rem))] rounded-[28px] border border-white/15 bg-slate-950/95 p-5 text-white shadow-2xl outline-none"
+        className="onboarding-panel-enter pointer-events-auto absolute z-[84] w-[min(360px,calc(100vw-2rem))] rounded-[28px] border border-white/15 bg-slate-950/95 p-5 text-white shadow-2xl outline-none"
         style={panelPosition}
       >
         <div className="flex items-start justify-between gap-4">
@@ -366,6 +387,61 @@ function clamp(value: number, min: number, max: number) {
   }
 
   return Math.min(Math.max(value, min), max);
+}
+
+function getBackdropSegments(spotlightRect: RectShape | null) {
+  if (!spotlightRect) {
+    return [
+      {
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+      },
+    ];
+  }
+
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const spotlightBottom = spotlightRect.top + spotlightRect.height;
+  const spotlightRight = spotlightRect.left + spotlightRect.width;
+
+  return [
+    {
+      top: 0,
+      left: 0,
+      width: viewportWidth,
+      height: spotlightRect.top,
+    },
+    {
+      top: spotlightBottom,
+      left: 0,
+      width: viewportWidth,
+      height: Math.max(viewportHeight - spotlightBottom, 0),
+    },
+    {
+      top: spotlightRect.top,
+      left: 0,
+      width: spotlightRect.left,
+      height: spotlightRect.height,
+    },
+    {
+      top: spotlightRect.top,
+      left: spotlightRight,
+      width: Math.max(viewportWidth - spotlightRight, 0),
+      height: spotlightRect.height,
+    },
+  ].filter((segment) => {
+    if (typeof segment.width === 'number' && segment.width <= 0) {
+      return false;
+    }
+
+    if (typeof segment.height === 'number' && segment.height <= 0) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function getFocusableElements(container: HTMLElement | null) {

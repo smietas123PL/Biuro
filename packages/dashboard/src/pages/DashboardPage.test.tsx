@@ -7,6 +7,8 @@ const requestMock = vi.hoisted(() => vi.fn());
 const useApiMock = vi.hoisted(() => vi.fn());
 const useWebSocketMock = vi.hoisted(() => vi.fn());
 const useCompanyMock = vi.hoisted(() => vi.fn());
+const useAuthMock = vi.hoisted(() => vi.fn());
+const useOnboardingMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../hooks/useApi', () => ({
   useApi: () => useApiMock(),
@@ -17,12 +19,22 @@ vi.mock('../context/CompanyContext', () => ({
   useCompany: () => useCompanyMock(),
 }));
 
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => useAuthMock(),
+}));
+
+vi.mock('../context/OnboardingContext', () => ({
+  useOnboarding: () => useOnboardingMock(),
+}));
+
 describe('DashboardPage', () => {
   beforeEach(() => {
     requestMock.mockReset();
     useApiMock.mockReset();
     useWebSocketMock.mockReset();
     useCompanyMock.mockReset();
+    useAuthMock.mockReset();
+    useOnboardingMock.mockReset();
 
     requestMock.mockImplementation(async (path: string) => {
       if (path === '/companies/company-1/stats') {
@@ -41,7 +53,7 @@ describe('DashboardPage', () => {
         };
       }
 
-      if (path === '/companies/company-1/activity-feed?limit=12') {
+      if (path === '/companies/company-1/activity-feed?limit=20') {
         return [
           {
             id: 'heartbeat-1',
@@ -195,9 +207,21 @@ describe('DashboardPage', () => {
       },
       selectedCompanyId: 'company-1',
     });
+    useAuthMock.mockReturnValue({
+      user: {
+        id: 'user-1',
+        email: 'ada@example.com',
+        full_name: 'Ada Lovelace',
+      },
+    });
+    useOnboardingMock.mockReturnValue({
+      hasCompleted: true,
+      startTutorial: vi.fn(),
+      status: 'idle',
+    });
   });
 
-  it('shows a trace drilldown card for the latest API trace', async () => {
+  it('shows the latest trace drilldown alongside the live operations stream', async () => {
     render(
       <MemoryRouter>
         <DashboardPage />
@@ -228,32 +252,37 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Live Cost Ticker')).toBeTruthy();
     expect(screen.getByText('Budget Gauge')).toBeTruthy();
     const thoughtSection = screen
-      .getByText('Live Thought Stream')
+      .getByText('Live Operations Stream')
       .closest(
         'div.rounded-2xl.border.bg-card.p-6.shadow-sm'
       ) as HTMLElement | null;
     if (!thoughtSection) {
-      throw new Error('Expected Live Thought Stream section');
+      throw new Error('Expected Live Operations Stream section');
     }
     const thoughtPanel = within(thoughtSection);
-    expect(thoughtPanel.getByText('Live Thought Stream')).toBeTruthy();
+    expect(thoughtPanel.getByText('Live Operations Stream')).toBeTruthy();
+    expect(thoughtPanel.getByRole('button', { name: 'All' })).toBeTruthy();
+    expect(thoughtPanel.getByRole('button', { name: 'Thoughts' })).toBeTruthy();
+    expect(thoughtPanel.getByRole('button', { name: 'Actions' })).toBeTruthy();
+    expect(thoughtPanel.getByRole('button', { name: 'Errors' })).toBeTruthy();
     expect(
       thoughtPanel.getByText(
         'We should verify retention cohorts before changing the headline.'
       )
     ).toBeTruthy();
-    expect(thoughtPanel.getByText('Recent heartbeat')).toBeTruthy();
-    expect(screen.getByText('Memory Insights')).toBeTruthy();
-    expect(screen.getByText('Recurring lessons')).toBeTruthy();
-    expect(screen.getAllByText('retention cohorts').length).toBeGreaterThan(0);
-    expect(screen.getByText('Most revisited questions')).toBeTruthy();
+    expect(thoughtPanel.getByText('Ada')).toBeTruthy();
     expect(
-      screen.getByText(
-        'Retention cohorts are more predictive than signup totals for this segment.'
-      )
-    ).toBeTruthy();
+      thoughtPanel.getByRole('link', { name: 'View Task' }).getAttribute('href')
+    ).toContain('/tasks/task-1');
+    expect(
+      thoughtPanel
+        .getByRole('link', { name: 'Agent Profile' })
+        .getAttribute('href')
+    ).toContain('/agents/agent-1');
     expect(screen.getByText('$12.5000 today')).toBeTruthy();
     expect(screen.getByText('$27.50 remaining')).toBeTruthy();
+    expect(screen.getByText('Operations Snapshot')).toBeTruthy();
+    expect(screen.getByText('What To Watch')).toBeTruthy();
     expect(screen.getByText(/Latest trace/)).toBeTruthy();
     expect(screen.getByText('http.get')).toBeTruthy();
     expect(screen.getByText('worker.heartbeat')).toBeTruthy();
@@ -282,16 +311,17 @@ describe('DashboardPage', () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByText('Live Operations Stream')).toBeTruthy();
+
     await waitFor(() => {
-      expect(screen.getByText('Live Thought Stream')).toBeTruthy();
       expect(
         screen.getByText(
           'The current friction is around the second confirmation step.'
         )
       ).toBeTruthy();
-      expect(screen.getByText('Live now')).toBeTruthy();
+      expect(screen.getByText('Ben')).toBeTruthy();
       expect(
-        screen.getByRole('link', { name: 'Open task' }).getAttribute('href')
+        screen.getByRole('link', { name: 'View Task' }).getAttribute('href')
       ).toContain('/tasks/task-2');
     });
   });

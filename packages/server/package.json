@@ -16,6 +16,7 @@
     "migrate:status": "tsx src/db/migrate.ts status",
     "migrate:verify": "tsx src/db/migrate.ts verify",
     "migrate:create": "tsx src/db/migrate.ts create",
+    "sync:pricing": "tsx src/scripts/syncPricing.ts",
     "backfill:embeddings": "tsx src/scripts/backfillEmbeddings.ts",
     "seed:tools": "tsx src/scripts/seedTools.ts"
   },

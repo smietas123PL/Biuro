@@ -27,19 +27,39 @@ import {
 import { CommandPalette } from './CommandPalette';
 import { OnboardingTour } from './OnboardingTour';
 
-const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Users, label: 'Agents', path: '/agents' },
-  { icon: CheckSquare, label: 'Tasks', path: '/tasks' },
-  { icon: Target, label: 'Goals', path: '/goals' },
-  { icon: Network, label: 'Org Chart', path: '/org-chart' },
-  { icon: WalletCards, label: 'Budgets', path: '/budgets' },
-  { icon: Layers3, label: 'Templates', path: '/templates' },
-  { icon: PlugZap, label: 'Integrations', path: '/integrations' },
-  { icon: Wrench, label: 'Tools', path: '/tools' },
-  { icon: Radar, label: 'Observability', path: '/observability' },
-  { icon: ShieldCheck, label: 'Approvals', path: '/approvals' },
-  { icon: Activity, label: 'Audit Log', path: '/audit' },
+const navGroups = [
+  {
+    title: 'Przegląd',
+    items: [
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+      { icon: Network, label: 'Struktura', path: '/org-chart' },
+    ],
+  },
+  {
+    title: 'Praca',
+    items: [
+      { icon: Users, label: 'Agents', path: '/agents' },
+      { icon: CheckSquare, label: 'Tasks', path: '/tasks' },
+      { icon: Target, label: 'Goals', path: '/goals' },
+      { icon: ShieldCheck, label: 'Approvals', path: '/approvals' },
+    ],
+  },
+  {
+    title: 'Zasoby',
+    items: [
+      { icon: Layers3, label: 'Templates', path: '/templates' },
+      { icon: Wrench, label: 'Tools', path: '/tools' },
+      { icon: PlugZap, label: 'Integrations', path: '/integrations' },
+    ],
+  },
+  {
+    title: 'Administracja',
+    items: [
+      { icon: WalletCards, label: 'Budgets', path: '/budgets' },
+      { icon: Radar, label: 'Observability', path: '/observability' },
+      { icon: Activity, label: 'Audit Log', path: '/audit' },
+    ],
+  },
 ];
 
 export function Layout() {
@@ -110,23 +130,34 @@ function AuthenticatedLayout() {
           </h1>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                clsx(
-                  'flex items-center gap-3 px-3 py-2 rounded-md transition-colors',
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                )
-              }
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
-            </NavLink>
+        <nav className="flex-1 p-4 overflow-y-auto overflow-x-hidden scrollbar-hide">
+          {navGroups.map((group) => (
+            <div key={group.title} className="mb-6 last:mb-0">
+              <h3 className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                {group.title}
+              </h3>
+              <div className="space-y-1">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={({ isActive }) =>
+                      clsx(
+                        'flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 group',
+                        isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )
+                    }
+                  >
+                    <item.icon className={clsx(
+                      "w-4 h-4 transition-transform group-hover:scale-110",
+                    )} />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 

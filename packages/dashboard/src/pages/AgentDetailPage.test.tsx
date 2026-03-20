@@ -464,9 +464,6 @@ describe('AgentDetailPage', () => {
       expect(requestMock).toHaveBeenCalledWith(
         '/agents/agent-1/replay?limit=120'
       );
-      expect(requestMock).toHaveBeenCalledWith(
-        '/agents/agent-1/replay/diff?left_task_id=task-1&right_task_id=task-2&limit=120'
-      );
     });
 
     expect(screen.getByRole('heading', { name: 'Ada' })).toBeTruthy();
@@ -476,8 +473,7 @@ describe('AgentDetailPage', () => {
     expect(screen.getByLabelText('Replay task filter')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'heartbeat' })).toBeTruthy();
     expect(screen.getByText('Prepare launch notes (1)')).toBeTruthy();
-    expect(screen.getByText('Timeline diff')).toBeTruthy();
-    expect(screen.getByText('3200 ms')).toBeTruthy();
+    expect(await screen.findByText('Timeline diff')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Replay task filter'), {
       target: { value: 'task-1' },

@@ -7,8 +7,14 @@ const dbMock = vi.hoisted(() => ({
   transaction: vi.fn(),
 }));
 
+const invalidatePolicyCacheMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
+}));
+
+vi.mock('../src/governance/policies.js', () => ({
+  invalidatePolicyCache: invalidatePolicyCacheMock,
 }));
 
 vi.mock('../src/middleware/auth.js', () => ({
@@ -57,6 +63,7 @@ describe('companies settings routes', () => {
   beforeEach(async () => {
     dbMock.query.mockReset();
     dbMock.transaction.mockReset();
+    invalidatePolicyCacheMock.mockReset();
     dbMock.transaction.mockImplementation(
       async (fn: (client: { query: typeof dbMock.query }) => unknown) =>
         fn({ query: dbMock.query })
@@ -372,6 +379,85 @@ describe('companies settings routes', () => {
         JSON.stringify({ threshold: 1 }),
       ]
     );
+    expect(invalidatePolicyCacheMock).toHaveBeenCalledWith(
+      '11111111-1111-1111-1111-111111111111'
+    );
+  });
+
+  it('deletes a company policy and invalidates the policy cache', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'policy-1',
+          company_id: 'company-1',
+        },
+      ],
+    });
+
+    const response = await fetch(`${baseUrl}/policies/policy-1`, {
+      method: 'DELETE',
+    });
+
+    expect(response.status).toBe(204);
+    expect(dbMock.query).toHaveBeenCalledWith(
+      'DELETE FROM policies WHERE id = $1 AND company_id = $2 RETURNING *',
+      ['policy-1', 'company-1']
+    );
+    expect(invalidatePolicyCacheMock).toHaveBeenCalledWith('company-1');
+  });
+
+  it('updates a company policy and invalidates the policy cache', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'policy-1',
+          company_id: 'company-1',
+          name: 'Updated policy',
+          type: 'approval_required',
+          rules: { threshold: 2 },
+        },
+      ],
+    });
+
+    const response = await fetch(`${baseUrl}/policies/policy-1`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Updated policy',
+        rules: {
+          threshold: 2,
+        },
+      }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({
+      id: 'policy-1',
+      company_id: 'company-1',
+      name: 'Updated policy',
+    });
+    expect(dbMock.query).toHaveBeenCalledWith(
+      `UPDATE policies
+         SET name = COALESCE($3, name),
+             description = COALESCE($4, description),
+             type = COALESCE($5, type),
+             rules = COALESCE($6, rules),
+             updated_at = NOW()
+         WHERE id = $1 AND company_id = $2
+         RETURNING *`,
+      [
+        'policy-1',
+        'company-1',
+        'Updated policy',
+        null,
+        null,
+        JSON.stringify({ threshold: 2 }),
+      ]
+    );
+    expect(invalidatePolicyCacheMock).toHaveBeenCalledWith('company-1');
   });
 
   it('rejects root policy access when company scope does not match the request context', async () => {

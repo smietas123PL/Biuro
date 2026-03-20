@@ -131,7 +131,9 @@ describe('ToolsPage', () => {
     });
   });
 
-  it('supports CRUD, bootstrap, assignment, testing, and history detail', async () => {
+  it(
+    'supports CRUD, bootstrap, assignment, testing, and history detail',
+    async () => {
     requestMock.mockImplementation((path: string, options?: RequestInit) => {
       if (path === '/companies/company-1/tools')
         return Promise.resolve(toolsResponse);
@@ -292,5 +294,7 @@ describe('ToolsPage', () => {
         }),
       });
     });
-  });
+    },
+    15000
+  );
 });

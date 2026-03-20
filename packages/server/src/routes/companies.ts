@@ -5,6 +5,7 @@ import type {
   RuntimeName,
 } from '@biuro/shared';
 import { db } from '../db/client.js';
+import { invalidatePolicyCache } from '../governance/policies.js';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { AuthRequest } from '../utils/context.js';
@@ -46,6 +47,11 @@ const policySchema = z.object({
   ]),
   rules: z.record(z.any()).optional(),
 });
+const policyUpdateSchema = policySchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one policy field must be provided',
+  });
 const auditLogFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   action: z.string().min(1).optional(),
@@ -188,6 +194,7 @@ router.post(
         'INSERT INTO policies (company_id, name, description, type, rules) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [company_id, name, description, type, JSON.stringify(rules || {})]
       );
+      invalidatePolicyCache(company_id);
       res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
@@ -924,11 +931,15 @@ router.post(
     try {
       const parsed = policySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error });
+      const companyId = Array.isArray(req.params.id)
+        ? req.params.id[0]
+        : req.params.id;
       const { name, description, type, rules } = parsed.data;
       const result = await db.query(
         'INSERT INTO policies (company_id, name, description, type, rules) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [req.params.id, name, description, type, JSON.stringify(rules || {})]
+        [companyId, name, description, type, JSON.stringify(rules || {})]
       );
+      invalidatePolicyCache(companyId);
       res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
@@ -947,6 +958,84 @@ router.get(
         [req.params.id]
       );
       res.json(result.rows);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Update Policy
+router.patch(
+  '/:id/policies/:policyId',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const parsed = policyUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error });
+
+      const companyId = Array.isArray(req.params.id)
+        ? req.params.id[0]
+        : req.params.id;
+      const policyId = Array.isArray(req.params.policyId)
+        ? req.params.policyId[0]
+        : req.params.policyId;
+      const { name, description, type, rules } = parsed.data;
+
+      const result = await db.query(
+        `UPDATE policies
+         SET name = COALESCE($3, name),
+             description = COALESCE($4, description),
+             type = COALESCE($5, type),
+             rules = COALESCE($6, rules),
+             updated_at = NOW()
+         WHERE id = $1 AND company_id = $2
+         RETURNING *`,
+        [
+          policyId,
+          companyId,
+          name ?? null,
+          description ?? null,
+          type ?? null,
+          rules === undefined ? null : JSON.stringify(rules),
+        ]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Policy not found' });
+      }
+
+      invalidatePolicyCache(companyId);
+      res.json(result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Delete Policy
+router.delete(
+  '/:id/policies/:policyId',
+  requireRole(['owner', 'admin']),
+  async (req, res, next) => {
+    try {
+      const companyId = Array.isArray(req.params.id)
+        ? req.params.id[0]
+        : req.params.id;
+      const policyId = Array.isArray(req.params.policyId)
+        ? req.params.policyId[0]
+        : req.params.policyId;
+
+      const result = await db.query(
+        'DELETE FROM policies WHERE id = $1 AND company_id = $2 RETURNING *',
+        [policyId, companyId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Policy not found' });
+      }
+
+      invalidatePolicyCache(companyId);
+      res.status(204).send();
     } catch (err) {
       next(err);
     }

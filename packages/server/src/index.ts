@@ -7,6 +7,7 @@ import { db } from './db/client.js';
 import routes from './routes/index.js';
 import { createServer } from 'http';
 import { initWSHub } from './ws.js';
+import { AppError } from './utils/errors.js';
 import { MCPService } from './services/mcp.js';
 import { closeEmbeddingCache } from './services/embeddings.js';
 import {
@@ -21,6 +22,7 @@ import {
 } from './realtime/eventBus.js';
 import { runStartupMigrations } from './db/startupMigrations.js';
 import { buildHelmetOptions } from './security/helmet.js';
+import { apiRateLimit } from './middleware/rateLimit.js';
 
 initializeTracing({
   serviceName: `${env.OTEL_SERVICE_NAME}-api`,
@@ -80,14 +82,14 @@ app.use(observabilityMiddleware);
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
-    version: '1.0.0',
+    version: env.APP_VERSION,
     timestamp: new Date().toISOString(),
   });
 });
 app.get('/metrics', metricsHandler);
 
 // Routes
-app.use('/api', routes);
+app.use('/api', apiRateLimit, routes);
 
 // Error handling
 app.use(
@@ -95,9 +97,22 @@ app.use(
     err: any,
     req: express.Request,
     res: express.Response,
-    next: express.NextFunction
+    _next: express.NextFunction
   ) => {
-    logger.error({ err, url: req.url }, 'Unhandled error');
+    if (err instanceof AppError) {
+      if (err.statusCode >= 500) {
+        logger.error({ err, url: req.url }, 'Server-side operation failed');
+      } else {
+        logger.warn({ err, url: req.url }, 'Client-side operation rejected');
+      }
+      return res.status(err.statusCode).json({
+        error: err.message,
+        code: err.code,
+        details: err.details,
+      });
+    }
+
+    logger.error({ err, url: req.url }, 'Unexpected server crash');
     res.status(500).json({ error: 'Internal server error' });
   }
 );

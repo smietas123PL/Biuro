@@ -1,6 +1,10 @@
-import { createClient, type RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
 import { env } from '../env.js';
 import { logger } from '../utils/logger.js';
+import {
+  createRedisConnection,
+  isRedisConfigured,
+} from '../realtime/redisConfig.js';
 
 export type SchedulerWakeup = {
   id: string;
@@ -71,17 +75,21 @@ function parseWakeupEntries(raw: unknown): SchedulerWakeup[] {
 }
 
 export function isSchedulerQueueEnabled() {
-  return Boolean(env.REDIS_URL);
+  return isRedisConfigured();
 }
 
 export async function initializeSchedulerQueue() {
-  if (!env.REDIS_URL) {
+  if (!isRedisConfigured()) {
     queueReady = false;
     return false;
   }
 
   if (!queueClient) {
-    queueClient = createClient({ url: env.REDIS_URL });
+    queueClient = createRedisConnection();
+    if (!queueClient) {
+      queueReady = false;
+      return false;
+    }
     queueClient.on('error', (err) => {
       logger.error({ err }, 'Scheduler Redis queue error');
     });
@@ -123,7 +131,7 @@ export async function enqueueCompanyWakeup(
     agentId?: string | null;
   }
 ) {
-  if ((!queueReady || !queueClient) && env.REDIS_URL) {
+  if ((!queueReady || !queueClient) && isRedisConfigured()) {
     await initializeSchedulerQueue();
   }
 

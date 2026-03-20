@@ -3,7 +3,7 @@ import {
   type OnboardingAnalyticsEventName,
   type OnboardingStartSource,
 } from './onboarding';
-import { getAuthToken, getSelectedCompanyId } from './session';
+import { getAuthToken, getCsrfToken, getSelectedCompanyId } from './session';
 
 type OnboardingAnalyticsPayload = {
   name: OnboardingAnalyticsEventName;
@@ -21,6 +21,7 @@ export async function sendOnboardingAnalyticsEvent(
   payload: OnboardingAnalyticsPayload
 ) {
   const token = getAuthToken();
+  const csrfToken = getCsrfToken();
   const companyId = getSelectedCompanyId();
 
   const body = {
@@ -52,6 +53,7 @@ export async function sendOnboardingAnalyticsEvent(
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
         'x-company-id': companyId,
       },
       body: JSON.stringify(body),

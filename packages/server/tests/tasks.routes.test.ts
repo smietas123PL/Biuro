@@ -277,6 +277,18 @@ describe('task routes', () => {
       id: 'task-1',
       status: 'assigned',
     });
+    expect(String(dbMock.query.mock.calls[1]?.[0])).toContain('created_by');
+    expect(dbMock.query.mock.calls[1]?.[1]).toEqual([
+      '11111111-1111-4111-8111-111111111111',
+      undefined,
+      undefined,
+      'Launch QA sweep',
+      'Validate release blockers.',
+      '22222222-2222-4222-8222-222222222222',
+      'user-1',
+      1,
+      'assigned',
+    ]);
     expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith(
       '11111111-1111-4111-8111-111111111111',
       'task_created',

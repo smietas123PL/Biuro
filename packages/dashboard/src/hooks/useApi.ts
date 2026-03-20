@@ -4,6 +4,7 @@ import {
   AUTH_EVENT,
   clearAuthToken,
   getAuthToken,
+  getCsrfToken,
   getSelectedCompanyId,
 } from '../lib/session';
 
@@ -20,6 +21,10 @@ type RequestConfig = {
 export type { ApiTraceSnapshot } from '@biuro/shared';
 
 function isSafeToRetry(method?: string) {
+  return !method || method === 'GET' || method === 'HEAD';
+}
+
+function isSafeMethod(method?: string) {
   return !method || method === 'GET' || method === 'HEAD';
 }
 
@@ -112,6 +117,7 @@ export function useApi() {
         for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
           try {
             const token = getAuthToken();
+            const csrfToken = getCsrfToken();
             const selectedCompanyId = getSelectedCompanyId();
             const res = await fetch(`${API_BASE}${path}`, {
               ...options,
@@ -121,6 +127,9 @@ export function useApi() {
                   ? { 'Content-Type': 'application/json' }
                   : {}),
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...(token && csrfToken && !isSafeMethod(method)
+                  ? { 'x-csrf-token': csrfToken }
+                  : {}),
                 ...(selectedCompanyId
                   ? { 'x-company-id': selectedCompanyId }
                   : {}),

@@ -10,6 +10,7 @@ import {
   buildTemplatePreviewAuditDetails,
 } from '../services/template.js';
 import { requireRole } from '../middleware/auth.js';
+import { llmRateLimit } from '../middleware/rateLimit.js';
 import {
   getTemplatePresetById,
   listTemplatePresets,
@@ -264,6 +265,7 @@ router.get(
 
 router.post(
   '/ai-suggest',
+  llmRateLimit,
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req: AuthRequest, res) => {
     const companyId = getCompanyId(req);

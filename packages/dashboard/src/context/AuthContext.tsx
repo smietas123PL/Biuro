@@ -8,6 +8,7 @@ import {
 import {
   clearAuthToken,
   getAuthToken,
+  getCsrfToken,
   setAuthToken,
   AUTH_EVENT,
 } from '../lib/session';
@@ -45,11 +46,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function fetchAuth(path: string, options?: RequestInit) {
   const token = getAuthToken();
+  const csrfToken = getCsrfToken();
+  const method = options?.method?.toUpperCase() ?? 'GET';
   const response = await fetch(`/api${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token && csrfToken && method !== 'GET' && method !== 'HEAD'
+        ? { 'x-csrf-token': csrfToken }
+        : {}),
       ...options?.headers,
     },
   });
@@ -77,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const data = await fetchAuth('/auth/me');
+      setAuthToken(token, data.csrfToken);
       setUser(data.user);
       setError(null);
     } catch (err: any) {
@@ -108,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         body: JSON.stringify(input),
       });
-      setAuthToken(data.token);
+      setAuthToken(data.token, data.csrfToken);
       setUser(data.user);
     } catch (err: any) {
       setError(err.message);
@@ -126,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         body: JSON.stringify(input),
       });
-      setAuthToken(data.token);
+      setAuthToken(data.token, data.csrfToken);
       setUser(data.user);
     } catch (err: any) {
       setError(err.message);

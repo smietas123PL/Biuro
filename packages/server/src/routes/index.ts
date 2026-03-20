@@ -15,10 +15,13 @@ import knowledge from './knowledge.js';
 import observability from './observability.js';
 import nlCommand from './nlCommand.js';
 import { requireRole } from '../middleware/auth.js';
+import { requireCsrfProtection } from '../security/csrf.js';
+import { env } from '../env.js';
 
 const router: Router = Router();
 
 router.use('/auth', auth);
+router.use(requireCsrfProtection());
 
 // Catch "undefined" in URL early
 router.use((req, _res, next) => {
@@ -73,7 +76,7 @@ router.use('/nl-command', nlCommand);
 router.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
-    version: '1.0.0',
+    version: env.APP_VERSION,
     timestamp: new Date().toISOString(),
   });
 });

@@ -19,10 +19,7 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
-    command:
-      - 'redis-server'
-      - '--appendonly'
-      - 'yes'
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required} --appendonly yes
     ports:
       - '6379:6379'
     volumes:
@@ -43,7 +40,8 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       LLM_MOCK_MODE: ${LLM_MOCK_MODE:-false}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
-      REDIS_URL: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       MAX_CONCURRENT_HEARTBEATS: ${MAX_CONCURRENT_HEARTBEATS:-20}
       HEARTBEAT_INTERVAL_MS: ${HEARTBEAT_INTERVAL_MS:-30000}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-autonomiczne-biuro}
@@ -86,7 +84,8 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       LLM_MOCK_MODE: ${LLM_MOCK_MODE:-false}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
-      REDIS_URL: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       MAX_CONCURRENT_HEARTBEATS: ${MAX_CONCURRENT_HEARTBEATS:-20}
       HEARTBEAT_INTERVAL_MS: ${HEARTBEAT_INTERVAL_MS:-30000}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-autonomiczne-biuro}
@@ -115,7 +114,7 @@ services:
       server:
         condition: service_healthy
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost >/dev/null']
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1 >/dev/null']
       interval: 30s
       timeout: 5s
       retries: 3

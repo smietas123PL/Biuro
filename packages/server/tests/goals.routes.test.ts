@@ -269,8 +269,9 @@ describe('goals routes', () => {
         expect(params?.[1]).toBe('goal-db-child-1');
         expect(params?.[2]).toBe('Starter: Define the launch scope');
         expect(params?.[4]).toBe('11111111-1111-4111-8111-111111111111');
-        expect(params?.[5]).toBe(80);
-        expect(params?.[6]).toBe('assigned');
+        expect(params?.[5]).toBe('user-1');
+        expect(params?.[6]).toBe(80);
+        expect(params?.[7]).toBe('assigned');
         return { rows: [{ id: 'task-db-1' }], rowCount: 1 };
       }
 

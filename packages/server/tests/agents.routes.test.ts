@@ -570,6 +570,7 @@ describe('agent routes', () => {
         expect(params?.[2]).toBe('task-1');
         expect(params?.[3]).toBe('Research customer pain points (Fork)');
         expect(params?.[5]).toBe('agent-1');
+        expect(params?.[6]).toBe('user-1');
         return {
           rows: [
             {

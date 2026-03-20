@@ -8,6 +8,7 @@ import {
   wsBroadcastEventsTotal,
   wsConnectionAttemptsTotal,
 } from './observability/metrics.js';
+import { resolveClientIp } from './security/trustedProxy.js';
 
 export class WSHub {
   private wss: WebSocketServer;
@@ -127,22 +128,7 @@ export class WSHub {
   }
 
   private getClientIp(req: any) {
-    const forwardedFor = req.headers['x-forwarded-for'];
-    if (typeof forwardedFor === 'string') {
-      const firstIp = forwardedFor.split(',')[0]?.trim();
-      if (firstIp) {
-        return firstIp;
-      }
-    }
-
-    if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
-      const firstIp = String(forwardedFor[0]).split(',')[0]?.trim();
-      if (firstIp) {
-        return firstIp;
-      }
-    }
-
-    return req.socket?.remoteAddress || 'unknown';
+    return resolveClientIp(req);
   }
 
   private allowConnection(clientIp: string) {

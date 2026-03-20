@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { env } from '../env.js';
 import { logger } from '../utils/logger.js';
 
 interface MCPServerConfig {
@@ -28,7 +29,7 @@ export class MCPService {
     });
 
     const client = new Client(
-      { name: 'biuro-app', version: '1.0.0' },
+      { name: 'biuro-app', version: env.APP_VERSION },
       { capabilities: {} }
     );
 

@@ -5,6 +5,7 @@ import { db } from '../db/client.js';
 import { z } from 'zod';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { requireAuth } from '../middleware/auth.js';
+import { createCsrfToken, requireCsrfProtection } from '../security/csrf.js';
 import { AuthRequest } from '../utils/context.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../env.js';
@@ -66,6 +67,7 @@ async function buildSessionPayload(userId: string, token: string) {
 
   return {
     token,
+    csrfToken: createCsrfToken(token),
     user: userRes.rows[0],
     companies: await getUserCompanies(userId),
   };
@@ -190,12 +192,17 @@ router.get('/me', requireAuth(), async (req: AuthRequest, res) => {
   res.json(await buildSessionPayload(req.user.id, token || ''));
 });
 
-router.post('/logout', requireAuth(), async (req: AuthRequest, res) => {
+router.post(
+  '/logout',
+  requireAuth(),
+  requireCsrfProtection(),
+  async (req: AuthRequest, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (token) {
     await db.query('DELETE FROM user_sessions WHERE token = $1', [token]);
   }
   res.json({ success: true });
-});
+  }
+);
 
 export default router;

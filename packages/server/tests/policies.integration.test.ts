@@ -8,11 +8,15 @@ vi.mock('../src/db/client.js', () => ({
   db: dbMock,
 }));
 
-import { evaluatePolicy } from '../src/governance/policies.js';
+import {
+  evaluatePolicy,
+  invalidatePolicyCache,
+} from '../src/governance/policies.js';
 
 describe('evaluatePolicy integration flows', () => {
   beforeEach(() => {
     dbMock.query.mockReset();
+    invalidatePolicyCache();
   });
 
   it('blocks heartbeats when rate_limit threshold is reached', async () => {
@@ -80,5 +84,66 @@ describe('evaluatePolicy integration flows', () => {
       allowed: true,
       requires_approval: false,
     });
+  });
+
+  it('reuses cached policies for repeated evaluations of the same company and type', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'policy-tool',
+          name: 'No bash',
+          rules: { blocked_tools: ['bash.exec'] },
+        },
+      ],
+    });
+
+    await evaluatePolicy('company-1', 'tool_restriction', {
+      tool_name: 'bash.exec',
+    });
+    await evaluatePolicy('company-1', 'tool_restriction', {
+      tool_name: 'bash.exec',
+    });
+
+    expect(dbMock.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates cached policies for a company after writes', async () => {
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'policy-tool',
+            name: 'No bash',
+            rules: { blocked_tools: ['bash.exec'] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'policy-tool-2',
+            name: 'No crm',
+            rules: { blocked_tools: ['crm.write'] },
+          },
+        ],
+      });
+
+    await evaluatePolicy('company-1', 'tool_restriction', {
+      tool_name: 'bash.exec',
+    });
+
+    invalidatePolicyCache('company-1');
+
+    await expect(
+      evaluatePolicy('company-1', 'tool_restriction', {
+        tool_name: 'crm.write',
+      })
+    ).resolves.toEqual({
+      allowed: false,
+      requires_approval: false,
+      reason: 'Tool blocked by policy: crm.write',
+    });
+
+    expect(dbMock.query).toHaveBeenCalledTimes(2);
   });
 });

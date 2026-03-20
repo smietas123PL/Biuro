@@ -1,8 +1,12 @@
 import crypto from 'node:crypto';
 import OpenAI from 'openai';
-import { createClient, type RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
 import { env } from '../env.js';
 import { logger } from '../utils/logger.js';
+import {
+  createRedisConnection,
+  isRedisConfigured,
+} from '../realtime/redisConfig.js';
 
 const EMBEDDING_DIMENSIONS = 1536;
 const FALLBACK_EMBEDDING_MODEL = 'local-hash-v1';
@@ -91,7 +95,7 @@ function logEmbeddingTelemetry(
 }
 
 async function getEmbeddingCacheClient() {
-  if (!env.REDIS_URL) {
+  if (!isRedisConfigured()) {
     return null;
   }
 
@@ -105,7 +109,11 @@ async function getEmbeddingCacheClient() {
 
   embeddingCacheConnectAttempted = true;
   try {
-    embeddingCacheClient = createClient({ url: env.REDIS_URL });
+    embeddingCacheClient = createRedisConnection();
+    if (!embeddingCacheClient) {
+      embeddingCacheReady = false;
+      return null;
+    }
     embeddingCacheClient.on('error', (err) => {
       logger.warn({ err }, 'Embedding cache Redis error');
     });

@@ -8,6 +8,8 @@ const envMock = vi.hoisted(() => ({
   HEARTBEAT_INTERVAL_MS: 1000,
   MAX_CONCURRENT_HEARTBEATS: 2,
   DAILY_DIGEST_SWEEP_INTERVAL_MS: 60000,
+  SCHEDULER_ERROR_BACKOFF_MIN_MS: 500,
+  SCHEDULER_ERROR_BACKOFF_MAX_MS: 10000,
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -90,6 +92,8 @@ describe('scheduler orchestration', () => {
     envMock.HEARTBEAT_INTERVAL_MS = 1000;
     envMock.MAX_CONCURRENT_HEARTBEATS = 2;
     envMock.DAILY_DIGEST_SWEEP_INTERVAL_MS = 60000;
+    envMock.SCHEDULER_ERROR_BACKOFF_MIN_MS = 500;
+    envMock.SCHEDULER_ERROR_BACKOFF_MAX_MS = 10000;
     dispatchDueDailyDigestsMock.mockResolvedValue([]);
   });
 
@@ -185,6 +189,77 @@ describe('scheduler orchestration', () => {
 
     expect(getActiveHeartbeatCount()).toBe(0);
     expect(loggerMock.warn).not.toHaveBeenCalled();
+  });
+
+  it('backs off exponentially after repeated scheduler errors in interval mode', async () => {
+    envMock.SCHEDULER_ERROR_BACKOFF_MIN_MS = 2000;
+    envMock.SCHEDULER_ERROR_BACKOFF_MAX_MS = 8000;
+
+    dbMock.query
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockRejectedValueOnce(new Error('db still down'))
+      .mockResolvedValueOnce({
+        rows: [{ id: 'agent-1' }],
+      });
+    processAgentHeartbeatMock.mockResolvedValue(undefined);
+
+    startOrchestrator();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(dbMock.query).toHaveBeenCalledTimes(1);
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ delayMs: 2000, failureCount: 1 }),
+      'Orchestrator scheduler backing off after error'
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(dbMock.query).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(dbMock.query).toHaveBeenCalledTimes(2);
+    expect(loggerMock.warn).toHaveBeenLastCalledWith(
+      expect.objectContaining({ delayMs: 4000, failureCount: 2 }),
+      'Orchestrator scheduler backing off after error'
+    );
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(dbMock.query).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(dbMock.query).toHaveBeenCalledTimes(3);
+    expect(processAgentHeartbeatMock).toHaveBeenCalledWith('agent-1');
+  });
+
+  it('backs off after queue-driven scheduler errors before retrying reads', async () => {
+    vi.useRealTimers();
+    isSchedulerQueueEnabledMock.mockReturnValue(true);
+    initializeSchedulerQueueMock.mockResolvedValue(undefined);
+    envMock.SCHEDULER_ERROR_BACKOFF_MIN_MS = 20;
+    envMock.SCHEDULER_ERROR_BACKOFF_MAX_MS = 80;
+    dbMock.query.mockResolvedValueOnce({
+      rows: [],
+    });
+    readSchedulerWakeupsMock
+      .mockRejectedValueOnce(new Error('redis read failed'))
+      .mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return [];
+      });
+
+    try {
+      startOrchestrator();
+      await new Promise((resolve) => setTimeout(resolve, 45));
+
+      expect(loggerMock.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ delayMs: 20, failureCount: 1 }),
+        'Queue-driven orchestrator backing off after error'
+      );
+      expect(readSchedulerWakeupsMock.mock.calls.length).toBeGreaterThanOrEqual(
+        2
+      );
+    } finally {
+      await stopOrchestrator();
+    }
   });
 
   it('warns when shutdown times out before heartbeats finish draining', async () => {

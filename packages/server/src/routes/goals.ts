@@ -7,6 +7,7 @@ import type {
 } from '@biuro/shared';
 import { db } from '../db/client.js';
 import { requireRole } from '../middleware/auth.js';
+import { llmRateLimit } from '../middleware/rateLimit.js';
 import type { AuthRequest } from '../utils/context.js';
 import { extractCompanyRuntimeSettings } from '../runtime/preferences.js';
 import { runtimeRegistry } from '../runtime/registry.js';
@@ -469,7 +470,8 @@ async function generateGoalDecomposition(
 async function insertGoalHierarchy(
   companyId: string,
   suggestion: GoalDecompositionSuggestion,
-  validAgentIds: Set<string>
+  validAgentIds: Set<string>,
+  createdByUserId?: string | null
 ) {
   validateDraftGoals(suggestion.goals);
   validateDraftTasks(suggestion.goals, suggestion.starter_tasks, validAgentIds);
@@ -513,8 +515,8 @@ async function insertGoalHierarchy(
     const createdTaskIds: string[] = [];
     for (const task of suggestion.starter_tasks) {
       const result = await client.query(
-        `INSERT INTO tasks (company_id, goal_id, parent_id, title, description, assigned_to, priority, status)
-         VALUES ($1, $2, NULL, $3, $4, $5, $6, $7)
+        `INSERT INTO tasks (company_id, goal_id, parent_id, title, description, assigned_to, created_by, priority, status)
+         VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
         [
           companyId,
@@ -524,6 +526,7 @@ async function insertGoalHierarchy(
           task.suggested_agent_id && validAgentIds.has(task.suggested_agent_id)
             ? task.suggested_agent_id
             : null,
+          createdByUserId ?? null,
           task.priority,
           task.suggested_agent_id && validAgentIds.has(task.suggested_agent_id)
             ? 'assigned'
@@ -582,6 +585,7 @@ router.post(
 
 router.post(
   '/ai-decompose',
+  llmRateLimit,
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req: AuthRequest, res) => {
     const companyId = getCompanyId(req);
@@ -694,7 +698,8 @@ router.post(
       const inserted = await insertGoalHierarchy(
         companyId,
         normalizedSuggestion,
-        new Set(agentsRes.rows.map((row) => String(row.id)))
+        new Set(agentsRes.rows.map((row) => String(row.id))),
+        req.user?.id ?? null
       );
       const response: GoalDecompositionApplyResponse = {
         ok: true,

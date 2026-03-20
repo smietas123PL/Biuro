@@ -1,7 +1,10 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { DEFAULT_APP_VERSION } from './appVersion.js';
 
 dotenv.config();
+
+const CSRF_DEFAULT_SECRET = 'dev-csrf-secret-please-change-2026';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
@@ -36,9 +39,39 @@ const envSchema = z.object({
         .map((origin) => origin.trim())
         .filter(Boolean)
     ),
+  TRUSTED_PROXY_IPS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    ),
   SLACK_SIGNING_SECRET: z.string().optional(),
   DISCORD_WEBHOOK_SECRET: z.string().optional(),
   REDIS_URL: z.string().url().optional(),
+  REDIS_PASSWORD: z.string().min(8).optional(),
+  DB_TRANSACTION_RETRY_MAX: z.coerce.number().int().min(0).max(5).default(2),
+  DB_TRANSACTION_RETRY_BASE_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(5_000)
+    .default(25),
+  DB_TRANSACTION_RETRY_MAX_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(30_000)
+    .default(250),
+  APP_VERSION: z.string().default(DEFAULT_APP_VERSION),
+  CSRF_PROTECTION_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  CSRF_SECRET: z.string().min(32).default(CSRF_DEFAULT_SECRET),
+  POLICY_CACHE_TTL_MS: z.coerce.number().int().min(0).max(3_600_000).default(30_000),
   WORKSPACE_ROOT: z.string().default(process.cwd()),
   EVENT_BUS_CHANNEL: z.string().default('biuro:events'),
   SCHEDULER_STREAM_KEY: z.string().default('biuro:scheduler:wakeups'),
@@ -48,6 +81,18 @@ const envSchema = z.object({
     .min(100)
     .max(30000)
     .default(1000),
+  SCHEDULER_ERROR_BACKOFF_MIN_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(60_000)
+    .default(500),
+  SCHEDULER_ERROR_BACKOFF_MAX_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(300_000)
+    .default(10_000),
   BASH_SANDBOX_MODE: z.enum(['docker', 'host']).default('docker'),
   BASH_SANDBOX_DOCKER_BINARY: z.string().default('docker'),
   BASH_SANDBOX_IMAGE: z.string().default('alpine/git:2.47.2'),
@@ -110,6 +155,10 @@ const envSchema = z.object({
   LLM_PRICING_OVERRIDES: z.string().optional(),
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().default(20),
+  REST_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),
+  REST_RATE_LIMIT_MAX: z.coerce.number().default(100),
+  LLM_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),
+  LLM_RATE_LIMIT_MAX: z.coerce.number().default(20),
   WS_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),
   WS_RATE_LIMIT_MAX: z.coerce.number().default(30),
   WS_MESSAGE_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(10 * 1000),
@@ -147,8 +196,18 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
   PORT: z.coerce.number().default(3100),
   HEARTBEAT_INTERVAL_MS: z.coerce.number().default(30000),
+  MAX_HEARTBEATS_PER_HOUR: z.coerce.number().int().min(1).default(60),
   MAX_CONCURRENT_HEARTBEATS: z.coerce.number().int().min(1).default(20),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
 
 export const env = envSchema.parse(process.env);
+if (
+  env.NODE_ENV === 'production' &&
+  env.CSRF_SECRET === CSRF_DEFAULT_SECRET
+) {
+  throw new Error(
+    'CSRF_SECRET must be changed in production! Set a strong value with: openssl rand -hex 32'
+  );
+}

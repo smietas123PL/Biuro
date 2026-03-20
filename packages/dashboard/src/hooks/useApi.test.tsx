@@ -1,7 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useApi } from './useApi';
-import { AUTH_TOKEN_KEY, COMPANY_STORAGE_KEY } from '../lib/session';
+import {
+  AUTH_TOKEN_KEY,
+  COMPANY_STORAGE_KEY,
+  CSRF_TOKEN_KEY,
+} from '../lib/session';
 
 describe('useApi', () => {
   beforeEach(() => {
@@ -18,6 +22,7 @@ describe('useApi', () => {
 
     vi.stubGlobal('fetch', fetchMock);
     localStorage.setItem(AUTH_TOKEN_KEY, 'token-123');
+    localStorage.setItem(CSRF_TOKEN_KEY, 'csrf-123');
     localStorage.setItem(COMPANY_STORAGE_KEY, 'company-7');
 
     const { result } = renderHook(() => useApi());
@@ -39,6 +44,7 @@ describe('useApi', () => {
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
           Authorization: 'Bearer token-123',
+          'x-csrf-token': 'csrf-123',
           'x-company-id': 'company-7',
         }),
       })

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../db/client.js';
 import { requireRole } from '../middleware/auth.js';
+import { llmRateLimit } from '../middleware/rateLimit.js';
 import type { AuthRequest } from '../utils/context.js';
 import { planNaturalLanguageCommand } from '../services/nlCommandPlanner.js';
 
@@ -20,6 +21,7 @@ function isCompanyNotFoundError(error: unknown) {
 
 router.post(
   '/',
+  llmRateLimit,
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req: AuthRequest, res, next) => {
     try {

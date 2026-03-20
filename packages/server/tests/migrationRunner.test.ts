@@ -142,4 +142,71 @@ describe('migration runner utilities', () => {
       'CREATE POLICY user_roles_scope_policy ON user_roles'
     );
   });
+
+  it('ships the query index migration from the audit follow-up', async () => {
+    const repoMigration = path.resolve(
+      import.meta.dirname,
+      '../src/db/schema_v15_add_query_indexes.sql'
+    );
+
+    const sql = await readFile(repoMigration, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_heartbeats_agent_created');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_tasks_assigned_status');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_audit_log_company_created');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_policies_company_type_active');
+  });
+
+  it('ships the tasks created_by user migration for sprint B', async () => {
+    const repoMigration = path.resolve(
+      import.meta.dirname,
+      '../src/db/schema_v16_tasks_created_by_user.sql'
+    );
+
+    const sql = await readFile(repoMigration, 'utf8');
+    expect(sql).toContain(
+      'ADD COLUMN IF NOT EXISTS created_by_user UUID REFERENCES users(id) ON DELETE SET NULL'
+    );
+    expect(sql).toContain('u.id::text = t.created_by');
+    expect(sql).toContain('DROP COLUMN IF EXISTS created_by');
+    expect(sql).toContain('RENAME COLUMN created_by_user TO created_by');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_tasks_created_by');
+  });
+
+  it('ships the query-index deduplication migration for sprint follow-up', async () => {
+    const repoMigration = path.resolve(
+      import.meta.dirname,
+      '../src/db/schema_v17_deduplicate_query_indexes.sql'
+    );
+
+    const sql = await readFile(repoMigration, 'utf8');
+    expect(sql).toContain('DROP INDEX IF EXISTS idx_heartbeats_agent_time');
+    expect(sql).toContain('DROP INDEX IF EXISTS idx_tasks_agent_status');
+    expect(sql).toContain('DROP INDEX IF EXISTS idx_audit_company_time');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_heartbeats_agent_created');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_tasks_assigned_status');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_audit_log_company_created');
+  });
+
+  it('ships the refined query-index migration for the audit follow-up', async () => {
+    const repoMigration = path.resolve(
+      import.meta.dirname,
+      '../src/db/schema_v18_refine_query_indexes.sql'
+    );
+
+    const sql = await readFile(repoMigration, 'utf8');
+    expect(sql).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_heartbeats_agent_created'
+    );
+    expect(sql).toContain('DROP INDEX IF EXISTS idx_tasks_assigned_status');
+    expect(sql).toContain("WHERE status NOT IN ('done', 'cancelled')");
+    expect(sql).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_audit_log_company_created'
+    );
+    expect(sql).toContain(
+      'DROP INDEX IF EXISTS idx_policies_company_type_active'
+    );
+    expect(sql).toContain('DROP INDEX IF EXISTS idx_policies_company_type');
+    expect(sql).toContain('CREATE INDEX idx_policies_company_type');
+    expect(sql).toContain('WHERE is_active = true');
+  });
 });

@@ -1,8 +1,7 @@
+import { env } from '../env.js';
 import { db } from '../db/client.js';
 import { logger } from '../utils/logger.js';
 import { deliverOutgoingWebhooks } from '../services/outgoingWebhooks.js';
-
-const MAX_HEARTBEATS_PER_HOUR = 60;
 
 export async function checkSafety(
   agentId: string,
@@ -20,7 +19,7 @@ export async function checkSafety(
        AND created_at > now() - interval '1 hour'`,
     [agentId]
   );
-  if ((heartbeatCount.rows[0]?.count ?? 0) >= MAX_HEARTBEATS_PER_HOUR) {
+  if ((heartbeatCount.rows[0]?.count ?? 0) >= env.MAX_HEARTBEATS_PER_HOUR) {
     return { ok: false, reason: 'Heartbeat rate limit exceeded' };
   }
 
@@ -50,20 +49,31 @@ export async function checkSafety(
 }
 
 async function detectCircularDelegation(taskId: string): Promise<boolean> {
-  const visited = new Set<string>();
-  let currentId = taskId;
+  const result = await db.query(
+    `WITH RECURSIVE chain AS (
+       SELECT
+         id,
+         parent_id,
+         1 AS depth
+       FROM tasks
+       WHERE id = $1
+       UNION ALL
+       SELECT
+         t.id,
+         t.parent_id,
+         c.depth + 1
+       FROM tasks t
+       JOIN chain c ON t.id = c.parent_id
+       WHERE c.depth < 20
+     )
+     SELECT COUNT(*) AS cycle_count
+     FROM chain
+     WHERE id = $1
+       AND depth > 1`,
+    [taskId]
+  );
 
-  while (currentId) {
-    if (visited.has(currentId)) return true;
-    visited.add(currentId);
-
-    const res = await db.query('SELECT parent_id FROM tasks WHERE id = $1', [
-      currentId,
-    ]);
-    currentId = res.rows[0]?.parent_id;
-  }
-
-  return false;
+  return Number(result.rows[0]?.cycle_count ?? 0) > 0;
 }
 
 export async function autoPauseAgent(agentId: string, reason: string) {

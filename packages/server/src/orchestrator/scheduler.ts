@@ -11,11 +11,17 @@ import {
   isSchedulerQueueEnabled,
   readSchedulerWakeups,
 } from './schedulerQueue.js';
+import {
+  computeExponentialBackoffDelay,
+  waitForDelay,
+} from '../utils/backoff.js';
 
 let interval: NodeJS.Timeout | null = null;
 let queueLoopPromise: Promise<void> | null = null;
 let schedulerRunning = false;
 let lastDailyDigestSweepAt = 0;
+let intervalSchedulerFailureCount = 0;
+let intervalSchedulerBackoffUntil = 0;
 const inFlightHeartbeats = new Set<Promise<HeartbeatOutcome>>();
 const inFlightHeartbeatWaiters = new Set<() => void>();
 
@@ -143,6 +149,7 @@ async function bootstrapQueueDrivenScheduler() {
 async function runQueueDrivenScheduler() {
   await initializeSchedulerQueue();
   await bootstrapQueueDrivenScheduler();
+  let queueFailureCount = 0;
 
   while (schedulerRunning) {
     try {
@@ -173,11 +180,19 @@ async function runQueueDrivenScheduler() {
         await dispatchQueuedCompany(wakeup.companyId);
         await acknowledgeSchedulerWakeup(wakeup.id);
       }
+      queueFailureCount = 0;
     } catch (err) {
-      logger.error({ err }, 'Queue-driven orchestrator scheduler error');
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 500).unref();
-      });
+      const delayMs = computeExponentialBackoffDelay(
+        queueFailureCount,
+        env.SCHEDULER_ERROR_BACKOFF_MIN_MS ?? 500,
+        env.SCHEDULER_ERROR_BACKOFF_MAX_MS ?? 10_000
+      );
+      queueFailureCount += 1;
+      logger.warn(
+        { err, delayMs, failureCount: queueFailureCount },
+        'Queue-driven orchestrator backing off after error'
+      );
+      await waitForDelay(delayMs);
     }
   }
 }
@@ -186,6 +201,8 @@ export function startOrchestrator() {
   if (schedulerRunning) return;
   schedulerRunning = true;
   lastDailyDigestSweepAt = 0;
+  intervalSchedulerFailureCount = 0;
+  intervalSchedulerBackoffUntil = 0;
 
   logger.info(
     {
@@ -203,6 +220,11 @@ export function startOrchestrator() {
   }
 
   interval = setInterval(async () => {
+    const now = Date.now();
+    if (now < intervalSchedulerBackoffUntil) {
+      return;
+    }
+
     try {
       await runScheduledMaintenance();
       const remainingCapacity = Math.max(
@@ -230,8 +252,20 @@ export function startOrchestrator() {
       for (const agent of agentsRes.rows) {
         runHeartbeat(agent.id, null);
       }
+      intervalSchedulerFailureCount = 0;
+      intervalSchedulerBackoffUntil = 0;
     } catch (err) {
-      logger.error({ err }, 'Orchestrator scheduler error');
+      const delayMs = computeExponentialBackoffDelay(
+        intervalSchedulerFailureCount,
+        env.SCHEDULER_ERROR_BACKOFF_MIN_MS ?? 500,
+        env.SCHEDULER_ERROR_BACKOFF_MAX_MS ?? 10_000
+      );
+      intervalSchedulerFailureCount += 1;
+      intervalSchedulerBackoffUntil = Date.now() + delayMs;
+      logger.warn(
+        { err, delayMs, failureCount: intervalSchedulerFailureCount },
+        'Orchestrator scheduler backing off after error'
+      );
     }
   }, env.HEARTBEAT_INTERVAL_MS);
 }
@@ -242,6 +276,8 @@ export function getActiveHeartbeatCount() {
 
 export async function stopOrchestrator(timeoutMs: number = 9_000) {
   schedulerRunning = false;
+  intervalSchedulerFailureCount = 0;
+  intervalSchedulerBackoffUntil = 0;
 
   if (interval) {
     clearInterval(interval);

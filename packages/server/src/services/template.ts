@@ -2,6 +2,7 @@ import type pg from 'pg';
 import type { TemplateImportDryRun as SharedTemplateImportDryRun } from '@biuro/shared';
 import { z } from 'zod';
 import { db } from '../db/client.js';
+import { invalidatePolicyCache } from '../governance/policies.js';
 
 const JsonObjectSchema = z.record(z.unknown());
 const SupportedRuntimeSchema = z.enum(['claude', 'openai', 'gemini']);
@@ -643,7 +644,7 @@ export const TemplateService = {
     template: CompanyTemplate,
     options: TemplateImportOptions = {}
   ) {
-    return db.transaction(async (client) => {
+    const result = await db.transaction(async (client) => {
       const currentCompanyRes = await client.query(
         'SELECT name, mission FROM companies WHERE id = $1',
         [companyId]
@@ -804,6 +805,9 @@ export const TemplateService = {
         budgetsImported: budgetsToImport.length,
       };
     });
+
+    invalidatePolicyCache(companyId);
+    return result;
   },
 
   async previewImport(

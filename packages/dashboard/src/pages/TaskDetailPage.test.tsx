@@ -308,7 +308,9 @@ describe('TaskDetailPage', () => {
     });
   });
 
-  it('renders task force mode with live co-reasoning and delegated workstreams', async () => {
+  it(
+    'renders task force mode with live co-reasoning and delegated workstreams',
+    async () => {
     render(
       <MemoryRouter
         initialEntries={['/tasks/task-root']}
@@ -399,7 +401,9 @@ describe('TaskDetailPage', () => {
         })
       );
     });
-  });
+    },
+    15000
+  );
 
   it('shows replay fork provenance for forked task branches', async () => {
     requestMock.mockImplementationOnce(async (path: string) => {

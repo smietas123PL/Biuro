@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'http';
 import { logger } from '../utils/logger.js';
 import { metricsRegistry, renderMetrics } from './metrics.js';
+import { env } from '../env.js';
 
 export type MetricsServerHandle = {
   close: () => Promise<void>;
@@ -25,7 +26,13 @@ export function startMetricsServer(
     if (req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ status: 'ok', service: serviceName }));
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          service: serviceName,
+          version: env.APP_VERSION,
+        })
+      );
       return;
     }
 

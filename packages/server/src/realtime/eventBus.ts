@@ -1,4 +1,4 @@
-import { createClient, type RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
 import { env } from '../env.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -6,6 +6,7 @@ import {
   recordEventBusPublishMetric,
   setEventBusRedisConnected,
 } from '../observability/metrics.js';
+import { createRedisConnection, isRedisConfigured } from './redisConfig.js';
 
 export type CompanyEventEnvelope = {
   companyId: string;
@@ -27,7 +28,7 @@ class RealtimeEventBus {
   private subscriberOwner: string | null = null;
 
   async initialize(options: { serviceName: string; subscribe?: boolean }) {
-    if (!env.REDIS_URL) {
+    if (!isRedisConfigured()) {
       setEventBusRedisConnected(false);
       logger.info(
         { serviceName: options.serviceName },
@@ -38,7 +39,10 @@ class RealtimeEventBus {
 
     if (!this.publisher) {
       try {
-        this.publisher = createClient({ url: env.REDIS_URL });
+        this.publisher = createRedisConnection();
+        if (!this.publisher) {
+          throw new Error('Redis is not configured');
+        }
         this.publisher.on('error', (err) => {
           logger.error(
             { err, serviceName: options.serviceName },

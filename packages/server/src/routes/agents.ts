@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/client.js';
 import { z } from 'zod';
 import { requireRole } from '../middleware/auth.js';
+import { llmRateLimit } from '../middleware/rateLimit.js';
 import { defaultModelsByRuntime } from '../runtime/defaultModels.js';
 import { extractCompanyRuntimeSettings } from '../runtime/preferences.js';
 import { runtimeRegistry } from '../runtime/registry.js';
@@ -1515,6 +1516,7 @@ router.get(
 
 router.post(
   '/:id/failure-explanation',
+  llmRateLimit,
   requireRole(['owner', 'admin', 'member', 'viewer']),
   async (req: AuthRequest, res, next) => {
     try {
@@ -1693,8 +1695,8 @@ router.post(
         .join('\n\n');
 
       const forkTaskResult = await db.query(
-        `INSERT INTO tasks (company_id, goal_id, parent_id, title, description, assigned_to, priority, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'assigned')
+        `INSERT INTO tasks (company_id, goal_id, parent_id, title, description, assigned_to, created_by, priority, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'assigned')
        RETURNING *`,
         [
           sourceTask.company_id,
@@ -1703,6 +1705,7 @@ router.post(
           taskTitle,
           taskDescription,
           agentId,
+          req.user?.id ?? null,
           sourceTask.priority ?? 0,
         ]
       );

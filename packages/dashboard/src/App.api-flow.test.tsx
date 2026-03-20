@@ -6,7 +6,11 @@ import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { CompanyProvider } from './context/CompanyContext';
-import { AUTH_TOKEN_KEY, COMPANY_STORAGE_KEY } from './lib/session';
+import {
+  AUTH_TOKEN_KEY,
+  COMPANY_STORAGE_KEY,
+  CSRF_TOKEN_KEY,
+} from './lib/session';
 import {
   ONBOARDING_VERSION,
   getChecklistDismissedKey,
@@ -74,6 +78,7 @@ async function startTestApiServer(): Promise<TestApiServer> {
     if (method === 'POST' && url === '/api/auth/login') {
       json(res, 200, {
         token: 'token-123',
+        csrfToken: 'csrf-123',
         user: {
           id: 'user-1',
           email: 'ada@example.com',
@@ -86,6 +91,7 @@ async function startTestApiServer(): Promise<TestApiServer> {
     if (method === 'GET' && url === '/api/auth/me') {
       json(res, 200, {
         token: 'token-123',
+        csrfToken: 'csrf-123',
         user: {
           id: 'user-1',
           email: 'ada@example.com',
@@ -363,6 +369,7 @@ describe('App API-backed auth flow', () => {
     expect(screen.getByDisplayValue('QA Test Corp')).toBeTruthy();
 
     expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe('token-123');
+    expect(localStorage.getItem(CSRF_TOKEN_KEY)).toBe('csrf-123');
     expect(localStorage.getItem(COMPANY_STORAGE_KEY)).toBe('company-1');
 
     const loginRequest = apiServer.requests.find(

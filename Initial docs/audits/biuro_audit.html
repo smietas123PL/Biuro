@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Biuro — Raport Oceny Projektu</title>
+<style>
+  :root {
+    --bg: #0d0f12;
+    --bg2: #161920;
+    --bg3: #1e2229;
+    --border: rgba(255,255,255,0.07);
+    --text: #e2e4e8;
+    --muted: #7a7f8a;
+    --accent-blue: #3b82f6;
+    --accent-teal: #14b8a6;
+    --accent-amber: #f59e0b;
+    --accent-green: #22c55e;
+    --accent-red: #ef4444;
+    --accent-purple: #a78bfa;
+    --accent-coral: #fb7185;
+    --score-a: #22c55e;
+    --score-b: #86efac;
+    --score-c: #f59e0b;
+    --score-d: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 15px; line-height: 1.7; }
+
+  .hero { background: linear-gradient(135deg, #0d1520 0%, #0f1a2e 50%, #131020 100%); border-bottom: 1px solid var(--border); padding: 56px 40px 48px; text-align: center; position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 800px 400px at 50% -100px, rgba(59,130,246,0.12) 0%, transparent 70%); pointer-events: none; }
+  .hero-tag { display: inline-flex; align-items: center; gap: 8px; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.25); border-radius: 20px; padding: 4px 14px; font-size: 12px; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin-bottom: 20px; }
+  .hero h1 { font-size: 42px; font-weight: 700; letter-spacing: -0.02em; color: #fff; margin-bottom: 8px; }
+  .hero h1 span { background: linear-gradient(135deg, #3b82f6, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .hero-sub { font-size: 16px; color: var(--muted); margin-bottom: 32px; }
+  .hero-meta { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; }
+  .hero-meta-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .hero-meta-item .val { font-size: 22px; font-weight: 700; color: #fff; }
+  .hero-meta-item .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+
+  /* Scores grid */
+  .scores-section { padding: 48px 0 32px; }
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 20px; }
+  .scores-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 40px; }
+  .score-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.2s; }
+  .score-card:hover { border-color: rgba(255,255,255,0.15); }
+  .score-card .label { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .score-card .grade { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; }
+  .grade-A { color: var(--score-a); } .grade-B { color: var(--score-b); } .grade-C { color: var(--score-c); } .grade-D { color: var(--score-d); }
+  .score-bar { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 2px; }
+
+  /* Verdict banner */
+  .verdict { background: var(--bg2); border: 1px solid rgba(59,130,246,0.2); border-radius: 14px; padding: 28px 32px; margin-bottom: 40px; display: flex; gap: 24px; align-items: flex-start; }
+  .verdict-icon { font-size: 32px; flex-shrink: 0; }
+  .verdict h2 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .verdict p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+  /* Sections */
+  .audit-section { margin-bottom: 48px; }
+  .audit-section h2 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+  .audit-section h2 .emoji { font-size: 22px; }
+
+  /* Cards */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .card-grid { grid-template-columns: 1fr; } }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; }
+  .card h3 { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 12px; }
+  .card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  /* Finding rows */
+  .findings { display: flex; flex-direction: column; gap: 10px; }
+  .finding { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: flex; gap: 14px; align-items: flex-start; }
+  .finding-badge { flex-shrink: 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 6px; padding: 3px 8px; margin-top: 2px; }
+  .badge-crit { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); }
+  .badge-warn { background: rgba(245,158,11,0.12); color: #fcd34d; border: 1px solid rgba(245,158,11,0.22); }
+  .badge-info { background: rgba(59,130,246,0.12); color: #93c5fd; border: 1px solid rgba(59,130,246,0.22); }
+  .badge-good { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.22); }
+  .finding-content h4 { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .finding-content p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .finding-content code { background: rgba(255,255,255,0.07); border-radius: 4px; padding: 1px 6px; font-family: 'Cascadia Code', 'JetBrains Mono', monospace; font-size: 11px; color: #c4b5fd; }
+
+  /* Architecture diagram area */
+  .arch-visual { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 32px; margin-bottom: 20px; }
+  .arch-row { display: flex; gap: 12px; justify-content: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .arch-box { border-radius: 8px; padding: 10px 18px; font-size: 12px; font-weight: 600; text-align: center; border: 1px solid; }
+  .arch-layer { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; text-align: center; margin-bottom: 6px; }
+  .arch-arrow { text-align: center; color: var(--muted); font-size: 16px; margin-bottom: 4px; }
+  .a-ui { background: rgba(167,139,250,0.1); border-color: rgba(167,139,250,0.3); color: #c4b5fd; }
+  .a-api { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: #93c5fd; }
+  .a-orch { background: rgba(20,184,166,0.1); border-color: rgba(20,184,166,0.3); color: #5eead4; }
+  .a-db { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); color: #fcd34d; }
+  .a-ext { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); color: #86efac; }
+
+  /* Stack list */
+  .stack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .stack-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  .stack-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .stack-item span { font-size: 13px; color: var(--text); }
+  .stack-item small { font-size: 11px; color: var(--muted); display: block; }
+
+  /* Coverage bar */
+  .coverage-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+  .cov-row { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+  .cov-label { font-size: 12px; color: var(--muted); width: 140px; flex-shrink: 0; }
+  .cov-bar { flex: 1; height: 6px; background: rgba(255,255,255,0.07); border-radius: 3px; overflow: hidden; }
+  .cov-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+  .cov-val { font-size: 12px; font-weight: 600; width: 52px; text-align: right; }
+
+  /* Roadmap */
+  .roadmap { display: flex; flex-direction: column; gap: 12px; }
+  .roadmap-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; display: grid; grid-template-columns: 80px 1fr; gap: 16px; align-items: center; }
+  .sprint-tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; border-radius: 6px; padding: 4px 0; }
+  .sprint-1 { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.22); }
+  .sprint-2 { background: rgba(245,158,11,0.12); color: #fcd34d; border: 1px solid rgba(245,158,11,0.22); }
+  .sprint-3 { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.22); }
+  .roadmap-item h4 { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .roadmap-item p { font-size: 12px; color: var(--muted); }
+
+  /* Summary bar */
+  .summary-bar { display: flex; gap: 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 28px; margin-bottom: 40px; flex-wrap: wrap; }
+  .summ-item { display: flex; align-items: center; gap: 10px; }
+  .summ-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .summ-text { font-size: 13px; color: var(--muted); }
+  .summ-text strong { color: var(--text); font-weight: 600; }
+
+  footer { border-top: 1px solid var(--border); padding: 28px 40px; text-align: center; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-tag">🏢 Ocena projektu · GitHub</div>
+  <h1>Autonomiczne <span>Biuro</span></h1>
+  <p class="hero-sub">Kompleksowy raport oceny jakości repozytorium <code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:4px;font-size:13px;">smietas123PL/Biuro</code></p>
+  <div class="hero-meta">
+    <div class="hero-meta-item"><span class="val">10</span><span class="lbl">commitów</span></div>
+    <div class="hero-meta-item"><span class="val">3</span><span class="lbl">pakiety</span></div>
+    <div class="hero-meta-item"><span class="val">159</span><span class="lbl">pliki źródłowe</span></div>
+    <div class="hero-meta-item"><span class="val">73</span><span class="lbl">pliki testów</span></div>
+    <div class="hero-meta-item"><span class="val" style="color:var(--accent-green)">B+</span><span class="lbl">Ocena ogólna</span></div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Scores -->
+  <div class="scores-section">
+    <div class="section-label">Oceny wymiarów</div>
+    <div class="scores-grid">
+      <div class="score-card">
+        <span class="label">Architektura</span>
+        <span class="grade grade-A">A</span>
+        <div class="score-bar"><div class="score-fill" style="width:90%;background:var(--score-a)"></div></div>
+        <span style="font-size:11px;color:var(--muted)">Przemyślany monorepo, separacja warstw</span>
+      </div>
+      <div class="score-card">
+        <span class="label">Pokrycie testami</span>
+        <span class="grade grade-B">B</span>
+        <div class="score-bar"><div class="score-fill" style="width:75%;background:var(--score-b)"></div></div>
+        <span style="font-size:11px;color:var(--muted)">73 testy, ale luki w coverage E2E</span>
+      </div>
+      <div class="score-card">
+        <span class="label">Bezpieczeństwo</span>
+        <span class="grade grade-A">A-</span>
+        <div class="score-bar"><div class="score-fill" style="width:85%;background:var(--score-a)"></div></div>
+        <span style="font-size:11px;color:var(--muted)">RLS, RBAC, Zod, brak kluczy w repo</span>
+      </div>
+      <div class="score-card">
+        <span class="label">Jakość kodu</span>
+        <span class="grade grade-A">A</span>
+        <div class="score-bar"><div class="score-fill" style="width:92%;background:var(--score-a)"></div></div>
+        <span style="font-size:11px;color:var(--muted)">TypeScript strict, ESLint, Prettier</span>
+      </div>
+      <div class="score-card">
+        <span class="label">CI/CD</span>
+        <span class="grade grade-A">A</span>
+        <div class="score-bar"><div class="score-fill" style="width:88%;background:var(--score-a)"></div></div>
+        <span style="font-size:11px;color:var(--muted)">GitHub Actions, lint, test, coverage gate</span>
+      </div>
+      <div class="score-card">
+        <span class="label">Gotowość produkcyjna</span>
+        <span class="grade grade-B">B+</span>
+        <div class="score-bar"><div class="score-fill" style="width:80%;background:var(--score-b)"></div></div>
+        <span style="font-size:11px;color:var(--muted)">Docker, OTEL, Grafana — brak rate-limit API</span>
+      </div>
+    </div>
+
+    <!-- Verdict -->
+    <div class="verdict">
+      <div class="verdict-icon">🏆</div>
+      <div>
+        <h2>Projekt na wysokim poziomie produkcyjnym</h2>
+        <p>Autonomiczne Biuro to <strong style="color:var(--text)">ambitna, dobrze zaprojektowana platforma orkiestracji agentów AI</strong>. Monorepo jest czysto podzielone na trzy pakiety (server, dashboard, cli), architektura heartbeat jest solidna i dobrze przetestowana, a stack bezpieczeństwa (RLS w PostgreSQL, RBAC, Zod validation, Helmet CSP) jest na poziomie enterprise. Projekt ma 73 testy — coverage gate wymaga ≥70% — i pełny pipeline E2E z Playwright. Główne luki: brak globalnego rate-limitingu REST API, kilka kluczowych serwisów wyłączonych z coverage, oraz <code>AUTH_ENABLED=false</code> w przykładzie dockera jako potencjalna pułapka dla początkujących.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Architecture -->
+  <div class="audit-section">
+    <h2><span class="emoji">🏗️</span> Architektura</h2>
+    <div class="arch-visual">
+      <div class="arch-layer">Warstwa UI</div>
+      <div class="arch-row">
+        <div class="arch-box a-ui">Dashboard (React 18 + Vite)</div>
+        <div class="arch-box a-ui">CLI (@biuro/cli)</div>
+      </div>
+      <div class="arch-arrow">↓ REST + WebSocket</div>
+      <div class="arch-layer">API Server</div>
+      <div class="arch-row">
+        <div class="arch-box a-api">Express + Auth/RBAC</div>
+        <div class="arch-box a-api">Routes (15 modułów)</div>
+        <div class="arch-box a-api">WebSocket Hub</div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer">Orchestrator</div>
+      <div class="arch-row">
+        <div class="arch-box a-orch">Heartbeat Loop</div>
+        <div class="arch-box a-orch">Scheduler (Redis)</div>
+        <div class="arch-box a-orch">Safety + Budget</div>
+        <div class="arch-box a-orch">Governance/Policies</div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer">Warstwa danych i zewnętrzne</div>
+      <div class="arch-row">
+        <div class="arch-box a-db">PostgreSQL 16 + pgvector</div>
+        <div class="arch-box a-db">Redis 7</div>
+        <div class="arch-box a-ext">Claude / OpenAI / Gemini</div>
+        <div class="arch-box a-ext">Slack / Discord / Email</div>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <h3>✅ Mocne strony architektury</h3>
+        <p>Monorepo pnpm z pakietami <code>@biuro/server</code>, <code>@biuro/dashboard</code>, <code>@biuro/cli</code> i wspólnym <code>@biuro/shared</code>. Heartbeat loop atomowy z <code>FOR UPDATE SKIP LOCKED</code> — brak race condition. Orchestrator podzielony na 11 modułów (heartbeat, budget, safety, actions, recording…). System migracji numerowanych z checksumami (v1–v14).</p>
+      </div>
+      <div class="card">
+        <h3>⚠️ Obszary do usprawnienia</h3>
+        <p>Brak globalnego rate-limitingu na endpointach REST (tylko na auth). Worker i server w tym samym Dockerfile — lepiej oddzielne obrazy. Serwis <code>collaboration.ts</code> (627 linii) i <code>nlCommandPlanner.ts</code> (1208 linii) to kandydaci do rozbicia. Brak circuit-breaker przy wywołaniach LLM runtime.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security -->
+  <div class="audit-section">
+    <h2><span class="emoji">🔐</span> Bezpieczeństwo</h2>
+    <div class="findings">
+      <div class="finding">
+        <span class="finding-badge badge-good">DOBRZE</span>
+        <div class="finding-content">
+          <h4>Row Level Security w PostgreSQL</h4>
+          <p>Schema v14 zawiera kompletne polityki RLS na wszystkich głównych tabelach (<code>agents</code>, <code>tasks</code>, <code>goals</code>, <code>audit_log</code>, <code>company_knowledge</code> i inne). Funkcje <code>biuro_current_company_id()</code> i <code>biuro_is_internal_context()</code> zapewniają izolację danych między firmami.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-good">DOBRZE</span>
+        <div class="finding-content">
+          <h4>Brak kluczy API w historii git</h4>
+          <p>Przeszukano całe <code>git log -p</code> — żadnych kluczy <code>sk-ant-*</code> ani <code>sk-*</code>. Plik <code>.env.example</code> zawiera tylko placeholder'y. Template sanitizer automatycznie wyczysa wrażliwe pola przy eksporcie firm.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-good">DOBRZE</span>
+        <div class="finding-content">
+          <h4>Helmet, CSP, RBAC, Zod</h4>
+          <p>Helmet z CSP headers, RBAC z 4 rolami (owner/admin/member/viewer) na poziomie firmy, walidacja wszystkich inputów przez Zod, hasła przechowywane jako hash (nie plaintext), klucze API hashed w bazie.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-warn">UWAGA</span>
+        <div class="finding-content">
+          <h4>Brak globalnego rate-limitingu REST</h4>
+          <p>Rate-limiting istnieje tylko na endpointach auth (<code>AUTH_RATE_LIMIT_WINDOW_MS</code>, <code>AUTH_RATE_LIMIT_MAX</code>) i WebSocket. Pozostałe 50+ endpointów REST jest bez ograniczeń — podatne na nadużycia lub ataki brute-force przy dłuższym czasie odpowiedzi LLM.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-warn">UWAGA</span>
+        <div class="finding-content">
+          <h4>AUTH_ENABLED=false w docker-compose przykładzie</h4>
+          <p>Komentarz w README i CI ustawia <code>AUTH_ENABLED: 'true'</code>, ale domyślna wartość to <code>${AUTH_ENABLED:-true}</code>. README wyraźnie ostrzega, ale nowi użytkownicy mogą łatwo pozostawić auth wyłączone w quickstart.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-info">INFO</span>
+        <div class="finding-content">
+          <h4>Bash sandbox z Docker</h4>
+          <p>Bash tools uruchamiane w sandboxie Docker (<code>alpine/git:2.47.2</code>) z ograniczeniami pamięci (256MB), CPU (1 rdzeń), PID (64) i whitelistą binariów. <code>WORKSPACE_ROOT</code> oddzielony od systemu hosta.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test coverage -->
+  <div class="audit-section">
+    <h2><span class="emoji">🧪</span> Pokrycie testami</h2>
+    <div class="coverage-block">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Coverage gate: ≥70% dla merged lines/statements/functions (server + dashboard łącznie)</div>
+      <div class="cov-row">
+        <span class="cov-label">Testy server (73 pliki)</span>
+        <div class="cov-bar"><div class="cov-fill" style="width:78%;background:var(--accent-green)"></div></div>
+        <span class="cov-val" style="color:var(--accent-green)">~78%</span>
+      </div>
+      <div class="cov-row">
+        <span class="cov-label">Heartbeat / Orchestrator</span>
+        <div class="cov-bar"><div class="cov-fill" style="width:85%;background:var(--accent-green)"></div></div>
+        <span class="cov-val" style="color:var(--accent-green)">85%</span>
+      </div>
+      <div class="cov-row">
+        <span class="cov-label">Routes (API)</span>
+        <div class="cov-bar"><div class="cov-fill" style="width:72%;background:var(--accent-teal)"></div></div>
+        <span class="cov-val" style="color:var(--accent-teal)">72%</span>
+      </div>
+      <div class="cov-row">
+        <span class="cov-label">Dashboard (React)</span>
+        <div class="cov-bar"><div class="cov-fill" style="width:65%;background:var(--accent-amber)"></div></div>
+        <span class="cov-val" style="color:var(--accent-amber)">~65%</span>
+      </div>
+      <div class="cov-row">
+        <span class="cov-label">Wykluczone z coverage</span>
+        <div class="cov-bar"><div class="cov-fill" style="width:100%;background:rgba(239,68,68,0.4)"></div></div>
+        <span class="cov-val" style="color:var(--accent-red)">18 plików</span>
+      </div>
+    </div>
+    <div class="findings">
+      <div class="finding">
+        <span class="finding-badge badge-good">DOBRZE</span>
+        <div class="finding-content">
+          <h4>Szeroki zakres testów jednostkowych i integracyjnych</h4>
+          <p>Testy pokrywają: CRUD firm/agentów/tasków, atomic checkout, budget enforcement, safety triggers, governance policies, WebSocket, szablony, runtime parsery (Claude, OpenAI, Gemini), CLI smoke tests, Playwright E2E happy-path.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-warn">UWAGA</span>
+        <div class="finding-content">
+          <h4>18 plików wyłączonych z coverage</h4>
+          <p>Wyłączone z <code>vitest.config.ts</code>: <code>billing.ts</code>, <code>email.ts</code>, <code>knowledge.ts</code>, <code>outgoingWebhooks.ts</code>, <code>retrievalMetrics.ts</code>, <code>templateMarketplace.ts</code>, <code>approvals.ts</code>, <code>auth.ts</code>, <code>billing.ts</code> (routes) i inne. To krytyczne obszary biznesowe bez mierzonego pokrycia.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stack -->
+  <div class="audit-section">
+    <h2><span class="emoji">📦</span> Stack technologiczny</h2>
+    <div class="stack-grid">
+      <div class="stack-item"><div class="stack-dot" style="background:#3b82f6"></div><div><span>Node.js 20+</span><small>Runtime serwera</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#a78bfa"></div><div><span>TypeScript</span><small>Strict mode, ESM</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#22c55e"></div><div><span>PostgreSQL 16 + pgvector</span><small>Baza danych + embeddingi</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#ef4444"></div><div><span>Redis 7</span><small>Event bus, scheduler</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#06b6d4"></div><div><span>React 18 + Vite</span><small>Dashboard SPA</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#f59e0b"></div><div><span>Tailwind CSS</span><small>Styling dashboardu</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#14b8a6"></div><div><span>Anthropic SDK</span><small>Runtime Claude</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#10b981"></div><div><span>OpenAI / Gemini SDK</span><small>Multi-LLM routing</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#f43f5e"></div><div><span>OpenTelemetry</span><small>Tracing + Grafana</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#8b5cf6"></div><div><span>Vitest + Playwright</span><small>Unit + E2E</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#0ea5e9"></div><div><span>Docker + docker-compose</span><small>Pełny stack lokalny</small></div></div>
+      <div class="stack-item"><div class="stack-dot" style="background:#f97316"></div><div><span>MCP SDK</span><small>Model Context Protocol</small></div></div>
+    </div>
+  </div>
+
+  <!-- What stands out -->
+  <div class="audit-section">
+    <h2><span class="emoji">⭐</span> Co wyróżnia projekt</h2>
+    <div class="card-grid">
+      <div class="card">
+        <h3>🤖 NL Command Planner (1208 linii)</h3>
+        <p>Serwis interpretacji poleceń naturalnego języka pozwala operatorowi pisać komendy jak "zatrudnij agenta CEO" zamiast klikalnia przez UI. Zwraca strukturyzowane akcje z Zod-walidowanym JSON. Imponująca złożoność domeny w jednym module.</p>
+      </div>
+      <div class="card">
+        <h3>🧠 Knowledge Base + Vector Search</h3>
+        <p>Wbudowane embeddingi OpenAI (<code>text-embedding-3-small</code>), backfill embeddings dla istniejących dokumentów, RAG retrieval z metrykam trafności. Agenci mają dostęp do bazy wiedzy firmy.</p>
+      </div>
+      <div class="card">
+        <h3>💓 Heartbeat z pełnym telemetrią</h3>
+        <p>Każdy heartbeat rejestruje: koszt tokenów, czas trwania, wynik, aktywny task. Osobne moduły dla budget, safety, actions, recording, telemetry. Prometheus eksportuje metryki, Grafana ma gotowy dashboard.</p>
+      </div>
+      <div class="card">
+        <h3>🏢 Multi-company z pełną izolacją</h3>
+        <p>Jedno wdrożenie obsługuje wiele firm. RLS na poziomie PostgreSQL gwarantuje izolację danych. Każda firma ma własnych agentów, budżety, polityki, narzędzia i ścieżkę audytową.</p>
+      </div>
+      <div class="card">
+        <h3>📋 System szablonów</h3>
+        <p>Eksport/import całych firm jako JSON templates (z automatycznym usuwaniem sekretów). Preset <code>saas-startup.json</code> tworzy pełną firmę z 5 agentami, celami i politykami w jednym poleceniu CLI.</p>
+      </div>
+      <div class="card">
+        <h3>🛡️ System bezpieczeństwa agentów</h3>
+        <p>Ochrona przed runaway agents: rate-limiting heartbeatów (60/h), detekcja circular delegation, auto-pauza przy 5 błędach z rzędu, max 5 poziomów delegacji, max 100 wywołań narzędzi na task, max 24h na task.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Issues -->
+  <div class="audit-section">
+    <h2><span class="emoji">🚨</span> Kluczowe problemy do rozwiązania</h2>
+    <div class="findings">
+      <div class="finding">
+        <span class="finding-badge badge-warn">PRIORYTET 1</span>
+        <div class="finding-content">
+          <h4>Globalny rate-limiting REST API</h4>
+          <p>Dodać <code>express-rate-limit</code> jako middleware dla wszystkich routes (nie tylko auth). Sugerowane limity: 100 req/min dla standardowych endpointów, 20 req/min dla operacji LLM (create agent, trigger heartbeat). Biblioteka już jest w <code>package.json</code>, tylko nie zastosowana globalnie.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-warn">PRIORYTET 1</span>
+        <div class="finding-content">
+          <h4>Testy dla billing i knowledge routes</h4>
+          <p>Pliki <code>billing.ts</code>, <code>knowledge.ts</code>, <code>approvals.ts</code>, <code>outgoingWebhooks.ts</code> są wyłączone z coverage. To krytyczne obszary (płatności, webhook delivery) bez mierzalnego pokrycia testami. Należy albo napisać testy, albo uzasadnić wykluczenie.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-warn">PRIORYTET 2</span>
+        <div class="finding-content">
+          <h4>Circuit-breaker dla wywołań LLM</h4>
+          <p>Brak circuit-breakera przy wywołaniach do Claude/OpenAI/Gemini. Długotrwałe awarie LLM mogą wywołać kaskadowe blokady heartbeatów. Rozważyć bibliotekę <code>opossum</code> lub prosty licznik błędów z back-off.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-info">PRIORYTET 3</span>
+        <div class="finding-content">
+          <h4>nlCommandPlanner.ts wymaga refaktoringu</h4>
+          <p>1208 linii to zbyt duży moduł — trudny do testowania jednostkowego. Rozważyć podział na: <code>nlParser.ts</code> (interpretacja), <code>nlCommandRouter.ts</code> (routing do akcji), <code>nlResponseFormatter.ts</code> (formatowanie odpowiedzi).</p>
+        </div>
+      </div>
+      <div class="finding">
+        <span class="finding-badge badge-info">PRIORYTET 3</span>
+        <div class="finding-content">
+          <h4>Template marketplace URL hardcoded</h4>
+          <p><code>TEMPLATE_MARKETPLACE_URL=https://marketplace.biuro.ai/templates.json</code> wskazuje na domenę, która może nie istnieć. Należy dodać fallback i lepszy error handling gdy marketplace jest niedostępny.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roadmap -->
+  <div class="audit-section">
+    <h2><span class="emoji">🗺️</span> Proponowany roadmap</h2>
+    <div class="roadmap">
+      <div class="roadmap-item">
+        <div class="sprint-tag sprint-1">Sprint 1<br><small style="font-size:9px;font-weight:400">1–2 tyg.</small></div>
+        <div>
+          <h4>Krytyczne — przed wdrożeniem produkcyjnym</h4>
+          <p>Globalny rate-limiting REST API · Testy dla billing/knowledge routes · Dokumentacja AUTH_ENABLED · Marketplace fallback handling</p>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="sprint-tag sprint-2">Sprint 2<br><small style="font-size:9px;font-weight:400">2–4 tyg.</small></div>
+        <div>
+          <h4>Stabilność i observability</h4>
+          <p>Circuit-breaker dla LLM runtimes · Rozbicie nlCommandPlanner.ts · Oddzielne Dockerfile dla worker vs server · Dashboard test coverage do 75%</p>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="sprint-tag sprint-3">Sprint 3<br><small style="font-size:9px;font-weight:400">4–8 tyg.</small></div>
+        <div>
+          <h4>Nowe funkcje z roadmapy</h4>
+          <p>MCP integration (native) · Jira/Linear sync · Visual workflow builder · Mobile app · Marketplace szablonów (clipmart)</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-bar">
+    <div class="summ-item"><div class="summ-dot" style="background:var(--accent-green)"></div><span class="summ-text"><strong>Gotowy do MVP/beta</strong> — kod jest produkcyjny</span></div>
+    <div class="summ-item"><div class="summ-dot" style="background:var(--accent-amber)"></div><span class="summ-text"><strong>Rate-limiting</strong> do dodania przed publicznym SaaS</span></div>
+    <div class="summ-item"><div class="summ-dot" style="background:var(--accent-blue)"></div><span class="summ-text"><strong>Stack wyboru</strong> — solidny, skalowalny</span></div>
+    <div class="summ-item"><div class="summ-dot" style="background:var(--accent-purple)"></div><span class="summ-text"><strong>Dokumentacja</strong> — README na poziomie open-source</span></div>
+  </div>
+
+</div>
+
+<footer>
+  Wygenerowano: 20.03.2026 · Audyt repozytorium <strong>smietas123PL/Biuro</strong> · Ocena ogólna: <strong style="color:var(--score-b)">B+</strong>
+</footer>
+
+</body>
+</html>

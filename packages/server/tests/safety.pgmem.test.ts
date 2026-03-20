@@ -31,9 +31,42 @@ import { autoPauseAgent, checkSafety } from '../src/orchestrator/safety.js';
 describe('safety pg-mem flows', () => {
   let testDb: Awaited<ReturnType<typeof createPgMemDb>>;
 
+  async function emulateCircularDelegationQuery(taskId: string) {
+    let currentId: string | null = taskId;
+    let depth = 1;
+
+    while (currentId) {
+      if (depth > 1 && currentId === taskId) {
+        return { rows: [{ cycle_count: '1' }] };
+      }
+
+      if (depth >= 20) {
+        break;
+      }
+
+      const result = await testDb.query(
+        'SELECT parent_id FROM tasks WHERE id = $1',
+        [currentId]
+      );
+      currentId = (result.rows[0]?.parent_id as string | null | undefined) ?? null;
+      depth += 1;
+    }
+
+    return { rows: [{ cycle_count: '0' }] };
+  }
+
   beforeEach(async () => {
     testDb = await createPgMemDb();
-    dbState.impl = testDb;
+    dbState.impl = {
+      ...testDb,
+      query: async (text: string, params?: any[]) => {
+        if (String(text).includes('WITH RECURSIVE chain AS')) {
+          return emulateCircularDelegationQuery(String(params?.[0] ?? ''));
+        }
+
+        return testDb.query(text, params);
+      },
+    };
     deliverOutgoingWebhooksMock.mockReset();
     loggerWarnMock.mockReset();
   });
@@ -66,6 +99,32 @@ describe('safety pg-mem flows', () => {
     await expect(checkSafety('agent-1', taskA)).resolves.toEqual({
       ok: false,
       reason: 'Circular delegation detected',
+    });
+  });
+
+  it('allows non-circular delegation chains', async () => {
+    const companyId = '00000000-0000-0000-0000-000000000011';
+    const rootTask = '00000000-0000-0000-0000-000000000111';
+    const childTask = '00000000-0000-0000-0000-000000000112';
+    const agentId = '00000000-0000-0000-0000-000000000113';
+
+    await testDb.query(
+      `INSERT INTO companies (id, name) VALUES ($1, 'QA Test Corp')`,
+      [companyId]
+    );
+    await testDb.query(
+      `INSERT INTO tasks (id, company_id, parent_id, title, status)
+       VALUES ($1, $2, $3, 'Root Task', 'backlog')`,
+      [rootTask, companyId, null]
+    );
+    await testDb.query(
+      `INSERT INTO tasks (id, company_id, parent_id, title, status)
+       VALUES ($1, $2, $3, 'Child Task', 'backlog')`,
+      [childTask, companyId, rootTask]
+    );
+
+    await expect(checkSafety(agentId, childTask)).resolves.toEqual({
+      ok: true,
     });
   });
 

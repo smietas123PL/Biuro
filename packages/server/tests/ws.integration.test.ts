@@ -10,6 +10,7 @@ const envMock = vi.hoisted(() => ({
   AUTH_ENABLED: true,
   WS_RATE_LIMIT_WINDOW_MS: 60_000,
   WS_RATE_LIMIT_MAX: 30,
+  TRUSTED_PROXY_IPS: [] as string[],
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -62,9 +63,59 @@ async function waitForClose(url: string) {
   );
 }
 
+async function waitForCloseWithHeaders(
+  url: string,
+  headers: Record<string, string>
+) {
+  return await new Promise<{ code: number; reason: string }>(
+    (resolve, reject) => {
+      const ws = new WebSocket(url, { headers });
+
+      ws.once('close', (code, reason) => {
+        resolve({ code, reason: reason.toString() });
+      });
+
+      ws.once('error', () => {
+        // Expected for refused websocket sessions closed immediately after handshake.
+      });
+
+      setTimeout(() => {
+        reject(new Error(`Timed out waiting for websocket close: ${url}`));
+      }, 2000);
+    }
+  );
+}
+
 async function openSocket(url: string) {
   return await new Promise<WebSocket>((resolve, reject) => {
     const ws = new WebSocket(url);
+
+    ws.once('open', () => {
+      resolve(ws);
+    });
+
+    ws.once('close', (code, reason) => {
+      reject(
+        new Error(
+          `Socket closed before opening (${code}: ${reason.toString()})`
+        )
+      );
+    });
+
+    ws.once('error', reject);
+
+    setTimeout(() => {
+      reject(new Error(`Timed out waiting for websocket open: ${url}`));
+    }, 2000);
+  });
+}
+
+async function openSocketWithHeaders(
+  url: string,
+  headers: Record<string, string>
+) {
+  return await new Promise<WebSocket>((resolve, reject) => {
+    const ws = new WebSocket(url, { headers });
 
     ws.once('open', () => {
       resolve(ws);
@@ -120,6 +171,7 @@ describe('websocket authorization', () => {
     envMock.AUTH_ENABLED = true;
     envMock.WS_RATE_LIMIT_WINDOW_MS = 60_000;
     envMock.WS_RATE_LIMIT_MAX = 30;
+    envMock.TRUSTED_PROXY_IPS = [];
 
     server = createServer();
     hub = initWSHub(server);
@@ -211,6 +263,37 @@ describe('websocket authorization', () => {
     expect(secondResult.reason).toBe('Too many websocket connection attempts');
     expect(loggerMock.warn).toHaveBeenCalledWith(
       { clientIp: '127.0.0.1' },
+      'WS connection rate limit exceeded'
+    );
+
+    await new Promise<void>((resolve) => {
+      firstSocket.close(1000, 'done');
+      firstSocket.once('close', () => resolve());
+    });
+  });
+
+  it('uses x-forwarded-for only when the socket comes from a trusted proxy', async () => {
+    envMock.WS_RATE_LIMIT_MAX = 1;
+    envMock.WS_RATE_LIMIT_WINDOW_MS = 60_000;
+    envMock.AUTH_ENABLED = false;
+    envMock.TRUSTED_PROXY_IPS = ['127.0.0.1'];
+
+    const firstSocket = await openSocketWithHeaders(
+      buildWsUrl(server, { companyId: 'company-1' }),
+      {
+        'x-forwarded-for': '203.0.113.10',
+      }
+    );
+    const secondResult = await waitForCloseWithHeaders(
+      buildWsUrl(server, { companyId: 'company-1' }),
+      {
+        'x-forwarded-for': '203.0.113.10',
+      }
+    );
+
+    expect(secondResult.code).toBe(4429);
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      { clientIp: '203.0.113.10' },
       'WS connection rate limit exceeded'
     );
 

@@ -14,13 +14,17 @@ import integrations from './integrations.js';
 import knowledge from './knowledge.js';
 import observability from './observability.js';
 import nlCommand from './nlCommand.js';
+import demo from './demo.js';
 import { requireRole } from '../middleware/auth.js';
 import { requireCsrfProtection } from '../security/csrf.js';
 import { env } from '../env.js';
 
+import { apiRateLimit } from '../middleware/rateLimit.js';
+
 const router: Router = Router();
 
 router.use('/auth', auth);
+router.use(apiRateLimit);
 router.use(requireCsrfProtection());
 
 // Catch "undefined" in URL early
@@ -71,6 +75,7 @@ router.use('/integrations', integrations);
 router.use('/knowledge', requireRole(['owner', 'admin', 'member']), knowledge);
 router.use('/observability', observability);
 router.use('/nl-command', nlCommand);
+router.use('/demo', demo);
 
 // Health check
 router.get('/health', (_req, res) => {

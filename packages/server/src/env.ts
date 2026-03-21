@@ -156,7 +156,7 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().default(20),
   REST_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),
-  REST_RATE_LIMIT_MAX: z.coerce.number().default(100),
+  REST_RATE_LIMIT_MAX: z.coerce.number().default(1000),
   LLM_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),
   LLM_RATE_LIMIT_MAX: z.coerce.number().default(20),
   WS_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60 * 1000),

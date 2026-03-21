@@ -310,4 +310,128 @@ describe('task routes', () => {
       'api'
     );
   });
+
+  it('updates task status, wakes the scheduler, and broadcasts the change', async () => {
+    dbMock.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'task-1',
+          company_id: '11111111-1111-4111-8111-111111111111',
+          assigned_to: 'agent-1',
+          status: 'in_progress',
+        },
+      ],
+    });
+
+    const response = await fetchWithCompany(`${baseUrl}/task-1/status`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'in_progress',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: 'task-1',
+      status: 'in_progress',
+    });
+    expect(dbMock.query).toHaveBeenCalledWith(
+      'UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2 AND company_id = $3 RETURNING *',
+      ['in_progress', 'task-1', '11111111-1111-4111-8111-111111111111']
+    );
+    expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'task_status_changed',
+      {
+        taskId: 'task-1',
+        agentId: 'agent-1',
+      }
+    );
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'task.updated',
+      {
+        company_id: '11111111-1111-4111-8111-111111111111',
+        task_id: 'task-1',
+        status: 'in_progress',
+        assigned_to: 'agent-1',
+        source: 'status_patch',
+      },
+      'api'
+    );
+  });
+
+  it('updates task assignment, requeues work, and broadcasts the change', async () => {
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 'agent-2' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'task-1',
+            company_id: '11111111-1111-4111-8111-111111111111',
+            assigned_to: 'agent-2',
+            status: 'assigned',
+          },
+        ],
+      });
+
+    const response = await fetchWithCompany(`${baseUrl}/task-1/assign`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        assigned_to: '22222222-2222-4222-8222-222222222222',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: 'task-1',
+      assigned_to: 'agent-2',
+      status: 'assigned',
+    });
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      1,
+      'SELECT id FROM agents WHERE id = $1 AND company_id = $2',
+      [
+        '22222222-2222-4222-8222-222222222222',
+        '11111111-1111-4111-8111-111111111111',
+      ]
+    );
+    expect(dbMock.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('UPDATE tasks'),
+      [
+        '22222222-2222-4222-8222-222222222222',
+        'task-1',
+        '11111111-1111-4111-8111-111111111111',
+      ]
+    );
+    expect(enqueueCompanyWakeupMock).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'task_assignment_changed',
+      {
+        taskId: 'task-1',
+        agentId: 'agent-2',
+      }
+    );
+    expect(broadcastCompanyEventMock).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'task.updated',
+      {
+        company_id: '11111111-1111-4111-8111-111111111111',
+        task_id: 'task-1',
+        status: 'assigned',
+        assigned_to: 'agent-2',
+        source: 'assignment_patch',
+      },
+      'api'
+    );
+  });
 });

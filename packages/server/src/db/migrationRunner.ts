@@ -44,7 +44,8 @@ export function getMigrationVersion(filename: string): number {
 }
 
 export function createMigrationChecksum(contents: string) {
-  return crypto.createHash('sha256').update(contents, 'utf8').digest('hex');
+  const normalized = contents.replace(/\r\n/g, '\n');
+  return crypto.createHash('sha256').update(normalized, 'utf8').digest('hex');
 }
 
 export function listMigrationFiles(migrationsDir: string): MigrationFile[] {

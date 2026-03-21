@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { KnowledgeGraphService } from '../services/knowledgeGraph.js';
 import { KnowledgeService } from '../services/knowledge.js';
 import { AuthRequest } from '../utils/context.js';
 
@@ -12,6 +13,10 @@ const KnowledgeDocumentSchema = z.object({
 const KnowledgeSearchSchema = z.object({
   q: z.string().trim().min(1),
   limit: z.coerce.number().int().min(1).max(25).default(5),
+});
+const KnowledgeGraphSearchSchema = z.object({
+  q: z.string().trim().min(1),
+  limit: z.coerce.number().int().min(1).max(10).default(5),
 });
 
 router.post('/', async (req: AuthRequest, res) => {
@@ -49,6 +54,23 @@ router.get('/search', async (req: AuthRequest, res) => {
     {
       consumer: 'knowledge_api',
     }
+  );
+  res.json(results);
+});
+
+router.get('/graph/search', async (req: AuthRequest, res) => {
+  const parsed = KnowledgeGraphSearchSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  const companyId = req.user?.companyId;
+  if (!companyId) return res.status(400).json({ error: 'Company ID missing' });
+
+  const results = await KnowledgeGraphService.searchSafe(
+    companyId,
+    parsed.data.q,
+    parsed.data.limit
   );
   res.json(results);
 });

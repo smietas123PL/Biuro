@@ -15,6 +15,7 @@ import {
   Network,
   Radar,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useEffect, useState } from 'react';
@@ -33,6 +34,7 @@ const navGroups = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
       { icon: Network, label: 'Struktura', path: '/org-chart' },
+      { icon: Zap, label: 'Digital Twin', path: '/digital-twin' },
     ],
   },
   {

@@ -185,6 +185,15 @@ function getStaticItems(role?: CompanyRole | null): NavigationPaletteItem[] {
     },
     {
       kind: 'navigation',
+      id: 'page-digital-twin',
+      label: 'Digital Twin',
+      description: 'Live 3D flow map of tasks, data, and cost telemetry',
+      path: '/digital-twin',
+      section: 'Pages',
+      keywords: ['graph', 'realtime', 'flow', 'telemetry'],
+    },
+    {
+      kind: 'navigation',
       id: 'page-budgets',
       label: 'Budgets',
       description: 'Spend, caps and monthly forecast',

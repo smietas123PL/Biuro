@@ -24,7 +24,7 @@ const SESSION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 const RegisterSchema = z
   .object({
-    email: z.string().email(),
+    email: z.string().email().transform(e => e.toLowerCase().trim()),
     password: z.string().min(8),
     fullName: z.string().optional(),
     companyId: z.string().uuid().optional(),
@@ -42,7 +42,7 @@ const RegisterSchema = z
   });
 
 const LoginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform(e => e.toLowerCase().trim()),
   password: z.string().min(8),
 });
 

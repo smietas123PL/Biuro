@@ -23,7 +23,11 @@ export const apiRateLimit = buildRateLimiter({
   windowMs: env.REST_RATE_LIMIT_WINDOW_MS,
   max: env.REST_RATE_LIMIT_MAX,
   message: 'Too many API requests. Please try again later.',
-  skip: (req) => req.path === '/health' || req.path === '/ws/stats',
+  skip: (req) =>
+    req.path === '/health' ||
+    req.path === '/ws/stats' ||
+    req.path === '/auth/me' ||
+    req.path.startsWith('/observability/traces/'),
 });
 
 export const llmRateLimit = buildRateLimiter({

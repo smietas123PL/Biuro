@@ -23,11 +23,19 @@ vi.mock('../src/middleware/auth.js', () => ({
   requireRole:
     () =>
     (
-      _req: express.Request,
+      req: express.Request & {
+        user?: { id: string; companyId: string; role: string };
+      },
       _res: express.Response,
       next: express.NextFunction
-    ) =>
-      next(),
+    ) => {
+      req.user = {
+        id: 'user-1',
+        companyId: 'company-1',
+        role: 'owner',
+      };
+      next();
+    },
 }));
 
 vi.mock('../src/runtime/registry.js', () => ({
@@ -108,9 +116,9 @@ describe('agent failure explanation route', () => {
     dbMock.query.mockImplementation(async (text: string, params?: any[]) => {
       if (
         text ===
-        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1'
+        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1 AND company_id = $2'
       ) {
-        expect(params).toEqual(['agent-1']);
+        expect(params).toEqual(['agent-1', 'company-1']);
         return {
           rows: [
             {
@@ -232,6 +240,189 @@ describe('agent failure explanation route', () => {
         mode: 'llm',
         runtime: 'claude',
       },
+    });
+  });
+
+  it('falls back to a heuristic explanation when the LLM response is invalid', async () => {
+    runtimeExecuteMock.mockResolvedValue({
+      thought: 'this is not valid JSON',
+      actions: [{ type: 'continue', thought: 'still not json' }],
+      routing: {
+        selected_runtime: 'claude',
+        selected_model: 'claude-sonnet',
+        attempts: [
+          { runtime: 'claude', model: 'claude-sonnet', status: 'success' },
+        ],
+      },
+    });
+
+    dbMock.query.mockImplementation(async (text: string) => {
+      if (
+        text ===
+        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1 AND company_id = $2'
+      ) {
+        return {
+          rows: [
+            {
+              id: 'agent-1',
+              company_id: 'company-1',
+              name: 'Ada',
+              role: 'Research Lead',
+              status: 'active',
+            },
+          ],
+        };
+      }
+
+      if (text.includes('FROM heartbeats h')) {
+        return {
+          rows: [
+            {
+              id: 'hb-1',
+              task_id: 'task-2',
+              task_title: 'Prepare launch notes',
+              status: 'error',
+              duration_ms: 5100,
+              cost_usd: '0.00',
+              details: {
+                error: 'Anthropic timeout',
+              },
+              created_at: '2026-03-18T10:06:00.000Z',
+            },
+          ],
+        };
+      }
+
+      if (
+        text.includes('FROM audit_log') &&
+        text.includes('WHERE agent_id = $1')
+      ) {
+        return { rows: [] };
+      }
+
+      if (text.includes('FROM messages m')) {
+        return { rows: [] };
+      }
+
+      if (text.includes('FROM agent_sessions s')) {
+        return { rows: [] };
+      }
+
+      if (text.includes('FROM companies')) {
+        return {
+          rows: [
+            {
+              id: 'company-1',
+              name: 'QA Test Corp',
+              mission: 'Ship reliable software',
+              config: {
+                llm_primary_runtime: 'claude',
+                llm_fallback_order: ['openai', 'gemini'],
+              },
+            },
+          ],
+        };
+      }
+
+      if (text.includes(`'agent.failure_explained'`)) {
+        return { rows: [], rowCount: 1 };
+      }
+
+      throw new Error(`Unexpected query: ${text}`);
+    });
+
+    const response = await fetch(`${baseUrl}/agent-1/failure-explanation`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        task_id: 'task-2',
+        types: ['heartbeat'],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      explanation: {
+        headline: 'Failure in Prepare launch notes',
+        severity: 'high',
+      },
+      planner: {
+        mode: 'rules',
+        fallback_reason: 'invalid_llm_output',
+      },
+    });
+  });
+
+  it('returns 404 when no failure event exists in the replay scope', async () => {
+    dbMock.query.mockImplementation(async (text: string) => {
+      if (
+        text ===
+        'SELECT id, company_id, name, role, status FROM agents WHERE id = $1 AND company_id = $2'
+      ) {
+        return {
+          rows: [
+            {
+              id: 'agent-1',
+              company_id: 'company-1',
+              name: 'Ada',
+              role: 'Research Lead',
+              status: 'active',
+            },
+          ],
+        };
+      }
+
+      if (text.includes('FROM heartbeats h')) {
+        return {
+          rows: [
+            {
+              id: 'hb-1',
+              task_id: 'task-2',
+              task_title: 'Prepare launch notes',
+              status: 'worked',
+              duration_ms: 1200,
+              cost_usd: '0.05',
+              details: {},
+              created_at: '2026-03-18T10:06:00.000Z',
+            },
+          ],
+        };
+      }
+
+      if (
+        text.includes('FROM audit_log') &&
+        text.includes('WHERE agent_id = $1')
+      ) {
+        return { rows: [] };
+      }
+
+      if (text.includes('FROM messages m')) {
+        return { rows: [] };
+      }
+
+      if (text.includes('FROM agent_sessions s')) {
+        return { rows: [] };
+      }
+
+      throw new Error(`Unexpected query: ${text}`);
+    });
+
+    const response = await fetch(`${baseUrl}/agent-1/failure-explanation`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        task_id: 'task-2',
+        types: ['heartbeat'],
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: 'No failure event found in the current replay scope',
     });
   });
 });

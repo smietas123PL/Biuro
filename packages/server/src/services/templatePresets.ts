@@ -390,6 +390,101 @@ export const templatePresetsCatalog: TemplatePreset[] = [
       ],
     },
   },
+  {
+    id: 'content-flow-demo',
+    name: 'ContentFlow AI (Demo)',
+    description:
+      'A fully functional demo scenario with 3 agents producing high-quality content on demand.',
+    recommended_for: 'Client demonstrations and live performance testing.',
+    template: {
+      version: '1.1',
+      company: {
+        name: 'ContentFlow AI (Demo)',
+        mission:
+          'Produce expert-level technical content and market analysis through autonomous research and collaboration.',
+        config: { is_demo: true, heartbeat_interval_ms: 10000 },
+      },
+      roles: ['owner', 'admin', 'member'],
+      goals: [
+        {
+          ref: 'goal-main',
+          title: 'Dominate Technical Content Market',
+          description:
+            'Build authority through deep-dive analysis and rapid trend responses.',
+          status: 'active',
+        },
+      ],
+      policies: [
+        {
+          name: 'Production Quality Gate',
+          description:
+            'Approval is required for final task completion to ensure high editorial standards.',
+          type: 'approval_required',
+          rules: { actions: ['complete_task'] },
+          is_active: true,
+        },
+      ],
+      tools: [
+        {
+          ref: 'tool-research',
+          name: 'web_search',
+          description: 'Search the live web for latest trends and facts.',
+          type: 'builtin',
+          config: {},
+        },
+      ],
+      agents: [
+        {
+          ref: 'agent-ceo',
+          name: 'Strategist',
+          role: 'ceo',
+          title: 'Content Strategist',
+          runtime: 'claude',
+          model: null,
+          system_prompt:
+            'You are the Lead Strategist. Your job is to take broad topics, conduct initial research using web_search, and delegate structured writing tasks to your team.',
+          config: {},
+          reports_to_ref: null,
+          monthly_budget_usd: 50,
+          tools: [{ tool_ref: 'tool-research', can_execute: true, config: {} }],
+        },
+        {
+          ref: 'agent-writer',
+          name: 'Author',
+          role: 'specialist',
+          title: 'Tech Writer',
+          runtime: 'openai',
+          model: null,
+          system_prompt:
+            'You are a Professional Tech Writer. You transform research outlines into engaging, authoritative articles in Markdown format.',
+          config: {},
+          reports_to_ref: 'agent-ceo',
+          monthly_budget_usd: 30,
+          tools: [],
+        },
+        {
+          ref: 'agent-editor',
+          name: 'Reviewer',
+          role: 'qa',
+          title: 'Senior Editor',
+          runtime: 'gemini',
+          model: null,
+          system_prompt:
+            'You are the Senior Editor. You review articles for technical accuracy, SEO, and tone. If it meets the bar, you complete the task.',
+          config: {},
+          reports_to_ref: 'agent-ceo',
+          monthly_budget_usd: 20,
+          tools: [],
+        },
+      ],
+      budgets: [
+        { agent_ref: 'agent-ceo', limit_usd: 50, spent_usd: 0 },
+        { agent_ref: 'agent-writer', limit_usd: 30, spent_usd: 0 },
+        { agent_ref: 'agent-editor', limit_usd: 20, spent_usd: 0 },
+      ],
+    },
+  },
+
 ];
 
 export function listTemplatePresets() {

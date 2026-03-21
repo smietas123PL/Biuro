@@ -8,6 +8,8 @@ const toPgVectorMock = vi.hoisted(() => vi.fn());
 const recordRetrievalMetricMock = vi.hoisted(() => vi.fn());
 const loggerWarnMock = vi.hoisted(() => vi.fn());
 const loggerInfoMock = vi.hoisted(() => vi.fn());
+const searchGraphSafeMock = vi.hoisted(() => vi.fn());
+const mergeKnowledgeDisplayResultsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/db/client.js', () => ({
   db: dbMock,
@@ -29,6 +31,14 @@ vi.mock('../src/utils/logger.js', () => ({
   },
 }));
 
+vi.mock('../src/services/knowledgeGraph.js', () => ({
+  KnowledgeGraphService: {
+    indexDocument: vi.fn(),
+    searchSafe: searchGraphSafeMock,
+  },
+  mergeKnowledgeDisplayResults: mergeKnowledgeDisplayResultsMock,
+}));
+
 import {
   KnowledgeService,
   mergeKnowledgeResults,
@@ -42,6 +52,8 @@ describe('knowledge service', () => {
     recordRetrievalMetricMock.mockReset();
     loggerWarnMock.mockReset();
     loggerInfoMock.mockReset();
+    searchGraphSafeMock.mockReset();
+    mergeKnowledgeDisplayResultsMock.mockReset();
 
     generateEmbeddingMock.mockResolvedValue({
       vector: [0.1, 0.2, 0.3],
@@ -52,6 +64,8 @@ describe('knowledge service', () => {
     });
     toPgVectorMock.mockReturnValue('[0.1,0.2,0.3]');
     recordRetrievalMetricMock.mockResolvedValue(undefined);
+    searchGraphSafeMock.mockResolvedValue([]);
+    mergeKnowledgeDisplayResultsMock.mockImplementation((primary: any[]) => primary);
   });
 
   it('degrades to lexical results when vector search fails', async () => {
@@ -89,6 +103,11 @@ describe('knowledge service', () => {
         metadata: { source: 'wiki' },
       },
     ]);
+    expect(searchGraphSafeMock).toHaveBeenCalledWith(
+      'company-1',
+      'launch checklist',
+      3
+    );
     expect(recordRetrievalMetricMock).toHaveBeenCalledWith(
       expect.objectContaining({
         companyId: 'company-1',
@@ -147,6 +166,11 @@ describe('knowledge service', () => {
         metadata: { source: 'handbook' },
       },
     ]);
+    expect(searchGraphSafeMock).toHaveBeenCalledWith(
+      'company-1',
+      'rollout plan',
+      2
+    );
     expect(recordRetrievalMetricMock).toHaveBeenCalledWith(
       expect.objectContaining({
         companyId: 'company-1',
@@ -211,5 +235,85 @@ describe('knowledge service', () => {
       'Lexical only',
       'Vector only',
     ]);
+  });
+
+  it('merges synaptic graph results into display output', async () => {
+    searchGraphSafeMock.mockResolvedValue([
+      {
+        title: 'Synaptic client: Atlas Labs',
+        content: 'Ada learned the rollout sequence for Atlas.',
+        metadata: { source: 'knowledge_graph' },
+      },
+    ]);
+    mergeKnowledgeDisplayResultsMock.mockImplementation(
+      (primary: any[], synaptic: any[]) => [...synaptic, ...primary].slice(0, 2)
+    );
+
+    dbMock.query.mockImplementation(async (text: string) => {
+      if (text.includes('embedding <=>')) {
+        return {
+          rows: [
+            {
+              id: 'doc-2',
+              title: 'Atlas launch',
+              content: 'Atlas needs a staged rollout.',
+              metadata: { source: 'wiki' },
+              created_at: '2026-03-21T10:00:00.000Z',
+              distance: 0.12,
+            },
+          ],
+        };
+      }
+
+      if (text.includes('lexical_score')) {
+        return {
+          rows: [
+            {
+              id: 'doc-2',
+              title: 'Atlas launch',
+              content: 'Atlas needs a staged rollout.',
+              metadata: { source: 'wiki' },
+              created_at: '2026-03-21T10:00:00.000Z',
+              lexical_score: 8,
+            },
+          ],
+        };
+      }
+
+      throw new Error(`Unexpected query: ${text}`);
+    });
+
+    const results = await KnowledgeService.search('company-1', 'Atlas rollout', 2, {
+      consumer: 'agent_context',
+    });
+
+    expect(results).toEqual([
+      {
+        title: 'Synaptic client: Atlas Labs',
+        content: 'Ada learned the rollout sequence for Atlas.',
+        metadata: { source: 'knowledge_graph' },
+      },
+      {
+        title: 'Atlas launch',
+        content: 'Atlas needs a staged rollout.',
+        metadata: { source: 'wiki' },
+      },
+    ]);
+    expect(mergeKnowledgeDisplayResultsMock).toHaveBeenCalledWith(
+      [
+        {
+          title: 'Atlas launch',
+          content: 'Atlas needs a staged rollout.',
+          metadata: { source: 'wiki' },
+        },
+      ],
+      [
+        {
+          title: 'Synaptic client: Atlas Labs',
+          content: 'Ada learned the rollout sequence for Atlas.',
+          metadata: { source: 'knowledge_graph' },
+        },
+      ]
+    );
   });
 });

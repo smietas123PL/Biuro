@@ -38,6 +38,19 @@ class RuntimeRegistry {
 
     return new MultiProviderRuntimeRouter(name, this.runtimes, options);
   }
+
+  getDirectRuntime(name: RuntimeName): IAgentRuntime {
+    const runtime = this.runtimes.get(name);
+    if (!runtime) {
+      throw new Error(`Runtime ${name} not available`);
+    }
+
+    return runtime;
+  }
+
+  getAvailableRuntimeNames(): RuntimeName[] {
+    return Array.from(this.runtimes.keys());
+  }
 }
 
 export const runtimeRegistry = new RuntimeRegistry();

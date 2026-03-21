@@ -79,16 +79,30 @@ export async function evaluatePolicy(
     switch (type) {
       case 'approval_required':
         if (
-          Array.isArray(rules.actions) &&
-          rules.actions.includes(payload.action)
+          !Array.isArray(rules.actions) ||
+          !rules.actions.includes(payload.action)
         ) {
-          return {
-            allowed: false,
-            requires_approval: true,
-            reason: `Policy: ${policy.name}`,
-            policy_id: policy.id,
-          };
+          break;
         }
+
+        if (
+          Array.isArray(rules.tool_names) &&
+          payload.tool_name &&
+          !rules.tool_names.includes(payload.tool_name)
+        ) {
+          break;
+        }
+
+        if (Array.isArray(rules.tool_names) && !payload.tool_name) {
+          break;
+        }
+
+        return {
+          allowed: false,
+          requires_approval: true,
+          reason: `Policy: ${policy.name}`,
+          policy_id: policy.id,
+        };
         break;
 
       case 'delegation_limit':

@@ -83,6 +83,7 @@ export const CompanyTemplateSchema = z.object({
   company: z.object({
     name: z.string().min(1),
     mission: z.string().nullable().optional(),
+    config: JsonObjectSchema.default({}),
   }),
   roles: z.array(z.enum(['owner', 'admin', 'member', 'viewer'])).default([]),
   goals: z.array(GoalTemplateSchema).default([]),
@@ -478,7 +479,7 @@ async function insertGoals(
 export const TemplateService = {
   async exportCompany(companyId: string): Promise<CompanyTemplate> {
     const company = (
-      await db.query('SELECT name, mission FROM companies WHERE id = $1', [
+      await db.query('SELECT name, mission, config FROM companies WHERE id = $1', [
         companyId,
       ])
     ).rows[0];
@@ -580,6 +581,7 @@ export const TemplateService = {
       company: {
         name: company.name,
         mission: company.mission ?? null,
+        config: company.config ?? {},
       },
       roles: rolesRes.rows.map((row) => row.role),
       goals: goalsRes.rows.map((goal) => ({
@@ -646,7 +648,7 @@ export const TemplateService = {
   ) {
     const result = await db.transaction(async (client) => {
       const currentCompanyRes = await client.query(
-        'SELECT name, mission FROM companies WHERE id = $1',
+        'SELECT name, mission, config FROM companies WHERE id = $1',
         [companyId]
       );
       const currentCompany = currentCompanyRes.rows[0];
@@ -660,10 +662,13 @@ export const TemplateService = {
       const nextCompanyMission = options.preserveCompanyIdentity
         ? (currentCompany.mission ?? null)
         : (template.company.mission ?? null);
+      const nextCompanyConfig = options.preserveCompanyIdentity
+        ? (currentCompany.config ?? {})
+        : { ...(currentCompany.config ?? {}), ...(template.company.config ?? {}) };
 
       await client.query(
-        'UPDATE companies SET name = $1, mission = $2 WHERE id = $3',
-        [nextCompanyName, nextCompanyMission, companyId]
+        'UPDATE companies SET name = $1, mission = $2, config = $3 WHERE id = $4',
+        [nextCompanyName, nextCompanyMission, JSON.stringify(nextCompanyConfig), companyId]
       );
 
       await insertGoals(client, companyId, template.goals);

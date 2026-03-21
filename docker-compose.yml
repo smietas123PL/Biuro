@@ -139,6 +139,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.6.1
+    user: root
     restart: unless-stopped
     command:
       - '-config.file=/etc/tempo/tempo.yml'

@@ -2,9 +2,11 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
+
 import {
   clearAuthToken,
   getAuthToken,
@@ -62,7 +64,9 @@ async function fetchAuth(path: string, options?: RequestInit) {
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(data?.error || 'Authentication request failed');
+    const error = new Error(data?.error || 'Authentication request failed') as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
 
   return data;
@@ -72,8 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isHydratingRef = useRef(false);
 
-  const hydrateSession = async () => {
+  const hydrateSession = async (isBackground = false) => {
+    if (isHydratingRef.current) return;
+    
     const token = getAuthToken();
     if (!token) {
       setUser(null);
@@ -81,17 +88,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    isHydratingRef.current = true;
+    if (!isBackground) setLoading(true);
+
     try {
       const data = await fetchAuth('/auth/me');
       setAuthToken(token, data.csrfToken);
       setUser(data.user);
       setError(null);
     } catch (err: any) {
-      clearAuthToken();
-      setUser(null);
-      setError(err.message);
+      if (err.status === 401) {
+        clearAuthToken();
+        setUser(null);
+      }
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
+      isHydratingRef.current = false;
     }
   };
 
@@ -99,8 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void hydrateSession();
 
     const handleAuthChange = () => {
-      setLoading(true);
-      void hydrateSession();
+      // Background refresh to sync state across tabs without showing full-page loader
+      void hydrateSession(true);
     };
 
     window.addEventListener(AUTH_EVENT, handleAuthChange);

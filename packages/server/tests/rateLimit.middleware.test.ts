@@ -152,4 +152,30 @@ describe('rate limit middleware', () => {
     expect((await fetch(baseUrl)).status).toBe(200);
     expect((await fetch(baseUrl)).status).toBe(200);
   });
+
+  it('skips the general limiter for auth verification', async () => {
+    const { apiRateLimit } = await import('../src/middleware/rateLimit.js');
+
+    const app = express();
+    app.use('/api', apiRateLimit);
+    app.get('/api/auth/me', (_req, res) => {
+      res.json({ user: { id: '1' } });
+    });
+
+    server = createServer(app);
+    await new Promise<void>((resolve) => {
+      server!.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected TCP address');
+    }
+    const baseUrl = `http://127.0.0.1:${address.port}/api/auth/me`;
+
+    // envMock.REST_RATE_LIMIT_MAX is 2, so 3 requests should normally trigger 429
+    expect((await fetch(baseUrl)).status).toBe(200);
+    expect((await fetch(baseUrl)).status).toBe(200);
+    expect((await fetch(baseUrl)).status).toBe(200);
+  });
 });

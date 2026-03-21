@@ -21,6 +21,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const OrgChartPage = lazy(() => import('./pages/OrgChartPage'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
+const DigitalTwinPage = lazy(() => import('./pages/DigitalTwinPage'));
 
 function RouteFallback() {
   return (
@@ -115,6 +116,14 @@ function App() {
               element={
                 <RouteBoundary>
                   <OrgChartPage />
+                </RouteBoundary>
+              }
+            />
+            <Route
+              path="digital-twin"
+              element={
+                <RouteBoundary>
+                  <DigitalTwinPage />
                 </RouteBoundary>
               }
             />

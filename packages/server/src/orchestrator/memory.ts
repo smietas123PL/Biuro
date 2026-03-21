@@ -4,6 +4,7 @@ import {
   toPgVector,
   type EmbeddingResult,
 } from '../services/embeddings.js';
+import { KnowledgeGraphService } from '../services/knowledgeGraph.js';
 import { recordRetrievalMetric } from '../services/retrievalMetrics.js';
 import { logger } from '../utils/logger.js';
 import type {
@@ -229,16 +230,49 @@ export async function storeMemory(
   companyId: string,
   agentId: string,
   taskId: string,
-  content: string
+  content: string,
+  metadata: Record<string, unknown> = {}
 ) {
   try {
     const embedding = await generateEmbedding(content);
 
-    await db.query(
-      `INSERT INTO agent_memory (company_id, agent_id, task_id, content, embedding)
-       VALUES ($1, $2, $3, $4, $5::vector)`,
-      [companyId, agentId, taskId, content, toPgVector(embedding.vector)]
+    const insertRes = await db.query(
+      `INSERT INTO agent_memory (company_id, agent_id, task_id, content, embedding, metadata)
+       VALUES ($1, $2, $3, $4, $5::vector, $6)
+       RETURNING id`,
+      [
+        companyId,
+        agentId,
+        taskId,
+        content,
+        toPgVector(embedding.vector),
+        JSON.stringify(metadata),
+      ]
     );
+    const memoryId = insertRes.rows[0]?.id as string | undefined;
+
+    if (memoryId) {
+      try {
+        const title =
+          typeof metadata.task_title === 'string' && metadata.task_title.trim()
+            ? metadata.task_title.trim()
+            : content.split('\n')[0]?.replace(/^Task:\s*/i, '').trim() || 'Memory';
+        await KnowledgeGraphService.indexMemory({
+          companyId,
+          memoryId,
+          agentId,
+          taskId,
+          title,
+          content,
+          metadata,
+        });
+      } catch (error) {
+        logger.warn(
+          { error, companyId, agentId, taskId, memoryId },
+          'Knowledge graph indexing failed for agent memory'
+        );
+      }
+    }
 
     logger.info(
       { agentId, taskId, source: embedding.source },

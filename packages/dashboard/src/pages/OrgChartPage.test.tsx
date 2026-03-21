@@ -159,10 +159,14 @@ describe('OrgChartPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Org Chart' })).toBeTruthy();
     expect(screen.getByText('Live Reporting Map')).toBeTruthy();
-    expect(screen.getByText('2 direct reports')).toBeTruthy();
-    expect(screen.getByText('1 direct report')).toBeTruthy();
-    expect(screen.getByText('top level')).toBeTruthy();
-    expect(screen.getByText('Fix onboarding bugs')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Inspect Ada' })).toBeTruthy();
+      expect(screen.getByText('2 direct reports')).toBeTruthy();
+      expect(screen.getByText('1 direct report')).toBeTruthy();
+      expect(screen.getByText('top level')).toBeTruthy();
+      expect(screen.getByText('Fix onboarding bugs')).toBeTruthy();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Inspect Ben' }));
 
@@ -198,6 +202,26 @@ describe('OrgChartPage', () => {
       sidepanel.getByRole('link', { name: 'Open task' }).getAttribute('href')
     ).toBe('/tasks/task-77');
     expect(sidepanel.getByRole('button', { name: 'Pause agent' })).toBeTruthy();
+  });
+
+  it('shows an empty state when no company is selected', () => {
+    useCompanyMock.mockReturnValue({
+      selectedCompany: null,
+      selectedCompanyId: null,
+    });
+
+    render(
+      <MemoryRouter
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <OrgChartPage />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText('Choose a company to view its reporting structure.')
+    ).toBeTruthy();
+    expect(requestMock).not.toHaveBeenCalled();
   });
 
   it('reflects a live working event and allows pausing the selected agent', async () => {

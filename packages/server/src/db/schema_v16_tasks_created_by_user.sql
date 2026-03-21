@@ -10,8 +10,8 @@ ALTER TABLE tasks
 UPDATE tasks t
 SET created_by_user = u.id
 FROM users u
-WHERE t.created_by IS NOT NULL
-  AND u.id::text = t.created_by;
+WHERE t.created_by::text IS NOT NULL
+  AND u.id::text = t.created_by::text;
 
 ALTER TABLE tasks
   DROP COLUMN IF EXISTS created_by;

@@ -12,20 +12,32 @@ export function getCsrfToken() {
 }
 
 export function setAuthToken(token: string, csrfToken?: string | null) {
+  const oldToken = localStorage.getItem(AUTH_TOKEN_KEY);
+  const oldCsrf = localStorage.getItem(CSRF_TOKEN_KEY);
+
   localStorage.setItem(AUTH_TOKEN_KEY, token);
   if (csrfToken) {
     localStorage.setItem(CSRF_TOKEN_KEY, csrfToken);
   } else {
     localStorage.removeItem(CSRF_TOKEN_KEY);
   }
-  window.dispatchEvent(new CustomEvent(AUTH_EVENT));
+
+  const hasChanged = oldToken !== token || oldCsrf !== (csrfToken ?? null);
+  if (hasChanged) {
+    window.dispatchEvent(new CustomEvent(AUTH_EVENT));
+  }
 }
 
 export function clearAuthToken() {
+  const oldToken = localStorage.getItem(AUTH_TOKEN_KEY);
+
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(CSRF_TOKEN_KEY);
   localStorage.removeItem(COMPANY_STORAGE_KEY);
-  window.dispatchEvent(new CustomEvent(AUTH_EVENT));
+
+  if (oldToken) {
+    window.dispatchEvent(new CustomEvent(AUTH_EVENT));
+  }
 }
 
 export function getSelectedCompanyId() {

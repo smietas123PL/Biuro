@@ -4,7 +4,7 @@ import type {
   CompanyRuntimeSettingsResponse,
   RuntimeName,
 } from '@biuro/shared';
-import { ArrowDown, ArrowUp, Sparkles } from 'lucide-react';
+import { Activity, ArrowDown, ArrowUp, Beaker, Play, Sparkles, Square } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
@@ -615,6 +615,8 @@ export default function SettingsPage() {
         )}
       </section>
 
+      <DemoScenarioSection />
+
       <section className="rounded-2xl border bg-card p-6 shadow-sm">
         <h3 className="text-lg font-semibold">Health Checks</h3>
         <div className="mt-4 space-y-2 text-sm text-muted-foreground">
@@ -623,6 +625,124 @@ export default function SettingsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function DemoScenarioSection() {
+  const { request } = useApi();
+  const { refreshCompanies } = useCompany();
+  const [status, setStatus] = useState<{ enabled: boolean; company: any } | null>(null);
+  const [toggling, setToggling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void request('/demo/status', undefined, { suppressError: true })
+      .then((data) => setStatus(data as any))
+      .catch(() => setStatus({ enabled: false, company: null }));
+  }, [request]);
+
+  const handleToggle = async () => {
+    setToggling(true);
+    setError(null);
+    const nextEnabled = !status?.enabled;
+
+    try {
+      await request('/demo/toggle', {
+        method: 'POST',
+        body: JSON.stringify({ enabled: nextEnabled }),
+      });
+      
+      const nextStatus = (await request('/demo/status')) as any;
+      setStatus(nextStatus);
+      await refreshCompanies();
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle demo scenario.');
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border bg-card p-6 shadow-sm overflow-hidden relative">
+      <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+         <Beaker className="h-24 w-24" />
+      </div>
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            Demo Scenario
+            {status?.enabled && (
+              <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            )}
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+            Enable or disable the "ContentFlow AI" demonstration company. 
+            When enabled, a pre-configured team of 3 agents will be created and start 
+            an autonomous content production cycle.
+          </p>
+        </div>
+        <div className={clsx(
+          'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium',
+          status?.enabled 
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700' 
+            : 'border-slate-200 bg-slate-50 text-slate-600'
+        )}>
+          {status?.enabled ? (
+             <><Activity className="h-3 w-3" /> Live Demo Active</>
+          ) : (
+             <><Square className="h-3 w-3" /> Demo Inactive</>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-4">
+        <button
+          type="button"
+          disabled={toggling}
+          onClick={handleToggle}
+          className={clsx(
+            'flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold transition-all shadow-sm',
+            status?.enabled
+              ? 'bg-rose-600 text-white hover:bg-rose-700'
+              : 'bg-primary text-primary-foreground hover:opacity-90'
+          )}
+        >
+          {toggling ? (
+            'Processing...'
+          ) : status?.enabled ? (
+            <>
+              <Square className="h-4 w-4 fill-current" />
+              Stop & Remove Demo
+            </>
+          ) : (
+            <>
+              <Play className="h-4 w-4 fill-current" />
+              Launch Demo Scenario
+            </>
+          )}
+        </button>
+
+        {status?.enabled && status.company && (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Active instance: </span>
+            <span className="font-medium text-primary underline decoration-primary/30 underline-offset-4">
+              {status.company.name}
+            </span>
+          </div>
+        )}
+
+        {error && (
+          <div className="text-sm text-rose-600 font-medium">
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 text-xs text-muted-foreground/80 italic">
+        * Warning: Disabling will PERMANENTLY delete the demo company and its data.
+      </div>
+    </section>
   );
 }
 

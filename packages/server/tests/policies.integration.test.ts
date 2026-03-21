@@ -86,6 +86,58 @@ describe('evaluatePolicy integration flows', () => {
     });
   });
 
+  it('requires approval for use_tool only when the tool_name matches the policy scope', async () => {
+    dbMock.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'policy-approval',
+            name: 'Review payment tools',
+            rules: {
+              actions: ['use_tool'],
+              tool_names: ['payments.execute'],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'policy-approval',
+            name: 'Review payment tools',
+            rules: {
+              actions: ['use_tool'],
+              tool_names: ['payments.execute'],
+            },
+          },
+        ],
+      });
+
+    await expect(
+      evaluatePolicy('company-1', 'approval_required', {
+        action: 'use_tool',
+        tool_name: 'payments.execute',
+      })
+    ).resolves.toEqual({
+      allowed: false,
+      requires_approval: true,
+      reason: 'Policy: Review payment tools',
+      policy_id: 'policy-approval',
+    });
+
+    invalidatePolicyCache();
+
+    await expect(
+      evaluatePolicy('company-1', 'approval_required', {
+        action: 'use_tool',
+        tool_name: 'notes.create',
+      })
+    ).resolves.toEqual({
+      allowed: true,
+      requires_approval: false,
+    });
+  });
+
   it('reuses cached policies for repeated evaluations of the same company and type', async () => {
     dbMock.query.mockResolvedValueOnce({
       rows: [

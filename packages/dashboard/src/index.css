@@ -97,11 +97,58 @@
   animation: checklist-enter 320ms ease-out both;
 }
 
+@keyframes twin-node-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes twin-dash-flow {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes twin-packet-pulse {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+.twin-node-float {
+  animation: twin-node-float 7.5s ease-in-out infinite;
+}
+
+.twin-flow-line {
+  stroke-dasharray: 2.4 3.6;
+  animation: twin-dash-flow 7s linear infinite;
+}
+
+.twin-packet-glow {
+  animation: twin-packet-pulse 1.1s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .onboarding-panel-enter,
   .onboarding-spotlight-enter,
   .checklist-enter,
-  .checklist-item-enter {
+  .checklist-item-enter,
+  .twin-node-float,
+  .twin-flow-line,
+  .twin-packet-glow {
     animation: none;
   }
 }

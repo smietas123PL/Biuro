@@ -2,6 +2,10 @@ import { db } from '../db/client.js';
 import { logger } from '../utils/logger.js';
 import { generateEmbedding, toPgVector, type EmbeddingResult } from './embeddings.js';
 import {
+  KnowledgeGraphService,
+  mergeKnowledgeDisplayResults,
+} from './knowledgeGraph.js';
+import {
   recordRetrievalMetric,
   type RetrievalScope,
 } from './retrievalMetrics.js';
@@ -267,7 +271,24 @@ export const KnowledgeService = {
       ]
     );
 
-    return res.rows[0].id;
+    const id = res.rows[0].id as string;
+
+    try {
+      await KnowledgeGraphService.indexDocument({
+        companyId,
+        documentId: id,
+        title,
+        content,
+        metadata,
+      });
+    } catch (error) {
+      logger.warn(
+        { error, companyId, documentId: id },
+        'Knowledge graph indexing failed for company document'
+      );
+    }
+
+    return id;
   },
 
   async search(
@@ -298,9 +319,10 @@ export const KnowledgeService = {
       return recentRes.rows;
     }
 
-    const [vectorRes, lexicalRes] = await Promise.all([
+    const [vectorRes, lexicalRes, synapticResults] = await Promise.all([
       searchByEmbedding(companyId, normalizedQuery, safeLimit * 3),
       searchLexicallySafe(companyId, normalizedQuery, safeLimit * 3),
+      KnowledgeGraphService.searchSafe(companyId, normalizedQuery, safeLimit),
     ]);
     if (vectorRes.degraded && lexicalRes.degraded) {
       throw vectorRes.error ?? lexicalRes.error ?? new Error('Knowledge search failed');
@@ -371,12 +393,16 @@ export const KnowledgeService = {
       const lexicalResults = lexicalRows
         .slice(0, safeLimit)
         .map(({ title, content, metadata }) => ({ title, content, metadata }));
-      await recordMetric(lexicalResults.length, null);
+      const displayResults = mergeKnowledgeDisplayResults(
+        lexicalResults,
+        synapticResults
+      );
+      await recordMetric(displayResults.length, null);
       emitDiagnostic({
-        resultCount: lexicalResults.length,
+        resultCount: displayResults.length,
         fallbackUsed: true,
       });
-      return lexicalResults;
+      return displayResults;
     }
 
     const mergedResults = mergeKnowledgeResults(
@@ -384,14 +410,18 @@ export const KnowledgeService = {
       lexicalRows,
       safeLimit
     );
+    const displayResults = mergeKnowledgeDisplayResults(
+      mergedResults,
+      synapticResults
+    );
     await recordMetric(
-      mergedResults.length,
+      displayResults.length,
       sanitizeTopDistance(vectorRows)
     );
     emitDiagnostic({
-      resultCount: mergedResults.length,
+      resultCount: displayResults.length,
       fallbackUsed: vectorRes.degraded || lexicalRes.degraded,
     });
-    return mergedResults;
+    return displayResults;
   },
 };

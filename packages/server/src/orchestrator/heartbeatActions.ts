@@ -5,6 +5,7 @@ import { canUseTool } from '../tools/registry.js';
 import { executeTool } from '../tools/executor.js';
 import { evaluatePolicy } from '../governance/policies.js';
 import { createApprovalRequest } from '../governance/approvals.js';
+import { evaluateCriticalToolConsensus } from '../governance/multiModelConsensus.js';
 import { broadcastCompanyEvent } from '../realtime/eventBus.js';
 import {
   broadcastCollaborationSignal,
@@ -12,6 +13,60 @@ import {
 } from '../services/collaboration.js';
 import { enqueueCompanyWakeup } from './schedulerQueue.js';
 import { storeMemory } from './memory.js';
+
+async function insertStatusUpdate(
+  companyId: string,
+  taskId: string,
+  agentId: string,
+  content: string
+) {
+  await db.query(
+    `INSERT INTO messages (company_id, task_id, from_agent, content, type)
+     VALUES ($1, $2, $3, $4, 'status_update')`,
+    [companyId, taskId, agentId, content]
+  );
+}
+
+async function blockTaskForApproval(args: {
+  companyId: string;
+  taskId: string;
+  assignedTo?: string | null;
+  agentId: string;
+  reason: string;
+  payload: Record<string, unknown>;
+  policyId?: string;
+}) {
+  const { companyId, taskId, assignedTo, agentId, reason, payload, policyId } =
+    args;
+  await createApprovalRequest(
+    companyId,
+    taskId,
+    agentId,
+    reason,
+    payload,
+    policyId
+  );
+  await db.query(
+    "UPDATE tasks SET status = 'blocked', locked_by = NULL, locked_at = NULL WHERE id = $1",
+    [taskId]
+  );
+  await broadcastCollaborationSignal(companyId, taskId, 'status_update', {
+    agent_id: agentId,
+    status: 'blocked',
+  });
+  await broadcastCompanyEvent(
+    companyId,
+    'task.updated',
+    {
+      company_id: companyId,
+      task_id: taskId,
+      status: 'blocked',
+      assigned_to: assignedTo ?? null,
+      source: 'approval_requested',
+    },
+    'worker'
+  );
+}
 
 export async function handleHeartbeatAction(
   agentId: string,
@@ -47,7 +102,11 @@ export async function handleHeartbeatAction(
         task.company_id,
         agentId,
         task.id,
-        `Task: ${task.title}\nResult: ${action.result}`
+        `Task: ${task.title}\nResult: ${action.result}`,
+        {
+          task_title: task.title,
+          source: 'complete_task',
+        }
       );
       break;
 
@@ -163,6 +222,39 @@ export async function handleHeartbeatAction(
 
     case 'use_tool':
       try {
+        const approvalPolicy = await evaluatePolicy(
+          task.company_id,
+          'approval_required',
+          {
+            action: 'use_tool',
+            tool_name: action.tool_name,
+          }
+        );
+        if (!approvalPolicy.allowed && approvalPolicy.requires_approval) {
+          await blockTaskForApproval({
+            companyId: task.company_id,
+            taskId: task.id,
+            assignedTo: task.assigned_to ?? null,
+            agentId,
+            reason:
+              approvalPolicy.reason ||
+              `Approval required before using tool ${action.tool_name}`,
+            payload: {
+              action: 'use_tool',
+              tool_name: action.tool_name,
+              params: action.params,
+            },
+            policyId: approvalPolicy.policy_id,
+          });
+          await insertStatusUpdate(
+            task.company_id,
+            task.id,
+            agentId,
+            `Tool blocked pending approval (${action.tool_name}): ${approvalPolicy.reason || 'approval required'}`
+          );
+          break;
+        }
+
         const toolPolicy = await evaluatePolicy(
           task.company_id,
           'tool_restriction',
@@ -177,6 +269,68 @@ export async function handleHeartbeatAction(
         const canUse = await canUseTool(agentId, action.tool_name);
         if (!canUse) {
           throw new Error(`Permission denied for tool: ${action.tool_name}`);
+        }
+
+        const toolRes = await db.query(
+          `SELECT id, name, description, type, config
+           FROM tools
+           WHERE company_id = $1 AND name = $2
+           LIMIT 1`,
+          [task.company_id, action.tool_name]
+        );
+        const tool = toolRes.rows[0] as
+          | {
+              id: string;
+              name: string;
+              description?: string | null;
+              type?: string;
+              config?: unknown;
+            }
+          | undefined;
+
+        if (tool) {
+          const consensus = await evaluateCriticalToolConsensus({
+            companyId: task.company_id,
+            task: {
+              id: task.id,
+              title: task.title,
+              description: task.description ?? null,
+            },
+            tool,
+            params: action.params,
+          });
+
+          if (consensus.required && !consensus.accepted) {
+            await blockTaskForApproval({
+              companyId: task.company_id,
+              taskId: task.id,
+              assignedTo: task.assigned_to ?? null,
+              agentId,
+              reason: consensus.reason,
+              payload: {
+                action: 'use_tool',
+                tool_name: action.tool_name,
+                params: action.params,
+                consensus,
+              },
+            });
+            await insertStatusUpdate(
+              task.company_id,
+              task.id,
+              agentId,
+              `Consensus rejected tool execution (${action.tool_name}): ${consensus.reason}`
+            );
+            break;
+          }
+
+          if (consensus.required && consensus.accepted) {
+            await insertStatusUpdate(
+              task.company_id,
+              task.id,
+              agentId,
+              `Consensus approved tool execution (${action.tool_name}) with ${consensus.approvals}/${consensus.totalVotes} approvals`
+            );
+          }
         }
 
         const result = await executeTool(
@@ -212,32 +366,14 @@ export async function handleHeartbeatAction(
       break;
 
     case 'request_approval':
-      await createApprovalRequest(
-        task.company_id,
-        task.id,
+      await blockTaskForApproval({
+        companyId: task.company_id,
+        taskId: task.id,
+        assignedTo: task.assigned_to ?? null,
         agentId,
-        action.reason,
-        action.payload
-      );
-      await db.query("UPDATE tasks SET status = 'blocked' WHERE id = $1", [
-        task.id,
-      ]);
-      await broadcastCollaborationSignal(task.company_id, task.id, 'status_update', {
-        agent_id: agentId,
-        status: 'blocked',
+        reason: action.reason,
+        payload: action.payload,
       });
-      await broadcastCompanyEvent(
-        task.company_id,
-        'task.updated',
-        {
-          company_id: task.company_id,
-          task_id: task.id,
-          status: 'blocked',
-          assigned_to: task.assigned_to ?? null,
-          source: 'approval_requested',
-        },
-        'worker'
-      );
       break;
 
     case 'message':

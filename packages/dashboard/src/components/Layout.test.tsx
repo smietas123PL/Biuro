@@ -121,6 +121,7 @@ describe('Layout', () => {
 
     expect(screen.getByText('Dashboard outlet')).toBeTruthy();
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Digital Twin' })).toBeTruthy();
 
     fireEvent.change(screen.getByRole('combobox'), {
       target: { value: 'company-2' },

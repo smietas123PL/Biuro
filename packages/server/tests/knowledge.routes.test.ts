@@ -4,11 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const addDocumentMock = vi.hoisted(() => vi.fn());
 const searchMock = vi.hoisted(() => vi.fn());
+const searchGraphSafeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/services/knowledge.js', () => ({
   KnowledgeService: {
     addDocument: addDocumentMock,
     search: searchMock,
+  },
+}));
+
+vi.mock('../src/services/knowledgeGraph.js', () => ({
+  KnowledgeGraphService: {
+    searchSafe: searchGraphSafeMock,
   },
 }));
 
@@ -21,6 +28,7 @@ describe('knowledge routes', () => {
   beforeEach(async () => {
     addDocumentMock.mockReset();
     searchMock.mockReset();
+    searchGraphSafeMock.mockReset();
 
     const app = express();
     app.use(express.json());
@@ -144,5 +152,40 @@ describe('knowledge routes', () => {
       error: 'Company ID missing',
     });
     expect(searchMock).not.toHaveBeenCalled();
+  });
+
+  it('searches the synaptic knowledge graph for the active company context', async () => {
+    searchGraphSafeMock.mockResolvedValue([
+      {
+        title: 'Synaptic client: Atlas Labs',
+        content: 'Shared rollout memory.',
+        metadata: { source: 'knowledge_graph' },
+      },
+    ]);
+
+    const response = await fetch(
+      `${baseUrl}/graph/search?q=atlas rollout&limit=2`,
+      {
+        headers: {
+          'x-company-id': 'company-1',
+        },
+      }
+    );
+
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual([
+      {
+        title: 'Synaptic client: Atlas Labs',
+        content: 'Shared rollout memory.',
+        metadata: { source: 'knowledge_graph' },
+      },
+    ]);
+    expect(searchGraphSafeMock).toHaveBeenCalledWith(
+      'company-1',
+      'atlas rollout',
+      2
+    );
   });
 });
